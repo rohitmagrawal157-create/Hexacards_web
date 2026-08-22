@@ -27,14 +27,16 @@ See `frontend/sql/CONNECT.md` for database setup.
 
 ## Deploy on Vercel
 
-### 1. Import repo
+### 1. Import repo (Services preset)
 
 1. Go to [vercel.com/new](https://vercel.com/new)
 2. Import **Hexacards_web** from GitHub
-3. **Root Directory:** set to `frontend` (required — Next.js lives here)
-4. Framework: **Next.js** (auto-detected)
-5. Build command: `npm run build` (default)
-6. Output: default (`.next`)
+3. **Framework Preset:** **Services** (as shown in Vercel UI)
+4. Vercel reads root **`vercel.json`** — deploys **frontend only**
+
+> **Why not the `backend/` folder?**  
+> Your live API is already inside Next.js at `frontend/app/api/*` (categories, products, health, seed).  
+> The `backend/` Express app is optional/local-only. Routing `/api/*` to Express would **break** the Next.js API routes.
 
 ### 2. Environment variables
 
@@ -78,7 +80,8 @@ Or in Vercel dashboard: **Deployments → ⋯ → Redeploy**.
 
 | Issue | Fix |
 |-------|-----|
-| Build fails / no Next.js detected | Set **Root Directory** to `frontend` |
+| "vercel.json required" for multiple services | Push root `vercel.json` (already in repo) — uses **frontend** service only |
+| Build fails / no Next.js detected | Use **Services** preset; `vercel.json` sets `frontend` root |
 | `/api/health` 500 | Add Supabase env vars in Vercel; redeploy |
 | Super Admin empty products | Run schema SQL + `POST /api/setup/seed` |
 | Forms fail reCAPTCHA | Add `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` + `RECAPTCHA_SECRET_KEY` |
