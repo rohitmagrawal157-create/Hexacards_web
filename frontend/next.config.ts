@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
     root: rootDir,
   },
   images: {
+    // Vercel Services deployment: /_next/image optimizer returns 404.
+    // Serve public/Images/* directly (works on production CDN).
+    unoptimized: true,
     qualities: [75, 100],
   },
 };
