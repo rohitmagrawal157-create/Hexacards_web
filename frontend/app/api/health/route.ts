@@ -61,7 +61,10 @@ export async function GET() {
         database: "supabase",
         connected: false,
         error: err instanceof Error ? err.message : "Server error",
-        hint: "Check frontend/.env.local and restart npm run dev in the frontend folder.",
+        hint:
+          process.env.VERCEL === "1"
+            ? "Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, and SUPABASE_SERVICE_ROLE_KEY in Vercel → Settings → Environment Variables, then redeploy."
+            : "Check frontend/.env.local and restart npm run dev in the frontend folder.",
       },
       { status: 500 },
     );
