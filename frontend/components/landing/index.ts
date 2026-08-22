@@ -1,0 +1,15 @@
+export { default as Navbar } from "./Navbar";
+export { default as Hero } from "./Hero";
+export { default as Clients } from "./Clients";
+export { default as Products } from "./Products";
+export { default as Feature } from "./Feature";
+export { default as HowItWorks } from "./HowItWorks";
+export { default as WhyHexa } from "./WhyHexa";
+export { default as Industries } from "./Industries";
+export { default as Testimonials } from "./Testimonials";
+export { default as FAQ } from "./FAQ";
+export { default as Footer } from "./Footer";
+export { default as Franchise } from "./Franchise";
+export { default as FranchiseEnquiry } from "./franchise_from";
+export { default as ContactUsForm } from "./ContactUsForm";
+export { default as Services } from "./services";

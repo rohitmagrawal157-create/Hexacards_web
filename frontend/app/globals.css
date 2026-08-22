@@ -1,0 +1,626 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #141414;
+  --surface: #fffcf6;
+  --muted: #5c5346;
+  --accent: #bc7c10;
+  --ink: #141414;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-syne);
+  --font-dashboard: var(--font-jakarta);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, sans-serif;
+}
+
+.tap-card-enter {
+  animation: tap-card-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes tap-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.page-fade-in {
+  animation: page-fade 0.7s ease-out both;
+}
+
+@keyframes page-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.hero-hex {
+  animation: hex-drift 28s linear infinite;
+}
+
+.hero-glow {
+  animation: glow-pulse 8s ease-in-out infinite;
+}
+
+@keyframes hex-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 72px 62px;
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .tap-card-enter,
+  .page-fade-in,
+  .hero-hex,
+  .hero-glow,
+  .hero-ambient-glow,
+  .hero-hex-drift,
+  .hero-hex-mesh,
+  .hero-hex-bg,
+  .hero-way-highlight,
+  .hero-rise,
+  .hero-rise-stagger > *,
+  .hero-card-enter,
+  .clients-marquee,
+  .nav-pill,
+  .products-card {
+    animation: none;
+  }
+
+  .tap-card-inner,
+  .nav-link-underline {
+    transition: none !important;
+  }
+}
+
+.clients-marquee {
+  animation: clients-marquee-scroll 28s linear infinite;
+}
+
+@keyframes clients-marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.nav-pill {
+  animation: nav-pill-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes nav-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.products-carousel {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.products-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.products-card {
+  animation: products-fade-up 0.55s ease-out both;
+}
+
+@keyframes products-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes revealUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Hero: lightweight white + hex ambient ── */
+.hero-rise {
+  animation: hero-rise 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero-rise-stagger > * {
+  animation: hero-rise 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.hero-rise-stagger > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.hero-rise-stagger > *:nth-child(2) {
+  animation-delay: 70ms;
+}
+.hero-rise-stagger > *:nth-child(3) {
+  animation-delay: 140ms;
+}
+.hero-rise-stagger > *:nth-child(4) {
+  animation-delay: 210ms;
+}
+.hero-rise-stagger > *:nth-child(5) {
+  animation-delay: 280ms;
+}
+.hero-rise-stagger > *:nth-child(6) {
+  animation-delay: 350ms;
+}
+
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-hex-bg {
+  isolation: isolate;
+  animation: hero-hex-fade-in 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes hero-hex-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.hero-hex-mesh {
+  opacity: 0.35;
+  animation: hero-hex-pan 120s linear infinite;
+  will-change: transform;
+}
+
+@keyframes hero-hex-pan {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.04);
+  }
+  to {
+    transform: translate3d(-70px, -60px, 0) scale(1.04);
+  }
+}
+
+.hero-ambient-glow {
+  animation: hero-glow-pulse 9s ease-in-out infinite;
+}
+
+@keyframes hero-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.05);
+  }
+}
+
+.hero-hex-drift {
+  animation: hero-hex-drift 24s ease-in-out infinite;
+}
+
+.hero-hex-drift--slow {
+  animation-duration: 32s;
+  animation-direction: reverse;
+}
+
+@keyframes hero-hex-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(14px, -12px) rotate(8deg);
+  }
+}
+
+/* Old way → Hexa way comparison */
+.hero-way {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 9999px;
+}
+
+.hero-way-highlight {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border-radius: 9999px;
+  background: white;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  animation: hero-way-slide 5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes hero-way-slide {
+  0%,
+  42% {
+    transform: translateX(0);
+  }
+  50%,
+  92% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.hero-way-btn {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  padding: 0.55rem 1rem;
+  text-align: center;
+  transition: color 0.35s ease;
+}
+
+.hero-way-btn span {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hero-way-btn small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.65rem;
+  font-weight: 400;
+  opacity: 0.65;
+}
+
+.hero-card-enter {
+  animation: hero-card-enter 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0.08s;
+}
+
+@keyframes hero-card-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(12px, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* react-international-phone — HexaCards professional skin */
+.hexa-phone-field {
+  --react-international-phone-height: 44px;
+  --react-international-phone-font-size: 14px;
+  --react-international-phone-border-radius: 10px;
+  --react-international-phone-border-color: rgba(0, 0, 0, 0.1);
+  --react-international-phone-background-color: #fafaf8;
+  --react-international-phone-text-color: #141414;
+  --react-international-phone-selected-dropdown-item-background-color: #fff8ed;
+  --react-international-phone-selected-dropdown-item-text-color: #141414;
+  --react-international-phone-dropdown-item-dial-code-color: #8a8174;
+  --react-international-phone-country-selector-background-color: #fafaf8;
+  --react-international-phone-country-selector-background-color-hover: #f3f1ec;
+  --react-international-phone-country-selector-border-color: rgba(0, 0, 0, 0.1);
+  --react-international-phone-country-selector-arrow-color: #8a8174;
+  --react-international-phone-dropdown-shadow: 0 12px 32px rgba(20, 20, 20, 0.14);
+  --react-international-phone-dropdown-item-height: 40px;
+  --react-international-phone-flag-width: 22px;
+  --react-international-phone-flag-height: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.hexa-phone-field:focus-within {
+  z-index: 40;
+}
+
+.hexa-phone-field .react-international-phone-input-container {
+  width: 100%;
+}
+
+.hexa-phone-field .hexa-phone-country-btn {
+  min-width: 72px;
+  padding: 0 10px;
+  border-right: 0;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.hexa-phone-field .hexa-phone-input-el {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 0 14px !important;
+  font-size: 14px !important;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.hexa-phone-field
+  .react-international-phone-input-container:focus-within
+  .hexa-phone-country-btn,
+.hexa-phone-field
+  .react-international-phone-input-container:focus-within
+  .hexa-phone-input-el {
+  border-color: rgba(188, 124, 16, 0.55) !important;
+  background: #fff !important;
+}
+
+.hexa-phone-field
+  .react-international-phone-input-container:focus-within
+  .hexa-phone-input-el {
+  box-shadow: 0 0 0 2px rgba(188, 124, 16, 0.14);
+}
+
+.hexa-phone-dropdown {
+  z-index: 80 !important;
+  top: calc(100% + 6px) !important;
+  width: min(320px, 85vw) !important;
+  max-height: 280px !important;
+  overflow-y: auto !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  padding: 6px !important;
+}
+
+.hexa-phone-dropdown-item {
+  gap: 4px;
+  border-radius: 8px !important;
+  padding: 8px 10px !important;
+  min-height: 40px !important;
+}
+
+.hexa-phone-dropdown-item:hover,
+.hexa-phone-dropdown-item.react-international-phone-country-selector-dropdown__list-item--focused,
+.hexa-phone-dropdown-item.react-international-phone-country-selector-dropdown__list-item--selected {
+  background: #fff8ed !important;
+}
+
+.hexa-phone-dropdown-name {
+  font-size: 13px !important;
+  font-weight: 550 !important;
+  color: #141414 !important;
+}
+
+.hexa-phone-dropdown-dial {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: #8a8174 !important;
+}
+
+/* Super admin login */
+@keyframes admin-login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes admin-login-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes admin-login-blob {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(12px, -10px) scale(1.05);
+  }
+}
+
+.admin-login-rise {
+  animation: admin-login-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.admin-login-rise-delay {
+  animation: admin-login-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.admin-login-fade {
+  animation: admin-login-fade 0.7s ease both;
+}
+
+.admin-login-blob {
+  animation: admin-login-blob 10s ease-in-out infinite;
+}
+
+.admin-login-blob-slow {
+  animation: admin-login-blob 14s ease-in-out infinite reverse;
+}
+
+.admin-login-hex-mesh {
+  animation: admin-login-hex-pan 90s linear infinite;
+  will-change: transform;
+}
+
+@keyframes admin-login-hex-pan {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-28px, -32px, 0);
+  }
+}
+
+.admin-login-hex-drift {
+  animation: admin-login-hex-drift 22s ease-in-out infinite;
+}
+
+.admin-login-hex-drift-slow {
+  animation: admin-login-hex-drift 30s ease-in-out infinite reverse;
+}
+
+@keyframes admin-login-hex-drift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(6px, -8px);
+  }
+}
+
+.admin-login-honeycomb-pan {
+  animation: admin-login-honeycomb-pan 80s linear infinite;
+  will-change: transform;
+}
+
+@keyframes admin-login-honeycomb-pan {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-54px, -62px, 0);
+  }
+}
+
+.admin-login-honeycomb-glow {
+  animation: admin-login-glow-pulse 7s ease-in-out infinite;
+}
+
+@keyframes admin-login-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.admin-login-sparkle {
+  animation: admin-login-sparkle 3.2s ease-in-out infinite;
+}
+
+.admin-login-sparkle:nth-child(3n) {
+  animation-delay: 0.6s;
+}
+
+.admin-login-sparkle:nth-child(4n) {
+  animation-delay: 1.2s;
+}
+
+@keyframes admin-login-sparkle {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-login-hex-mesh,
+  .admin-login-hex-drift,
+  .admin-login-hex-drift-slow,
+  .admin-login-blob,
+  .admin-login-blob-slow,
+  .admin-login-honeycomb-pan,
+  .admin-login-honeycomb-glow,
+  .admin-login-sparkle {
+    animation: none !important;
+  }
+}
+
+/* Super admin: hide main panel scrollbar, keep scroll working */
+.admin-main-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.admin-main-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+

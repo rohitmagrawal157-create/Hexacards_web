@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800" fill="none">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="600" y2="800" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B0764"/>
+      <stop offset="1" stop-color="#5B21B6"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="800" rx="32" fill="url(#bg2)"/>
+  <circle cx="500" cy="120" r="140" fill="#C4B5FD" opacity="0.18"/>
+  <circle cx="80" cy="680" r="110" fill="#A78BFA" opacity="0.15"/>
+  <rect x="28" y="28" width="544" height="744" rx="24" stroke="#FFFFFF" stroke-opacity="0.1"/>
+  <rect x="60" y="70" width="110" height="36" rx="18" fill="#FFFFFF" fill-opacity="0.12"/>
+  <text x="82" y="93" fill="#F5F3FF" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="600">DESIGN</text>
+  <circle cx="300" cy="230" r="64" fill="#DDD6FE"/>
+  <text x="268" y="242" fill="#4C1D95" font-family="ui-sans-serif, system-ui, sans-serif" font-size="34" font-weight="700">AC</text>
+  <text x="156" y="340" fill="#FAF5FF" font-family="ui-sans-serif, system-ui, sans-serif" font-size="36" font-weight="700">Ava Chen</text>
+  <text x="176" y="380" fill="#E9D5FF" font-family="ui-sans-serif, system-ui, sans-serif" font-size="17">Product Designer</text>
+  <rect x="180" y="410" width="240" height="1" fill="#FFFFFF" fill-opacity="0.15"/>
+  <rect x="90" y="450" width="420" height="72" rx="16" fill="#FFFFFF" fill-opacity="0.08"/>
+  <text x="120" y="480" fill="#EDE9FE" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14">Portfolio · Behance · LinkedIn</text>
+  <text x="120" y="506" fill="#C4B5FD" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">All links in one tap</text>
+  <rect x="140" y="560" width="320" height="52" rx="26" fill="#F5F3FF"/>
+  <text x="230" y="592" fill="#4C1D95" font-family="ui-sans-serif, system-ui, sans-serif" font-size="16" font-weight="700">View Profile</text>
+  <text x="188" y="720" fill="#DDD6FE" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14">hexacards.io/ava</text>
+</svg>
