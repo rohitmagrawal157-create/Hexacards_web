@@ -1,7 +1,10 @@
 export type HexaAuthUser = {
+  userId?: number;
   phone: string;
   name: string;
   loggedInAt: string;
+  sessionId?: string;
+  sessionToken?: string;
 };
 
 const AUTH_KEY = "hexaAuthUser";
@@ -27,11 +30,22 @@ export function isLoggedIn(): boolean {
   return Boolean(getAuthUser()?.phone);
 }
 
-export function setAuthUser(phone: string, name: string): HexaAuthUser {
+export function setAuthUser(
+  phone: string,
+  name: string,
+  userId?: number | string,
+  session?: { sessionId?: string; sessionToken?: string },
+): HexaAuthUser {
+  const numericId = Number(userId);
   const user: HexaAuthUser = {
+    ...(Number.isInteger(numericId) && numericId > 0
+      ? { userId: numericId }
+      : {}),
     phone: phone.replace(/\D/g, "").slice(-10),
     name: name.trim(),
     loggedInAt: new Date().toISOString(),
+    ...(session?.sessionId ? { sessionId: session.sessionId } : {}),
+    ...(session?.sessionToken ? { sessionToken: session.sessionToken } : {}),
   };
   localStorage.setItem(AUTH_KEY, JSON.stringify(user));
   window.dispatchEvent(new Event("hexa-auth-change"));

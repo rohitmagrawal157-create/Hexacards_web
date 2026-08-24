@@ -8,12 +8,11 @@ import {
   clearAuthUser,
   getAuthUser,
   isValidIndianPhone,
-  issueDemoOtp,
   normalizeIndianPhone,
   setAuthUser,
-  verifyDemoOtp,
   type HexaAuthUser,
 } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-config";
 
 type Step = "phone" | "otp";
 
@@ -23,7 +22,8 @@ export default function Login() {
   const nextPath = searchParams.get("next") || "/";
 
   const [step, setStep] = useState<Step>("phone");
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
@@ -45,11 +45,11 @@ export default function Login() {
 
   const phoneDigits = useMemo(() => normalizeIndianPhone(phone), [phone]);
 
-  function sendOtp() {
+  async function sendOtp() {
     setError("");
     setInfo("");
-    if (!name.trim()) {
-      setError("Please enter your name.");
+    if (!firstName.trim()) {
+      setError("Please enter your first name.");
       return;
     }
     if (!isValidIndianPhone(phoneDigits)) {
@@ -58,17 +58,35 @@ export default function Login() {
     }
     setBusy(true);
     try {
-      const code = issueDemoOtp(phoneDigits);
+      const res = await apiFetch<{
+        user: { userId: number; firstName: string; lastName: string; mobile: string };
+        otpExpiresAt: string;
+        demoOtp?: string;
+      }>("/api/auth/otp/send", {
+        method: "POST",
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName:  lastName.trim(),
+          mobile:    phoneDigits,
+        }),
+      });
+
+      if (!res.ok || !res.data) {
+        setError(res.error || "Could not send OTP. Try again.");
+        return;
+      }
+
       setStep("otp");
       setOtp("");
       setResendIn(30);
-      setInfo(`OTP sent to +91 ${phoneDigits}. Demo code: ${code}`);
+      const demoHint = res.data.demoOtp ? ` Demo code: ${res.data.demoOtp}` : "";
+      setInfo(`OTP sent to +91 ${phoneDigits}.${demoHint}`);
     } finally {
       setBusy(false);
     }
   }
 
-  function verifyOtp() {
+  async function verifyOtp() {
     setError("");
     if (!/^\d{6}$/.test(otp.trim())) {
       setError("Enter the 6-digit OTP.");
@@ -76,11 +94,33 @@ export default function Login() {
     }
     setBusy(true);
     try {
-      if (!verifyDemoOtp(phoneDigits, otp)) {
-        setError("Invalid or expired OTP. Try again.");
+      const res = await apiFetch<{
+        userId: number;
+        firstName: string;
+        lastName: string;
+        mobile: string;
+        session?: {
+          sessionId: string;
+          sessionToken: string;
+        };
+      }>("/api/auth/otp/verify", {
+        method: "POST",
+        body: JSON.stringify({
+          mobile: phoneDigits,
+          otp:    otp.trim(),
+        }),
+      });
+
+      if (!res.ok || !res.data) {
+        setError(res.error || "Invalid or expired OTP. Try again.");
         return;
       }
-      setAuthUser(phoneDigits, name.trim());
+
+      const fullName = [res.data.firstName, res.data.lastName].filter(Boolean).join(" ").trim();
+      setAuthUser(res.data.mobile, fullName || "User", res.data.userId, {
+        sessionId: res.data.session?.sessionId,
+        sessionToken: res.data.session?.sessionToken,
+      });
       router.replace(nextPath.startsWith("/") ? nextPath : "/");
     } finally {
       setBusy(false);
@@ -95,7 +135,8 @@ export default function Login() {
     clearAuthUser();
     setExisting(null);
     setStep("phone");
-    setName("");
+    setFirstName("");
+    setLastName("");
     setPhone("");
     setOtp("");
     setInfo("");
@@ -141,7 +182,7 @@ export default function Login() {
               <p className="mt-1 text-sm text-[#5c5346]">
                 {step === "phone"
                   ? "Your name and mobile number — we’ll send an OTP to verify before checkout."
-                  : `Hi ${name.trim()}, enter the 6-digit code sent to +91 ${phoneDigits}.`}
+                  : `Hi ${firstName.trim()}, enter the 6-digit code sent to +91 ${phoneDigits}.`}
               </p>
             </div>
           </div>
@@ -182,23 +223,42 @@ export default function Login() {
               }}
               className="space-y-4"
             >
-              <div>
-                <label
-                  htmlFor="name"
-                  className="flex items-center gap-2 text-sm font-semibold text-[#141414]"
-                >
-                  <UserRound className="h-4 w-4 text-[#BC7C10]" />
-                  Your name
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  autoComplete="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Rahul Sharma"
-                  className="mt-2 w-full rounded-xl border border-black/10 bg-[#FFFCF7] px-4 py-3 text-sm text-[#141414] outline-none transition-colors placeholder:text-[#5c5346]/50 focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20"
-                />
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label
+                    htmlFor="firstName"
+                    className="flex items-center gap-2 text-sm font-semibold text-[#141414]"
+                  >
+                    <UserRound className="h-4 w-4 text-[#BC7C10]" />
+                    First name
+                  </label>
+                  <input
+                    id="firstName"
+                    type="text"
+                    autoComplete="given-name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="e.g. Rahul"
+                    className="mt-2 w-full rounded-xl border border-black/10 bg-[#FFFCF7] px-4 py-3 text-sm text-[#141414] outline-none transition-colors placeholder:text-[#5c5346]/50 focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label
+                    htmlFor="lastName"
+                    className="block text-sm font-semibold text-[#141414]"
+                  >
+                    Last name
+                  </label>
+                  <input
+                    id="lastName"
+                    type="text"
+                    autoComplete="family-name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="e.g. Sharma"
+                    className="mt-2 w-full rounded-xl border border-black/10 bg-[#FFFCF7] px-4 py-3 text-sm text-[#141414] outline-none transition-colors placeholder:text-[#5c5346]/50 focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20"
+                  />
+                </div>
               </div>
 
               <div>
