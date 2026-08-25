@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -29,6 +29,9 @@ import {
   loginPathWithNext,
   type HexaAuthUser,
 } from "@/lib/auth";
+import LocationSelects, {
+  type LocationValue,
+} from "@/components/shared/LocationSelects";
 import { hasPlacedOrder, getOrdersForPhone, type HexaOrder } from "@/lib/orders";
 import {
   loadOrderCardProfile,
@@ -97,6 +100,51 @@ export default function EditCard() {
   const [serviceInput, setServiceInput] = useState("");
   const brochureRef = useRef<HTMLInputElement>(null);
   const [brochureError, setBrochureError] = useState("");
+  const [locIds, setLocIds] = useState<{
+    countryId: number | null;
+    stateId: number | null;
+    cityId: number | null;
+  }>({ countryId: null, stateId: null, cityId: null });
+
+  const locationValue = useMemo(
+    () => ({
+      countryId: locIds.countryId,
+      stateId: locIds.stateId,
+      cityId: locIds.cityId,
+      countryName: "",
+      countryIso: profile?.contact.countryCode || "IN",
+      stateName: profile?.contact.state || "",
+      cityName: profile?.contact.city || "",
+    }),
+    [
+      locIds.countryId,
+      locIds.stateId,
+      locIds.cityId,
+      profile?.contact.countryCode,
+      profile?.contact.state,
+      profile?.contact.city,
+    ],
+  );
+
+  function handleLocationChange(loc: LocationValue) {
+    setLocIds({
+      countryId: loc.countryId,
+      stateId: loc.stateId,
+      cityId: loc.cityId,
+    });
+    setProfile((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        contact: {
+          ...prev.contact,
+          countryCode: loc.countryIso || prev.contact.countryCode || "IN",
+          state: loc.stateName,
+          city: loc.cityName,
+        },
+      };
+    });
+  }
   const [cropState, setCropState] = useState<{
     src: string;
     kind: CropKind;
@@ -638,22 +686,18 @@ export default function EditCard() {
                     />
                   </Field>
 
-                  <Field label="State">
-                    <input
-                      className={fieldClass()}
-                      value={profile.contact.state}
-                      onChange={(e) => updateContact("state", e.target.value)}
-                      placeholder="State"
+                  <div className="sm:col-span-2">
+                    <LocationSelects
+                      idPrefix="edit-card"
+                      showCountry
+                      showState
+                      showCity
+                      layout="grid"
+                      selectClassName={fieldClass()}
+                      value={locationValue}
+                      onChange={handleLocationChange}
                     />
-                  </Field>
-                  <Field label="City">
-                    <input
-                      className={fieldClass()}
-                      value={profile.contact.city}
-                      onChange={(e) => updateContact("city", e.target.value)}
-                      placeholder="City"
-                    />
-                  </Field>
+                  </div>
                   <Field label="Address" className="sm:col-span-2">
                     <textarea
                       rows={3}

@@ -28,6 +28,10 @@ import {
 } from "@/lib/orders";
 import { initOrderCardProfile } from "@/lib/order-card-profile";
 import { buildOrderCardSlug } from "@/lib/order-card";
+import LocationSelects, {
+  type LocationValue,
+} from "@/components/shared/LocationSelects";
+import { INDIA_COUNTRY_ID } from "@/lib/location-api";
 import {
   resolveLogoForOrder,
   savedDesignToCardDesign,
@@ -104,8 +108,13 @@ export default function Checkout() {
     phone: "",
     address: "",
     city: "",
+    state: "",
     postalCode: "",
-    country: "IN",
+    country: "India",
+    countryId: INDIA_COUNTRY_ID as number | null,
+    stateId: null as number | null,
+    cityId: null as number | null,
+    countryIso: "IN",
   });
   const [sameBilling, setSameBilling] = useState(true);
   const [selectedPackId, setSelectedPackId] = useState<PackOption["id"]>("1");
@@ -305,6 +314,7 @@ export default function Checkout() {
         city: form.city,
         postalCode: form.postalCode,
         country: form.country,
+        state: form.state,
         packTitle: selectedPack.title,
         qty: lineQty,
         subtotal,
@@ -609,60 +619,49 @@ export default function Checkout() {
                 />
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="city"
-                    className="mb-2 block text-sm font-medium text-[#5c5346]"
-                  >
-                    City *
-                  </label>
-                  <input
-                    id="city"
-                    type="text"
-                    required
-                    value={form.city}
-                    onChange={(e) => updateField("city", e.target.value)}
-                    className="w-full rounded-xl border border-black/10 bg-[#FFFCF7] px-4 py-3 transition-colors focus:border-[#BC7C10]/50 focus:bg-white focus:ring-2 focus:ring-[#BC7C10]/15 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="postal"
-                    className="mb-2 block text-sm font-medium text-[#5c5346]"
-                  >
-                    PIN Code *
-                  </label>
-                  <input
-                    id="postal"
-                    type="text"
-                    required
-                    value={form.postalCode}
-                    onChange={(e) => updateField("postalCode", e.target.value)}
-                    className="w-full rounded-xl border border-black/10 bg-[#FFFCF7] px-4 py-3 transition-colors focus:border-[#BC7C10]/50 focus:bg-white focus:ring-2 focus:ring-[#BC7C10]/15 focus:outline-none"
-                  />
-                </div>
+              <div className="mt-4">
+                <LocationSelects
+                  idPrefix="checkout"
+                  required
+                  value={{
+                    countryId: form.countryId,
+                    stateId: form.stateId,
+                    cityId: form.cityId,
+                    countryName: form.country,
+                    stateName: form.state,
+                    cityName: form.city,
+                    countryIso: form.countryIso,
+                  }}
+                  onChange={(loc: LocationValue) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      countryId: loc.countryId,
+                      stateId: loc.stateId,
+                      cityId: loc.cityId,
+                      country: loc.countryName || prev.country,
+                      state: loc.stateName,
+                      city: loc.cityName,
+                      countryIso: loc.countryIso || prev.countryIso,
+                    }));
+                  }}
+                />
               </div>
 
               <div className="mt-4">
                 <label
-                  htmlFor="country"
+                  htmlFor="postal"
                   className="mb-2 block text-sm font-medium text-[#5c5346]"
                 >
-                  Country *
+                  PIN Code *
                 </label>
-                <select
-                  id="country"
+                <input
+                  id="postal"
+                  type="text"
                   required
-                  value={form.country}
-                  onChange={(e) => updateField("country", e.target.value)}
+                  value={form.postalCode}
+                  onChange={(e) => updateField("postalCode", e.target.value)}
                   className="w-full rounded-xl border border-black/10 bg-[#FFFCF7] px-4 py-3 transition-colors focus:border-[#BC7C10]/50 focus:bg-white focus:ring-2 focus:ring-[#BC7C10]/15 focus:outline-none"
-                >
-                  <option value="IN">India</option>
-                  <option value="AE">United Arab Emirates</option>
-                  <option value="US">United States</option>
-                  <option value="GB">United Kingdom</option>
-                </select>
+                />
               </div>
 
               <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-[#5c5346]">

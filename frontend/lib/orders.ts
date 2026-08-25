@@ -21,6 +21,7 @@ export type HexaOrder = {
   email: string;
   address: string;
   city: string;
+  state?: string;
   postalCode: string;
   country: string;
   packTitle: string;
@@ -292,9 +293,9 @@ export function paymentStatusLabel(status: HexaPaymentStatus) {
 
 export function formatOrderAddress(order: Pick<
   HexaOrder,
-  "address" | "city" | "postalCode" | "country"
+  "address" | "city" | "state" | "postalCode" | "country"
 >) {
-  return [order.address, order.city, order.postalCode, order.country]
+  return [order.address, order.city, order.state, order.postalCode, order.country]
     .filter(Boolean)
     .join(", ");
 }

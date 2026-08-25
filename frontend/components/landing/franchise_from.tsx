@@ -10,12 +10,21 @@ import {
   Package,
   Headphones,
 } from "lucide-react";
+import LocationSelects, {
+  type LocationValue,
+} from "@/components/shared/LocationSelects";
+import { INDIA_COUNTRY_ID } from "@/lib/location-api";
 
 type FormState = {
   name: string;
   phone: string;
   email: string;
+  country: string;
   state: string;
+  city: string;
+  countryId: number | null;
+  stateId: number | null;
+  cityId: number | null;
   message: string;
 };
 
@@ -25,7 +34,12 @@ const initialForm: FormState = {
   name: "",
   phone: "",
   email: "",
+  country: "India",
   state: "",
+  city: "",
+  countryId: INDIA_COUNTRY_ID,
+  stateId: null,
+  cityId: null,
   message: "",
 };
 
@@ -80,6 +94,7 @@ function validate(form: FormState): FormErrors {
   }
 
   if (!form.state.trim()) errors.state = "State is required.";
+  if (!form.city.trim()) errors.city = "City is required.";
   if (!form.message.trim()) errors.message = "Message is required.";
 
   return errors;
@@ -267,26 +282,45 @@ export default function FranchiseEnquiry() {
               </div>
 
               <div>
-                <label
-                  htmlFor="franchise-state"
-                  className="text-[11px] font-semibold tracking-wide text-[#8a8174] uppercase"
-                >
-                  State *
-                </label>
-                <input
-                  id="franchise-state"
-                  name="state"
-                  type="text"
-                  placeholder="Your state"
-                  value={form.state}
-                  onChange={(e) => updateField("state", e.target.value)}
-                  aria-invalid={Boolean(errors.state)}
-                  className={`${fieldClass} ${
-                    errors.state ? "border-red-400 focus:ring-red-200" : ""
+                <LocationSelects
+                  idPrefix="franchise"
+                  required
+                  layout="stack"
+                  selectClassName={`${fieldClass} ${
+                    errors.state || errors.city ? "border-red-400 focus:ring-red-200" : ""
                   }`}
+                  value={{
+                    countryId: form.countryId,
+                    stateId: form.stateId,
+                    cityId: form.cityId,
+                    countryName: form.country,
+                    stateName: form.state,
+                    cityName: form.city,
+                    countryIso: "IN",
+                  }}
+                  onChange={(loc: LocationValue) => {
+                    setForm((f) => ({
+                      ...f,
+                      countryId: loc.countryId,
+                      stateId: loc.stateId,
+                      cityId: loc.cityId,
+                      country: loc.countryName || f.country,
+                      state: loc.stateName,
+                      city: loc.cityName,
+                    }));
+                    setErrors((e) => ({
+                      ...e,
+                      state: undefined,
+                      city: undefined,
+                      country: undefined,
+                    }));
+                  }}
                 />
                 {errors.state ? (
                   <p className="mt-1 text-xs text-red-600">{errors.state}</p>
+                ) : null}
+                {errors.city ? (
+                  <p className="mt-1 text-xs text-red-600">{errors.city}</p>
                 ) : null}
               </div>
 

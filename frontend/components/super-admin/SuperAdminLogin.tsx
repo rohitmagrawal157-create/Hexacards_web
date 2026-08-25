@@ -12,9 +12,9 @@ import {
   getSuperAdminUser,
   isSuperAdminLoggedIn,
   setSuperAdminUser,
-  verifySuperAdminCredentials,
   type SuperAdminUser,
 } from "@/lib/super-admin-auth";
+import { apiFetch } from "@/lib/api-config";
 import HexNetworkBackground from "@/components/shared/HexNetworkBackground";
 
 function LoginShell({ children }: { children: React.ReactNode }) {
@@ -43,7 +43,7 @@ export default function SuperAdminLogin() {
     if (user) setExisting(user);
   }, []);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
@@ -58,11 +58,33 @@ export default function SuperAdminLogin() {
 
     setBusy(true);
     try {
-      if (!verifySuperAdminCredentials(email, password)) {
-        setError("Invalid email or password.");
+      const res = await apiFetch<{
+        admin: {
+          aid: number;
+          firstName: string;
+          lastName: string;
+          email: string;
+          profile: string | null;
+        };
+        name: string;
+      }>("/api/auth/admin/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
+      });
+
+      if (!res.ok || !res.data?.admin) {
+        setError(res.error || "Invalid email or password.");
         return;
       }
-      setSuperAdminUser(email, "Super Admin");
+
+      const { admin, name } = res.data;
+      setSuperAdminUser(admin.email, name || "Super Admin", {
+        aid: admin.aid,
+        profile: admin.profile,
+      });
       router.replace(nextPath.startsWith("/") ? nextPath : "/super-admin");
     } finally {
       setBusy(false);

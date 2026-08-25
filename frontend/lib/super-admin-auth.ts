@@ -1,10 +1,12 @@
 export type SuperAdminUser = {
+  aid?: number;
   email: string;
   name: string;
   role: "super-admin";
   loggedInAt: string;
   /** ISO timestamp — updated on activity; session expires after idle TTL */
   lastActiveAt: string;
+  profile?: string | null;
 };
 
 const ADMIN_AUTH_KEY = "hexaSuperAdminUser";
@@ -12,7 +14,7 @@ const ADMIN_AUTH_KEY = "hexaSuperAdminUser";
 /** Idle timeout: require login again after this much inactivity */
 export const SUPER_ADMIN_SESSION_MS = 15 * 60 * 1000; // 15 minutes
 
-/** Demo credentials — replace with server auth in production */
+/** Default seed credentials (see frontend/sql/admin-seed.sql) */
 export const DEMO_ADMIN_EMAIL = "admin@hexacards.com";
 export const DEMO_ADMIN_PASSWORD = "superadmin123";
 
@@ -34,7 +36,8 @@ export function getSuperAdminUser(): SuperAdminUser | null {
       ...parsed,
       name: parsed.name?.trim() || "Super Admin",
       loggedInAt: parsed.loggedInAt || new Date().toISOString(),
-      lastActiveAt: parsed.lastActiveAt || parsed.loggedInAt || new Date().toISOString(),
+      lastActiveAt:
+        parsed.lastActiveAt || parsed.loggedInAt || new Date().toISOString(),
     };
 
     if (isSessionExpired(user)) {
@@ -59,7 +62,6 @@ export function touchSuperAdminSession(): SuperAdminUser | null {
   if (!user) return null;
 
   const last = Date.parse(user.lastActiveAt);
-  // Avoid rewriting storage on every click/key — refresh at most once per minute
   if (Number.isFinite(last) && Date.now() - last < 60_000) {
     return user;
   }
@@ -72,14 +74,20 @@ export function touchSuperAdminSession(): SuperAdminUser | null {
   return next;
 }
 
-export function setSuperAdminUser(email: string, name: string): SuperAdminUser {
+export function setSuperAdminUser(
+  email: string,
+  name: string,
+  extras?: { aid?: number; profile?: string | null },
+): SuperAdminUser {
   const now = new Date().toISOString();
   const user: SuperAdminUser = {
+    ...(extras?.aid && extras.aid > 0 ? { aid: extras.aid } : {}),
     email: email.trim().toLowerCase(),
     name: name.trim() || "Super Admin",
     role: "super-admin",
     loggedInAt: now,
     lastActiveAt: now,
+    profile: extras?.profile ?? null,
   };
   localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(user));
   window.dispatchEvent(new Event("hexa-super-admin-auth-change"));
@@ -91,6 +99,7 @@ export function clearSuperAdminUser() {
   window.dispatchEvent(new Event("hexa-super-admin-auth-change"));
 }
 
+/** @deprecated Prefer POST /api/auth/admin/login — kept for offline fallback only */
 export function verifySuperAdminCredentials(
   email: string,
   password: string,
