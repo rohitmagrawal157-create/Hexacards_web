@@ -26,7 +26,7 @@ import {
   updateOrder,
   type HexaOrder,
 } from "@/lib/orders";
-import { initOrderCardProfile } from "@/lib/order-card-profile";
+import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
 import { buildOrderCardSlug } from "@/lib/order-card";
 import LocationSelects, {
   type LocationValue,
@@ -315,6 +315,9 @@ export default function Checkout() {
         postalCode: form.postalCode,
         country: form.country,
         state: form.state,
+        countryId: form.countryId,
+        stateId: form.stateId,
+        cityId: form.cityId,
         packTitle: selectedPack.title,
         qty: lineQty,
         subtotal,
@@ -338,15 +341,15 @@ export default function Checkout() {
       const finalSlug = buildOrderCardSlug(cardName, contactPhone, order.id);
       const liveUrl = `https://hexacards.com/${finalSlug}`;
       const finalized =
-        updateOrder(order.id, {
+        (await updateOrder(order.id, {
           cardSlug: finalSlug,
           cardUrl: liveUrl,
           cardDesign: cardDesign
             ? { ...cardDesign, liveUrl }
             : undefined,
-        }) ?? order;
+        })) ?? order;
 
-      initOrderCardProfile(finalized);
+      await initOrderCardProfileAsync(finalized);
 
       try {
         sessionStorage.removeItem("hexaCardDesign");

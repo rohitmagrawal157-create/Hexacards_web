@@ -5,6 +5,7 @@ import {
   normalizeLogoImage,
   type HexaCardProfile,
 } from "@/lib/card-profile";
+import { upsertOrderCardInDb } from "@/lib/cards-api";
 import {
   getOrderById,
   updateOrder,
@@ -33,6 +34,11 @@ function profileFromOrder(
       email: order.email?.trim() || base.contact.email,
       city: order.city?.trim() || base.contact.city,
       address: order.address?.trim() || base.contact.address,
+      businessName:
+        order.businessName?.trim() ||
+        order.companyName?.trim() ||
+        base.contact.businessName,
+      state: order.state?.trim() || base.contact.state,
     },
     appearance: {
       ...base.appearance,
@@ -115,6 +121,7 @@ export function getOrderCardProfile(orderId: string): HexaCardProfile | null {
   return readAll()[orderId] ?? null;
 }
 
+/** Local-only save (sync). Prefer persistOrderCardProfile for DB. */
 export function saveOrderCardProfile(
   orderId: string,
   profile: HexaCardProfile,
@@ -130,6 +137,22 @@ export function saveOrderCardProfile(
   return next;
 }
 
+/**
+ * Save profile to localStorage + Supabase `cards`, and link `orders.card_id`.
+ */
+export async function persistOrderCardProfile(
+  order: HexaOrder,
+  profile: HexaCardProfile,
+  loc?: { stateId?: number | null; cityId?: number | null },
+): Promise<HexaCardProfile> {
+  const next = saveOrderCardProfile(order.id, profile);
+  const result = await upsertOrderCardInDb(order, next, loc);
+  if (result.error) {
+    console.warn("[cards] DB persist warning:", result.error);
+  }
+  return next;
+}
+
 /** Create isolated profile for a new order — does not touch other cards */
 export function initOrderCardProfile(order: HexaOrder): HexaCardProfile {
   const existing = getOrderCardProfile(order.id);
@@ -138,6 +161,18 @@ export function initOrderCardProfile(order: HexaOrder): HexaCardProfile {
   const base = defaultCardProfile(order.customerName, order.phone);
   const profile = profileFromOrder(order, base);
   return saveOrderCardProfile(order.id, profile);
+}
+
+/** Init local profile + create/link Supabase card row */
+export async function initOrderCardProfileAsync(
+  order: HexaOrder,
+): Promise<HexaCardProfile> {
+  const profile = initOrderCardProfile(order);
+  await upsertOrderCardInDb(order, profile, {
+    stateId: order.stateId ?? null,
+    cityId: order.cityId ?? null,
+  });
+  return profile;
 }
 
 export function loadOrderCardProfile(
@@ -163,13 +198,16 @@ function syncOrderCardDesignFromProfile(
   const order = getOrderById(orderId);
   if (!order) return;
 
-  updateOrder(orderId, {
+  void updateOrder(orderId, {
     customerName: profile.contact.cardName.trim() || order.customerName,
     jobTitle: profile.contact.title.trim() || order.jobTitle,
     email: profile.contact.email.trim() || order.email,
     phone: profile.contact.mobile.replace(/\D/g, "").slice(-10) || order.phone,
     city: profile.contact.city.trim() || order.city,
+    state: profile.contact.state.trim() || order.state,
     address: profile.contact.address.trim() || order.address,
+    businessName:
+      profile.contact.businessName.trim() || order.businessName,
     cardDesign: order.cardDesign
       ? {
           ...order.cardDesign,

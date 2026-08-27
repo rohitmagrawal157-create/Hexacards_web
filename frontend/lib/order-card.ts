@@ -93,7 +93,7 @@ export async function resolveOrderLogoSrc(
     try {
       const dataUrl = await blobUrlToDataUrl(blob);
       if (order.cardDesign) {
-        updateOrder(order.id, {
+        void updateOrder(order.id, {
           cardDesign: { ...order.cardDesign, logoSrc: dataUrl },
         });
       }
@@ -970,7 +970,7 @@ export async function buildOrderCardDesignAsync(
   order: HexaOrder,
 ): Promise<ResolvedOrderCardDesign> {
   if (order.cardDesign && !order.cardDesign.lockedAccentColor?.trim()) {
-    updateOrder(order.id, {
+    void updateOrder(order.id, {
       cardDesign: {
         ...order.cardDesign,
         lockedAccentColor: order.cardDesign.accentColor,

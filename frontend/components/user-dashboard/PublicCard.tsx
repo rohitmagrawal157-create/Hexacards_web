@@ -10,13 +10,19 @@ import {
   getCardProfile,
   type HexaCardProfile,
 } from "@/lib/card-profile";
-import { getAuthUser } from "@/lib/auth";
+import { getAuthUser, normalizeIndianPhone } from "@/lib/auth";
 import { findOrderByCardSlug } from "@/lib/orders";
 import {
   getOrderCardProfile,
   loadOrderCardProfile,
+  saveOrderCardProfile,
 } from "@/lib/order-card-profile";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
+import {
+  cardDtoToProfile,
+  fetchCardBySlug,
+} from "@/lib/cards-api";
+import { MessageOwnerContext } from "@/lib/message-owner-context";
 import ProfileBanner from "./ProfileBanner";
 
 export default function PublicCard() {
@@ -29,11 +35,59 @@ export default function PublicCard() {
   const [publicUrl, setPublicUrl] = useState("");
   const [editHref, setEditHref] = useState("/dashboard/edit-card");
   const [notFound, setNotFound] = useState(false);
+  const [ownerPhone, setOwnerPhone] = useState("");
+  const [cardId, setCardId] = useState<number | null>(null);
 
-  const loadCard = useCallback(() => {
+  const loadCard = useCallback(async () => {
     const normalizedSlug = slugParam.trim().toLowerCase();
 
     if (normalizedSlug) {
+      // Prefer Supabase so public links work across devices
+      const dbCard = await fetchCardBySlug(normalizedSlug);
+      if (dbCard) {
+        const order = findOrderByCardSlug(normalizedSlug);
+        const local =
+          order != null
+            ? getOrderCardProfile(order.id) ??
+              loadOrderCardProfile(order, order.customerName, order.phone)
+            : null;
+        const loaded = cardDtoToProfile(dbCard, local);
+        if (order) {
+          try {
+            saveOrderCardProfile(order.id, loaded);
+          } catch {
+            // ignore quota
+          }
+        }
+
+        const slug = dbCard.unicCardName;
+        const liveUrl = order
+          ? resolveOrderLiveUrl(order).liveUrl
+          : `https://hexacards.com/${slug}`;
+
+        setProfile(loaded);
+        setUserName(
+          loaded.contact.cardName?.trim() || dbCard.cardName || "HexaCards User",
+        );
+        setPublicSlug(slug);
+        setPublicUrl(liveUrl);
+        setEditHref(
+          order
+            ? `/dashboard/edit-card?order=${encodeURIComponent(order.id)}`
+            : "/dashboard/edit-card",
+        );
+        setOwnerPhone(
+          normalizeIndianPhone(order?.ownerPhone ?? "") ||
+            normalizeIndianPhone(order?.phone ?? "") ||
+            normalizeIndianPhone(dbCard.mobile) ||
+            normalizeIndianPhone(loaded.contact.mobile),
+        );
+        setCardId(dbCard.cardId);
+        setNotFound(false);
+        setReady(true);
+        return;
+      }
+
       const order = findOrderByCardSlug(normalizedSlug);
       if (order) {
         const saved = getOrderCardProfile(order.id);
@@ -52,6 +106,12 @@ export default function PublicCard() {
         setEditHref(
           `/dashboard/edit-card?order=${encodeURIComponent(order.id)}`,
         );
+        setOwnerPhone(
+          normalizeIndianPhone(order.ownerPhone) ||
+            normalizeIndianPhone(order.phone) ||
+            normalizeIndianPhone(loaded.contact.mobile),
+        );
+        setCardId(order.cardId ?? null);
         setNotFound(false);
         setReady(true);
         return;
@@ -70,17 +130,25 @@ export default function PublicCard() {
     setPublicSlug(cardPublicSlug(stored));
     setPublicUrl(cardPublicUrl(stored));
     setEditHref("/dashboard/edit-card");
+    setOwnerPhone(
+      normalizeIndianPhone(auth?.phone ?? "") ||
+        normalizeIndianPhone(stored.contact.mobile),
+    );
+    setCardId(null);
     setNotFound(false);
     setReady(true);
   }, [slugParam]);
 
   useEffect(() => {
-    loadCard();
-    window.addEventListener("hexa-order-profiles-change", loadCard);
-    window.addEventListener("hexa-orders-change", loadCard);
+    void loadCard();
+    const onChange = () => {
+      void loadCard();
+    };
+    window.addEventListener("hexa-order-profiles-change", onChange);
+    window.addEventListener("hexa-orders-change", onChange);
     return () => {
-      window.removeEventListener("hexa-order-profiles-change", loadCard);
-      window.removeEventListener("hexa-orders-change", loadCard);
+      window.removeEventListener("hexa-order-profiles-change", onChange);
+      window.removeEventListener("hexa-orders-change", onChange);
     };
   }, [loadCard]);
 
@@ -119,28 +187,36 @@ export default function PublicCard() {
   const displayUrl = publicUrl || cardPublicUrl(profile);
 
   return (
-    <div className="min-h-screen bg-[#F4F5F7]">
-      <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-4">
-        <Link
-          href={editHref}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5c5346] hover:text-[#141414]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Edit card
-        </Link>
-        <p className="truncate font-mono text-[11px] text-[#8a8174]">
-          {displayUrl}
-        </p>
-      </div>
+    <MessageOwnerContext.Provider
+      value={{
+        ownerPhone,
+        cardId,
+        cardSlug: publicSlug || null,
+      }}
+    >
+      <div className="min-h-screen bg-[#F4F5F7]">
+        <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-4">
+          <Link
+            href={editHref}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5c5346] hover:text-[#141414]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Edit card
+          </Link>
+          <p className="truncate font-mono text-[11px] text-[#8a8174]">
+            {displayUrl}
+          </p>
+        </div>
 
-      <div className="mx-auto max-w-lg px-3 pb-10 sm:px-4">
-        <ProfileBanner
-          profile={profile}
-          userName={userName}
-          slug={publicSlug || cardPublicSlug(profile)}
-          compact={false}
-        />
+        <div className="mx-auto max-w-lg px-3 pb-10 sm:px-4">
+          <ProfileBanner
+            profile={profile}
+            userName={userName}
+            slug={publicSlug || cardPublicSlug(profile)}
+            compact={false}
+          />
+        </div>
       </div>
-    </div>
+    </MessageOwnerContext.Provider>
   );
 }

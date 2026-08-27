@@ -1,12 +1,16 @@
 import { getAuthUser, normalizeIndianPhone } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-config";
+import type { OrderCardDesignData } from "@/lib/order-card";
+import { findOrderByPublicSlug, resolveOrderLiveUrl } from "@/lib/order-card";
+import {
+  persistOrderLogo,
+  orderLogoRef,
+  stripLogoForLocalStorage,
+} from "@/lib/order-logo-store";
 
 export type HexaOrderStatus = "placed" | "shipped" | "delivered";
 
 export type HexaPaymentStatus = "paid" | "pending" | "failed" | "refunded";
-
-import type { OrderCardDesignData } from "@/lib/order-card";
-import { findOrderByPublicSlug, resolveOrderLiveUrl } from "@/lib/order-card";
-import { persistOrderLogo, orderLogoRef, stripLogoForLocalStorage } from "@/lib/order-logo-store";
 
 export type HexaOrder = {
   id: string;
@@ -24,6 +28,9 @@ export type HexaOrder = {
   state?: string;
   postalCode: string;
   country: string;
+  countryId?: number | null;
+  stateId?: number | null;
+  cityId?: number | null;
   packTitle: string;
   qty: number;
   subtotal: number;
@@ -31,21 +38,19 @@ export type HexaOrder = {
   total: number;
   coupon?: string | null;
   productTitle: string;
-  /** Product ID from product catalog (e.g. "google-standee", "instagram-card") */
+  /** Product slug from catalog (e.g. "google-standee") */
   productId?: string;
-  /** Digital card slug — used for QR / live URL */
+  /** Supabase users.user_id when linked */
+  userId?: number | null;
+  /** Supabase cards.card_id when linked */
+  cardId?: number | null;
   cardSlug?: string;
-  /** Full live card URL */
   cardUrl?: string;
   companyName?: string;
   jobTitle?: string;
-  /** For standee / social-media card orders: business/brand name entered at order time */
   businessName?: string;
-  /** For standee / social-media card orders: the review/social link entered at order time */
   reviewLink?: string;
-  /** For standee / social-media card orders: logo data URL or ref */
   orderLogoSrc?: string;
-  /** Card customizer data saved at checkout */
   cardDesign?: OrderCardDesignData;
 };
 
@@ -82,7 +87,13 @@ function writeOrders(orders: HexaOrder[]) {
   if (typeof window === "undefined") return;
 
   const compact = orders.slice(0, 50).map(compactOrderForStorage);
-  const attempts = [compact, compact.slice(0, 20), compact.slice(0, 10), compact.slice(0, 5), compact.slice(0, 1)];
+  const attempts = [
+    compact,
+    compact.slice(0, 20),
+    compact.slice(0, 10),
+    compact.slice(0, 5),
+    compact.slice(0, 1),
+  ];
 
   for (const next of attempts) {
     try {
@@ -121,7 +132,6 @@ function readOrders(): HexaOrder[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as HexaOrder[];
     if (!Array.isArray(parsed)) return [];
-    // Normalize legacy rows that predate ownerPhone
     const orders = parsed.map((o) => ({
       ...o,
       ownerPhone: phoneKey(o.ownerPhone) || phoneKey(o.phone),
@@ -129,10 +139,11 @@ function readOrders(): HexaOrder[] {
       paymentStatus: o.paymentStatus ?? "paid",
     }));
 
-    // Move oversized logos out of localStorage so later saves do not hit quota.
     if (
       orders.some(
-        (o) => o.cardDesign?.logoSrc?.startsWith("data:image/") && o.cardDesign.logoSrc.length > 4000,
+        (o) =>
+          o.cardDesign?.logoSrc?.startsWith("data:image/") &&
+          o.cardDesign.logoSrc.length > 4000,
       )
     ) {
       try {
@@ -148,17 +159,132 @@ function readOrders(): HexaOrder[] {
   }
 }
 
+function dtoToHexaOrder(dto: HexaOrder & Record<string, unknown>): HexaOrder {
+  return {
+    id: String(dto.id),
+    createdAt: String(dto.createdAt),
+    status: (dto.status as HexaOrderStatus) || "placed",
+    paymentStatus: (dto.paymentStatus as HexaPaymentStatus) || "paid",
+    ownerPhone: phoneKey(String(dto.ownerPhone ?? "")),
+    customerName: String(dto.customerName ?? ""),
+    phone: phoneKey(String(dto.phone ?? "")),
+    email: String(dto.email ?? ""),
+    address: String(dto.address ?? ""),
+    city: String(dto.city ?? ""),
+    state: dto.state ? String(dto.state) : undefined,
+    postalCode: String(dto.postalCode ?? ""),
+    country: String(dto.country ?? ""),
+    countryId: (dto.countryId as number | null | undefined) ?? null,
+    stateId: (dto.stateId as number | null | undefined) ?? null,
+    cityId: (dto.cityId as number | null | undefined) ?? null,
+    packTitle: String(dto.packTitle ?? ""),
+    qty: Number(dto.qty) || 1,
+    subtotal: Number(dto.subtotal) || 0,
+    discount: Number(dto.discount) || 0,
+    total: Number(dto.total) || 0,
+    coupon: (dto.coupon as string | null | undefined) ?? null,
+    productTitle: String(dto.productTitle ?? ""),
+    productId: dto.productId ? String(dto.productId) : undefined,
+    userId:
+      dto.userId != null && Number(dto.userId) > 0 ? Number(dto.userId) : null,
+    cardId:
+      dto.cardId != null && Number(dto.cardId) > 0 ? Number(dto.cardId) : null,
+    cardSlug: dto.cardSlug ? String(dto.cardSlug) : undefined,
+    cardUrl: dto.cardUrl ? String(dto.cardUrl) : undefined,
+    companyName: dto.companyName ? String(dto.companyName) : undefined,
+    jobTitle: dto.jobTitle ? String(dto.jobTitle) : undefined,
+    businessName: dto.businessName ? String(dto.businessName) : undefined,
+    reviewLink: dto.reviewLink ? String(dto.reviewLink) : undefined,
+    orderLogoSrc: dto.orderLogoSrc ? String(dto.orderLogoSrc) : undefined,
+    cardDesign: (dto.cardDesign as OrderCardDesignData | undefined) ?? undefined,
+  };
+}
+
+function orderToApiBody(order: Partial<HexaOrder> & { id?: string }) {
+  return {
+    id: order.id,
+    ownerPhone: order.ownerPhone,
+    customerName: order.customerName,
+    phone: order.phone,
+    email: order.email,
+    address: order.address,
+    city: order.city,
+    state: order.state,
+    postalCode: order.postalCode,
+    country: order.country,
+    countryId: order.countryId ?? null,
+    stateId: order.stateId ?? null,
+    cityId: order.cityId ?? null,
+    packTitle: order.packTitle,
+    qty: order.qty,
+    subtotal: order.subtotal,
+    discount: order.discount,
+    total: order.total,
+    coupon: order.coupon ?? null,
+    productTitle: order.productTitle,
+    productId: order.productId ?? null,
+    productSlug: order.productId ?? null,
+    userId: order.userId ?? null,
+    cardId: order.cardId ?? null,
+    jobTitle: order.jobTitle,
+    companyName: order.companyName,
+    businessName: order.businessName,
+    reviewLink: order.reviewLink ?? null,
+    orderLogoSrc: order.orderLogoSrc ?? null,
+    cardSlug: order.cardSlug ?? null,
+    cardUrl: order.cardUrl ?? null,
+    cardDesign: order.cardDesign ?? null,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+  };
+}
+
+/** Sync local cache (dashboard offline fallback). Prefer fetchOrders() for admin. */
 export function getOrders(): HexaOrder[] {
   return readOrders().sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
 
-/** Orders belonging to a logged-in phone (last 10 digits). */
+/** Load orders from Supabase; falls back to localStorage. */
+export async function fetchOrders(opts?: {
+  phone?: string;
+  ownerPhone?: string;
+}): Promise<HexaOrder[]> {
+  const params = new URLSearchParams();
+  if (opts?.ownerPhone) params.set("ownerPhone", opts.ownerPhone);
+  if (opts?.phone) params.set("phone", opts.phone);
+  const qs = params.toString();
+  const res = await apiFetch<HexaOrder[]>(
+    `/api/orders${qs ? `?${qs}` : ""}`,
+  );
+  if (res.ok && Array.isArray(res.data)) {
+    const mapped = res.data.map((d) => dtoToHexaOrder(d as HexaOrder & Record<string, unknown>));
+    if (!opts?.phone && !opts?.ownerPhone && typeof window !== "undefined") {
+      try {
+        writeOrders(mapped);
+      } catch {
+        // ignore quota
+      }
+    }
+    return mapped.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }
+  return getOrders();
+}
+
 export function getOrdersForPhone(phone: string): HexaOrder[] {
   const digits = phoneKey(phone);
   if (!digits) return [];
   return getOrders().filter((o) => orderOwnerKey(o) === digits);
+}
+
+export async function fetchOrdersForPhone(phone: string): Promise<HexaOrder[]> {
+  const digits = phoneKey(phone);
+  if (!digits) return [];
+  return fetchOrders({ ownerPhone: digits });
 }
 
 export function hasPlacedOrder(phone: string): boolean {
@@ -184,15 +310,21 @@ export function findOrderByCardSlug(slug: string): HexaOrder | null {
 
   if (!found.cardSlug?.trim()) {
     const { slug: computed, liveUrl } = resolveOrderLiveUrl(found);
-    return (
-      updateOrder(found.id, {
-        cardSlug: computed,
-        cardUrl: liveUrl,
-        cardDesign: found.cardDesign
-          ? { ...found.cardDesign, liveUrl }
-          : undefined,
-      }) ?? found
-    );
+    void updateOrder(found.id, {
+      cardSlug: computed,
+      cardUrl: liveUrl,
+      cardDesign: found.cardDesign
+        ? { ...found.cardDesign, liveUrl }
+        : undefined,
+    });
+    return {
+      ...found,
+      cardSlug: computed,
+      cardUrl: liveUrl,
+      cardDesign: found.cardDesign
+        ? { ...found.cardDesign, liveUrl }
+        : undefined,
+    };
   }
 
   return found;
@@ -233,24 +365,80 @@ export async function saveOrder(
     };
   }
 
+  const apiRes = await apiFetch<HexaOrder>("/api/orders", {
+    method: "POST",
+    body: JSON.stringify(orderToApiBody(next)),
+  });
+
+  let saved = next;
+  if (apiRes.ok && apiRes.data) {
+    saved = {
+      ...next,
+      ...dtoToHexaOrder(apiRes.data as HexaOrder & Record<string, unknown>),
+      cardDesign: next.cardDesign ?? dtoToHexaOrder(apiRes.data as HexaOrder & Record<string, unknown>).cardDesign,
+    };
+  } else {
+    console.error(
+      "[orders] Supabase save failed — stored in browser only:",
+      apiRes.error,
+      apiRes.details,
+    );
+  }
+
   const all = readOrders();
-  all.unshift(next);
+  all.unshift(compactOrderForStorage(saved));
   writeOrders(all);
   window.dispatchEvent(new Event("hexa-orders-change"));
-  return compactOrderForStorage(next);
+  return compactOrderForStorage(saved);
 }
 
-export function updateOrder(
+export async function updateOrder(
   id: string,
   patch: Partial<HexaOrder>,
-): HexaOrder | null {
+): Promise<HexaOrder | null> {
   const all = readOrders();
   const idx = all.findIndex((o) => o.id === id);
-  if (idx < 0) return null;
-  all[idx] = compactOrderForStorage({ ...all[idx], ...patch });
-  writeOrders(all);
-  window.dispatchEvent(new Event("hexa-orders-change"));
-  return all[idx];
+  let local: HexaOrder | null = null;
+  if (idx >= 0) {
+    all[idx] = compactOrderForStorage({ ...all[idx], ...patch });
+    writeOrders(all);
+    local = all[idx];
+    window.dispatchEvent(new Event("hexa-orders-change"));
+  }
+
+  const apiRes = await apiFetch<HexaOrder>(
+    `/api/orders/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(orderToApiBody({ id, ...patch })),
+    },
+  );
+
+  if (apiRes.ok && apiRes.data) {
+    const mapped = dtoToHexaOrder(
+      apiRes.data as HexaOrder & Record<string, unknown>,
+    );
+    if (idx >= 0) {
+      all[idx] = compactOrderForStorage({
+        ...mapped,
+        cardDesign: patch.cardDesign ?? mapped.cardDesign ?? all[idx].cardDesign,
+      });
+      writeOrders(all);
+      window.dispatchEvent(new Event("hexa-orders-change"));
+      return all[idx];
+    }
+    return mapped;
+  }
+
+  if (!apiRes.ok) {
+    console.error(
+      "[orders] Supabase update failed:",
+      apiRes.error,
+      apiRes.details,
+    );
+  }
+
+  return local;
 }
 
 export function formatOrderDate(iso: string) {
@@ -291,10 +479,12 @@ export function paymentStatusLabel(status: HexaPaymentStatus) {
   }
 }
 
-export function formatOrderAddress(order: Pick<
-  HexaOrder,
-  "address" | "city" | "state" | "postalCode" | "country"
->) {
+export function formatOrderAddress(
+  order: Pick<
+    HexaOrder,
+    "address" | "city" | "state" | "postalCode" | "country"
+  >,
+) {
   return [order.address, order.city, order.state, order.postalCode, order.country]
     .filter(Boolean)
     .join(", ");

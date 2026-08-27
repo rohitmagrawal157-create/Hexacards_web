@@ -28,11 +28,12 @@ type Props = {
   options: SearchableOption[];
   onChange: (value: string) => void;
   className?: string;
+  /** Extra classes merged onto the trigger (do not replace flex layout). */
   triggerClassName?: string;
 };
 
-const defaultTrigger =
-  "flex w-full items-center justify-between gap-2 rounded-xl border border-black/10 bg-[#FFFCF7] px-4 py-3 text-left text-sm text-[#141414] transition-colors hover:border-[#BC7C10]/35 focus:border-[#BC7C10]/50 focus:bg-white focus:ring-2 focus:ring-[#BC7C10]/15 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60";
+const TRIGGER_BASE =
+  "flex w-full items-center gap-2 rounded-xl border border-black/10 bg-[#FFFCF7] px-3.5 py-2.5 text-left text-sm text-[#141414] transition-colors hover:border-[#BC7C10]/35 focus:border-[#BC7C10]/50 focus:bg-white focus:ring-2 focus:ring-[#BC7C10]/15 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function SearchableSelect({
   id,
@@ -47,7 +48,7 @@ export default function SearchableSelect({
   options,
   onChange,
   className = "",
-  triggerClassName = defaultTrigger,
+  triggerClassName = "",
 }: Props) {
   const autoId = useId();
   const fieldId = id || autoId;
@@ -104,6 +105,13 @@ export default function SearchableSelect({
     setOpen(false);
   }
 
+  function clearSelection(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    onChange("");
+    setOpen(false);
+  }
+
   function onTriggerKey(e: KeyboardEvent<HTMLButtonElement>) {
     if (disabled) return;
     if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
@@ -130,13 +138,12 @@ export default function SearchableSelect({
     <div ref={rootRef} className={`relative ${className}`.trim()}>
       <label
         htmlFor={fieldId}
-        className="mb-2 block text-sm font-medium text-[#5c5346]"
+        className="mb-1.5 block text-[11px] font-semibold tracking-wide text-[#8a8174] uppercase"
       >
         {label}
         {required ? " *" : ""}
       </label>
 
-      {/* Native input for HTML5 required / form submit */}
       <input
         id={fieldId}
         tabIndex={-1}
@@ -147,50 +154,58 @@ export default function SearchableSelect({
         className="pointer-events-none absolute h-0 w-0 opacity-0"
       />
 
-      <button
-        type="button"
-        disabled={disabled || loading}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => !disabled && !loading && setOpen((v) => !v)}
-        onKeyDown={onTriggerKey}
-        className={triggerClassName}
+      <div
+        className={`${TRIGGER_BASE} ${triggerClassName}`.trim()}
       >
-        <span
-          className={`min-w-0 flex-1 truncate ${
-            selected ? "font-medium text-[#141414]" : "text-[#8a8174]"
-          }`}
+        <button
+          type="button"
+          disabled={disabled || loading}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => !disabled && !loading && setOpen((v) => !v)}
+          onKeyDown={onTriggerKey}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
         >
-          {loading
-            ? "Loading…"
-            : selected?.label || placeholder}
-        </span>
-        <span className="flex shrink-0 items-center gap-1">
-          {selected && !disabled ? (
-            <span
-              role="button"
-              tabIndex={-1}
-              aria-label="Clear"
-              className="rounded-md p-0.5 text-[#8a8174] hover:bg-black/[0.05] hover:text-[#141414]"
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange("");
-              }}
+          <span
+            className={`min-w-0 flex-1 truncate ${
+              selected ? "font-medium text-[#141414]" : "text-[#8a8174]"
+            }`}
+          >
+            {loading ? "Loading…" : selected?.label || placeholder}
+          </span>
+        </button>
+
+        <span className="flex shrink-0 items-center gap-0.5">
+          {selected && !disabled && !loading ? (
+            <button
+              type="button"
+              aria-label={`Clear ${label}`}
+              className="rounded-md p-1 text-[#8a8174] hover:bg-black/[0.06] hover:text-[#141414]"
+              onClick={clearSelection}
             >
               <X className="h-3.5 w-3.5" />
-            </span>
+            </button>
           ) : null}
-          <ChevronDown
-            className={`h-4 w-4 text-[#8a8174] transition-transform ${
-              open ? "rotate-180" : ""
-            }`}
-          />
+          <button
+            type="button"
+            tabIndex={-1}
+            disabled={disabled || loading}
+            aria-label={open ? `Close ${label}` : `Open ${label}`}
+            className="rounded-md p-1 text-[#8a8174] hover:bg-black/[0.06] disabled:opacity-60"
+            onClick={() => !disabled && !loading && setOpen((v) => !v)}
+          >
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${
+                open ? "rotate-180" : ""
+              }`}
+            />
+          </button>
         </span>
-      </button>
+      </div>
 
       {open ? (
         <div
-          className="absolute left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-xl border border-black/10 bg-white shadow-[0_12px_40px_rgba(20,20,20,0.14)] ring-1 ring-black/[0.03]"
+          className="absolute top-full right-0 left-0 z-50 mt-1.5 overflow-hidden rounded-xl border border-black/10 bg-white shadow-[0_12px_40px_rgba(20,20,20,0.14)] ring-1 ring-black/[0.03]"
           role="listbox"
         >
           <div className="border-b border-black/[0.06] bg-[#FFFCF7] p-2">
@@ -221,7 +236,10 @@ export default function SearchableSelect({
             </div>
           </div>
 
-          <div ref={listRef} className="max-h-56 overflow-y-auto overscroll-contain py-1">
+          <div
+            ref={listRef}
+            className="max-h-56 overflow-y-auto overscroll-contain py-1"
+          >
             {filtered.length === 0 ? (
               <p className="px-4 py-6 text-center text-sm text-[#8a8174]">
                 {emptyText}
@@ -241,7 +259,11 @@ export default function SearchableSelect({
                     onClick={() => select(opt.value)}
                     className={`flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm transition-colors ${
                       isActive ? "bg-[#FFF8ED]" : "bg-white"
-                    } ${isSelected ? "font-semibold text-[#BC7C10]" : "text-[#141414]"}`}
+                    } ${
+                      isSelected
+                        ? "font-semibold text-[#BC7C10]"
+                        : "text-[#141414]"
+                    }`}
                   >
                     <span className="min-w-0 flex-1 truncate">{opt.label}</span>
                     {isSelected ? (

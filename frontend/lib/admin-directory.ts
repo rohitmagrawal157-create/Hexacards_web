@@ -1,4 +1,7 @@
-import { getOrders, type HexaOrder } from "@/lib/orders";
+import { apiFetch } from "@/lib/api-config";
+import { fetchOrders, getOrders, type HexaOrder } from "@/lib/orders";
+import type { CardDto } from "@/lib/server/card-types";
+import type { UserDto } from "@/lib/server/user-types";
 import { isCardProductOrder, orderToDashboardCard } from "@/lib/user-cards";
 
 export type AdminUserRecord = {
@@ -33,7 +36,12 @@ type UsersStore = {
 };
 
 type CardsStore = {
-  overrides: Record<string, Partial<Pick<AdminCardRecord, "startDate" | "expiryDate" | "active" | "pageViews">>>;
+  overrides: Record<
+    string,
+    Partial<
+      Pick<AdminCardRecord, "startDate" | "expiryDate" | "active" | "pageViews">
+    >
+  >;
   deletedIds: string[];
 };
 
@@ -47,7 +55,7 @@ function splitName(name: string): { firstName: string; lastName: string } {
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
 
-function formatShortDate(value: string | Date): string {
+function formatShortDateDashed(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date
@@ -61,9 +69,9 @@ function formatShortDate(value: string | Date): string {
 
 function addYears(iso: string, years: number): string {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return formatShortDate(new Date());
+  if (Number.isNaN(date.getTime())) return formatShortDateDashed(new Date());
   date.setFullYear(date.getFullYear() + years);
-  return formatShortDate(date);
+  return formatShortDateDashed(date);
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -97,7 +105,9 @@ function phoneId(phone: string) {
 function usersFromOrders(orders: HexaOrder[]): AdminUserRecord[] {
   const byPhone = new Map<string, HexaOrder[]>();
   for (const order of orders) {
-    const phone = (order.ownerPhone || order.phone || "").replace(/\D/g, "").slice(-10);
+    const phone = (order.ownerPhone || order.phone || "")
+      .replace(/\D/g, "")
+      .slice(-10);
     if (!phone) continue;
     const list = byPhone.get(phone) ?? [];
     list.push(order);
@@ -107,11 +117,14 @@ function usersFromOrders(orders: HexaOrder[]): AdminUserRecord[] {
   const rows: AdminUserRecord[] = [];
   for (const [phone, list] of byPhone) {
     const sorted = [...list].sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     );
     const first = sorted[0];
     const latest = sorted[sorted.length - 1];
-    const { firstName, lastName } = splitName(latest.customerName || "Customer");
+    const { firstName, lastName } = splitName(
+      latest.customerName || "Customer",
+    );
     rows.push({
       id: phoneId(phone),
       srNo: 0,
@@ -119,22 +132,59 @@ function usersFromOrders(orders: HexaOrder[]): AdminUserRecord[] {
       lastName,
       email: latest.email?.trim() || "",
       mobile: phone,
-      regDate: formatShortDate(first.createdAt),
+      regDate: formatShortDateDashed(first.createdAt),
       active: true,
     });
   }
   return rows;
 }
 
+function userDtoToAdmin(user: UserDto): AdminUserRecord {
+  return {
+    id: `db-${user.userId}`,
+    srNo: 0,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email?.trim() || "",
+    mobile: user.mobile,
+    regDate: formatShortDateDashed(user.dateTime),
+    active: user.status,
+  };
+}
+
+function cardDtoToAdmin(card: CardDto): AdminCardRecord {
+  const slug = card.unicCardName;
+  return {
+    id: `card-${card.cardId}`,
+    srNo: 0,
+    name: card.cardName || slug,
+    liveUrl: `https://hexacards.com/${slug}`,
+    email: card.email?.trim() || "",
+    mobile: (card.mobile || "").replace(/\D/g, "").slice(-10),
+    startDate: card.startDate
+      ? formatShortDateDashed(card.startDate)
+      : formatShortDateDashed(card.dateTime),
+    expiryDate: card.endDate
+      ? formatShortDateDashed(card.endDate)
+      : addYears(card.dateTime, 20),
+    pageViews: card.pageView || 0,
+    editHref: `/super-admin?tab=cards`,
+    active: card.status,
+  };
+}
+
 function assignSrNos<T extends { srNo: number }>(rows: T[]): T[] {
   return rows.map((row, index) => ({ ...row, srNo: rows.length - index }));
 }
 
+/** Sync local cache — prefer fetchAdminUsers() for admin UI. */
 export function getAdminUsers(): AdminUserRecord[] {
   const store = readJson<UsersStore>(USERS_KEY, emptyUsersStore());
   const fromOrders = usersFromOrders(getOrders());
   const extras = store.extras.filter(
-    (user) => !store.deletedIds.includes(user.id) && !fromOrders.some((row) => row.id === user.id),
+    (user) =>
+      !store.deletedIds.includes(user.id) &&
+      !fromOrders.some((row) => row.id === user.id),
   );
   const merged = [...fromOrders, ...extras]
     .filter((user) => !store.deletedIds.includes(user.id))
@@ -147,6 +197,28 @@ export function getAdminUsers(): AdminUserRecord[] {
       return bTime - aTime;
     }),
   );
+}
+
+/** Load users from Supabase `users` table; falls back to order-derived list. */
+export async function fetchAdminUsers(): Promise<AdminUserRecord[]> {
+  const res = await apiFetch<UserDto[]>("/api/users");
+  if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+    const store = readJson<UsersStore>(USERS_KEY, emptyUsersStore());
+    const rows = res.data
+      .map(userDtoToAdmin)
+      .filter((u) => !store.deletedIds.includes(u.id))
+      .map((u) => ({ ...u, ...store.overrides[u.id] }));
+    return assignSrNos(
+      rows.sort(
+        (a, b) =>
+          new Date(b.regDate.replace(/-/g, " ")).getTime() -
+          new Date(a.regDate.replace(/-/g, " ")).getTime(),
+      ),
+    );
+  }
+
+  await fetchOrders();
+  return getAdminUsers();
 }
 
 export function addAdminUser(
@@ -163,6 +235,21 @@ export function addAdminUser(
   store.extras = [created, ...store.extras.filter((item) => item.id !== id)];
   writeJson(USERS_KEY, store);
   window.dispatchEvent(new Event("hexa-admin-directory-change"));
+
+  void apiFetch("/api/users", {
+    method: "POST",
+    body: JSON.stringify({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      mobile: user.mobile,
+      email: user.email || null,
+    }),
+  }).then((res) => {
+    if (!res.ok) {
+      console.error("[admin-users] DB create failed:", res.error);
+    }
+  });
+
   return created;
 }
 
@@ -174,6 +261,22 @@ export function updateAdminUser(id: string, patch: Partial<AdminUserRecord>) {
   );
   writeJson(USERS_KEY, store);
   window.dispatchEvent(new Event("hexa-admin-directory-change"));
+
+  const dbId = id.startsWith("db-") ? Number(id.slice(3)) : null;
+  if (dbId && Number.isInteger(dbId) && dbId > 0) {
+    void apiFetch(`/api/users/${dbId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        firstName: patch.firstName,
+        lastName: patch.lastName,
+        email: patch.email,
+        mobile: patch.mobile,
+        status: patch.active === undefined ? undefined : patch.active ? 1 : 0,
+      }),
+    }).then((res) => {
+      if (!res.ok) console.error("[admin-users] DB update failed:", res.error);
+    });
+  }
 }
 
 export function deleteAdminUser(id: string) {
@@ -183,12 +286,20 @@ export function deleteAdminUser(id: string) {
   delete store.overrides[id];
   writeJson(USERS_KEY, store);
   window.dispatchEvent(new Event("hexa-admin-directory-change"));
+
+  const dbId = id.startsWith("db-") ? Number(id.slice(3)) : null;
+  if (dbId && Number.isInteger(dbId) && dbId > 0) {
+    void apiFetch(`/api/users/${dbId}`, { method: "DELETE" }).then((res) => {
+      if (!res.ok) console.error("[admin-users] DB delete failed:", res.error);
+    });
+  }
 }
 
 export function toggleAdminUser(id: string, active: boolean) {
   updateAdminUser(id, { active });
 }
 
+/** Sync local cache — prefer fetchAdminCards() for admin UI. */
 export function getAdminCards(): AdminCardRecord[] {
   const store = readJson<CardsStore>(CARDS_KEY, emptyCardsStore());
   const orders = getOrders().filter(isCardProductOrder);
@@ -203,8 +314,10 @@ export function getAdminCards(): AdminCardRecord[] {
         name: card.slug || card.name,
         liveUrl: card.publicUrl,
         email: order.email?.trim() || "",
-        mobile: (order.ownerPhone || order.phone || "").replace(/\D/g, "").slice(-10),
-        startDate: override.startDate || formatShortDate(order.createdAt),
+        mobile: (order.ownerPhone || order.phone || "")
+          .replace(/\D/g, "")
+          .slice(-10),
+        startDate: override.startDate || formatShortDateDashed(order.createdAt),
         expiryDate: override.expiryDate || addYears(order.createdAt, 20),
         pageViews: override.pageViews ?? 0,
         editHref: `/super-admin?tab=cards`,
@@ -213,6 +326,28 @@ export function getAdminCards(): AdminCardRecord[] {
     });
 
   return assignSrNos(rows);
+}
+
+/** Load cards from Supabase `cards` table; falls back to order-derived list. */
+export async function fetchAdminCards(): Promise<AdminCardRecord[]> {
+  const res = await apiFetch<CardDto[]>("/api/cards");
+  if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+    const store = readJson<CardsStore>(CARDS_KEY, emptyCardsStore());
+    const rows = res.data
+      .map(cardDtoToAdmin)
+      .filter((c) => !store.deletedIds.includes(c.id))
+      .map((c) => ({ ...c, ...store.overrides[c.id] }));
+    return assignSrNos(
+      rows.sort(
+        (a, b) =>
+          new Date(b.startDate.replace(/-/g, " ")).getTime() -
+          new Date(a.startDate.replace(/-/g, " ")).getTime(),
+      ),
+    );
+  }
+
+  await fetchOrders();
+  return getAdminCards();
 }
 
 export function updateAdminCard(id: string, patch: Partial<AdminCardRecord>) {
@@ -226,6 +361,20 @@ export function updateAdminCard(id: string, patch: Partial<AdminCardRecord>) {
   };
   writeJson(CARDS_KEY, store);
   window.dispatchEvent(new Event("hexa-admin-directory-change"));
+
+  const dbId = id.startsWith("card-") ? Number(id.slice(5)) : null;
+  if (dbId && Number.isInteger(dbId) && dbId > 0) {
+    void apiFetch(`/api/cards/${dbId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: patch.active === undefined ? undefined : patch.active ? 1 : 0,
+        startDate: patch.startDate || undefined,
+        endDate: patch.expiryDate || undefined,
+      }),
+    }).then((res) => {
+      if (!res.ok) console.error("[admin-cards] DB update failed:", res.error);
+    });
+  }
 }
 
 export function deleteAdminCard(id: string) {
@@ -234,6 +383,13 @@ export function deleteAdminCard(id: string) {
   delete store.overrides[id];
   writeJson(CARDS_KEY, store);
   window.dispatchEvent(new Event("hexa-admin-directory-change"));
+
+  const dbId = id.startsWith("card-") ? Number(id.slice(5)) : null;
+  if (dbId && Number.isInteger(dbId) && dbId > 0) {
+    void apiFetch(`/api/cards/${dbId}`, { method: "DELETE" }).then((res) => {
+      if (!res.ok) console.error("[admin-cards] DB delete failed:", res.error);
+    });
+  }
 }
 
 export function toggleAdminCard(id: string, active: boolean) {

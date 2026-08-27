@@ -5,6 +5,7 @@ import {
   jsonOk,
   mapCategory,
   slugify,
+  toCategoryImgFilename,
   toNumber,
   uniqueId,
 } from "@/lib/admin-catalog-db";
@@ -16,7 +17,7 @@ export async function GET() {
       .from("categories")
       .select("*")
       .order("sort_order", { ascending: true })
-      .order("title", { ascending: true });
+      .order("category_name", { ascending: true });
 
     if (error) return jsonError(500, "Failed to load categories", error.message);
     return jsonOk((data as CategoryRow[] | null ?? []).map(mapCategory));
@@ -31,25 +32,56 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as CategoryCreateBody;
-    const title = String(body.title ?? "").trim();
+    const title = String(
+      body.title ?? body.categoryName ?? body.category_name ?? "",
+    ).trim();
     if (!title) return jsonError(400, "title is required");
 
     const supabase = getSupabaseAdmin();
-    const { data: existing } = await supabase.from("categories").select("id");
-    const existingIds = new Set((existing ?? []).map((r) => String(r.id)));
-    const id =
-      String(body.id ?? "").trim() || uniqueId(slugify(title), existingIds);
+    const { data: existing } = await supabase.from("categories").select("slug");
+    const existingSlugs = new Set(
+      (existing ?? []).map((r) => String(r.slug)),
+    );
+    const slug =
+      String(body.slug ?? body.id ?? "").trim() ||
+      uniqueId(slugify(title), existingSlugs);
 
-    if (existingIds.has(id)) {
-      return jsonError(409, `Category id "${id}" already exists`);
+    if (existingSlugs.has(slug)) {
+      return jsonError(409, `Category slug "${slug}" already exists`);
     }
 
+    const image =
+      body.imageSrc !== undefined
+        ? toCategoryImgFilename(body.imageSrc)
+        : body.categoryImg !== undefined || body.category_img !== undefined
+          ? toCategoryImgFilename(
+              String(body.categoryImg ?? body.category_img ?? ""),
+            )
+          : null;
+
+    const desc = String(
+      body.subtitle ?? body.categoryDesc ?? body.category_desc ?? "",
+    ).trim();
+
+    const statusRaw = body.status;
+    const status =
+      statusRaw === undefined
+        ? 1
+        : typeof statusRaw === "boolean"
+          ? statusRaw
+            ? 1
+            : 0
+          : Number(statusRaw) === 0
+            ? 0
+            : 1;
+
     const payload = {
-      id,
-      title,
-      subtitle: String(body.subtitle ?? "").trim(),
-      image_src: body.imageSrc ? String(body.imageSrc).trim() : null,
-      sort_order: toNumber(body.sortOrder, existingIds.size),
+      category_name: title,
+      category_desc: desc || null,
+      category_img: image,
+      slug,
+      sort_order: toNumber(body.sortOrder, existingSlugs.size),
+      status,
     };
 
     const { data, error } = await supabase

@@ -25,6 +25,7 @@ import {
 import CardLogsPanel, { sampleCardLogs } from "@/components/super-admin/Cardslogs";
 import {
   deleteAdminCard,
+  fetchAdminCards,
   getAdminCards,
   toggleAdminCard,
   updateAdminCard,
@@ -422,7 +423,7 @@ export default function CardsPanel({
 
   useEffect(() => {
     function sync() {
-      setRows(getAdminCards());
+      void fetchAdminCards().then(setRows);
     }
     sync();
     window.addEventListener("hexa-orders-change", sync);

@@ -19,6 +19,14 @@ SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
 2. In Supabase SQL Editor, run `sql/schema.sql`.
+   If you already have older tables, also run:
+   - `sql/categories-migrate.sql`
+   - `sql/products-migrate.sql`
+   - `sql/orders-table.sql`
+   - `sql/orders-migrate.sql` (if older orders columns exist)
+   - `sql/payments-table.sql`
+   - `sql/reviews-table.sql`
+   - `sql/messages-table.sql`
 
 3. Start Next.js (frontend + TypeScript API together):
 

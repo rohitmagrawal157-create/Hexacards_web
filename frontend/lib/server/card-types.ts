@@ -84,6 +84,9 @@ export type CardCreateBody = {
   business_name?: string;
   userId?: number;
   user_id?: number;
+  /** Resolve user_id from users.mobile when userId omitted */
+  ownerPhone?: string;
+  mobileNumber?: string;
   logo?: string | null;
   bgImg?: string | null;
   bg_img?: string | null;

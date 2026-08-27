@@ -35,7 +35,7 @@ import {
 } from "@/lib/auth";
 import {
   formatOrderDate,
-  getOrdersForPhone,
+  fetchOrdersForPhone,
   statusLabel,
   type HexaOrder,
   type HexaOrderStatus,
@@ -50,6 +50,7 @@ import { ensureOrderCardProfile } from "@/lib/order-card-profile";
 import { buildCardQrImageUrl } from "@/lib/order-card";
 import {
   deleteCardMessage,
+  fetchCardMessages,
   formatMessageDateShort,
   getCardMessages,
   markAllMessagesRead,
@@ -210,7 +211,7 @@ export default function Dashboard() {
       return;
     }
 
-    function syncWorkspace() {
+    async function syncWorkspace() {
       const auth = getAuthUser();
       if (!auth) {
         setAuthReady(false);
@@ -218,50 +219,67 @@ export default function Dashboard() {
         return;
       }
       setUser(auth);
-      setOrders(getOrdersForPhone(auth.phone));
-      setMessages(getCardMessages());
+      setOrders(await fetchOrdersForPhone(auth.phone));
+      setMessages(await fetchCardMessages({ ownerPhone: auth.phone }));
       setAuthReady(true);
     }
 
-    syncWorkspace();
+    void syncWorkspace();
 
     function onAuthChange() {
-      syncWorkspace();
+      void syncWorkspace();
     }
 
     function onOrdersChange() {
       const current = getAuthUser();
-      setOrders(current ? getOrdersForPhone(current.phone) : []);
+      if (!current) {
+        setOrders([]);
+        return;
+      }
+      void fetchOrdersForPhone(current.phone).then(setOrders);
     }
 
     function onMessagesChange() {
-      setMessages(getCardMessages());
+      const current = getAuthUser();
+      if (!current) {
+        setMessages(getCardMessages());
+        return;
+      }
+      void fetchCardMessages({ ownerPhone: current.phone }).then(setMessages);
     }
 
     function onVisibility() {
-      if (document.visibilityState === "visible") syncWorkspace();
+      if (document.visibilityState === "visible") void syncWorkspace();
     }
 
     function onStorage(e: StorageEvent) {
       if (
         e.key === "hexaOrders" ||
         e.key === "hexaAuthUser" ||
-        e.key === "hexaOrderCardProfiles"
+        e.key === "hexaOrderCardProfiles" ||
+        e.key === "hexaCardMessages"
       ) {
-        syncWorkspace();
+        void syncWorkspace();
       }
     }
 
     function onProfilesChange() {
       const current = getAuthUser();
-      setOrders(current ? getOrdersForPhone(current.phone) : []);
+      if (!current) {
+        setOrders([]);
+        return;
+      }
+      void fetchOrdersForPhone(current.phone).then(setOrders);
     }
 
     window.addEventListener("hexa-auth-change", onAuthChange);
     window.addEventListener("hexa-orders-change", onOrdersChange);
     window.addEventListener("hexa-order-profiles-change", onProfilesChange);
     window.addEventListener("hexa-card-messages-change", onMessagesChange);
-    window.addEventListener("focus", syncWorkspace);
+    function onFocus() {
+      void syncWorkspace();
+    }
+    window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("storage", onStorage);
     return () => {
@@ -269,7 +287,7 @@ export default function Dashboard() {
       window.removeEventListener("hexa-orders-change", onOrdersChange);
       window.removeEventListener("hexa-order-profiles-change", onProfilesChange);
       window.removeEventListener("hexa-card-messages-change", onMessagesChange);
-      window.removeEventListener("focus", syncWorkspace);
+      window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("storage", onStorage);
     };
@@ -280,7 +298,7 @@ export default function Dashboard() {
     if (!authReady) return;
     const auth = getAuthUser();
     if (!auth) return;
-    setOrders(getOrdersForPhone(auth.phone));
+    void fetchOrdersForPhone(auth.phone).then(setOrders);
   }, [authReady, active, searchParams]);
 
   const avatar = useMemo(() => (user ? initials(user.name) : "HC"), [user]);
@@ -295,9 +313,19 @@ export default function Dashboard() {
     setRefreshing(true);
     const next = getAuthUser();
     setUser(next);
-    setOrders(next ? getOrdersForPhone(next.phone) : []);
-    setMessages(getCardMessages());
-    window.setTimeout(() => setRefreshing(false), 500);
+    void Promise.all([
+      next ? fetchOrdersForPhone(next.phone) : Promise.resolve([] as HexaOrder[]),
+      next
+        ? fetchCardMessages({ ownerPhone: next.phone })
+        : Promise.resolve(getCardMessages()),
+    ])
+      .then(([ordersList, messagesList]) => {
+        setOrders(ordersList);
+        setMessages(messagesList);
+      })
+      .finally(() => {
+        window.setTimeout(() => setRefreshing(false), 500);
+      });
   }
 
   function selectNav(key: NavKey) {
@@ -507,7 +535,16 @@ export default function Dashboard() {
           {active === "messages" ? (
             <MessagesPanel
               messages={messages}
-              onChange={() => setMessages(getCardMessages())}
+              onChange={() => {
+                const auth = getAuthUser();
+                if (!auth) {
+                  setMessages(getCardMessages());
+                  return;
+                }
+                void fetchCardMessages({ ownerPhone: auth.phone }).then(
+                  setMessages,
+                );
+              }}
             />
           ) : null}
           {active === "orders" ? <OrdersPanel orders={orders} /> : null}
@@ -1198,8 +1235,7 @@ function MessagesPanel({
           <button
             type="button"
             onClick={() => {
-              markAllMessagesRead();
-              onChange();
+              void markAllMessagesRead().then(() => onChange());
             }}
             className="rounded-lg border border-black/[0.08] px-3 py-2 text-xs font-semibold text-[#141414] hover:bg-[#FAFAF8]"
           >
@@ -1244,8 +1280,7 @@ function MessagesPanel({
                     } hover:bg-[#FAFAF8]`}
                     onClick={() => {
                       if (!msg.read) {
-                        markMessageRead(msg.id);
-                        onChange();
+                        void markMessageRead(msg.id).then(() => onChange());
                       }
                     }}
                   >
@@ -1313,8 +1348,7 @@ function MessagesPanel({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteCardMessage(msg.id);
-                          onChange();
+                          void deleteCardMessage(msg.id).then(() => onChange());
                         }}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#8a8174] hover:bg-[#FFF5F5] hover:text-[#E24C4C]"
                         aria-label={`Delete message from ${msg.name}`}

@@ -1,3 +1,6 @@
+import { apiFetch } from "@/lib/api-config";
+import { getAuthUser, normalizeIndianPhone } from "@/lib/auth";
+
 export type CardMessage = {
   id: string;
   name: string;
@@ -32,25 +35,79 @@ function writeMessages(messages: CardMessage[]) {
   window.dispatchEvent(new Event("hexa-card-messages-change"));
 }
 
+function toCardMessage(row: CardMessage & Record<string, unknown>): CardMessage {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    email: String(row.email ?? ""),
+    phone: String(row.phone ?? ""),
+    website: String(row.website ?? ""),
+    message: String(row.message ?? ""),
+    createdAt: String(row.createdAt ?? new Date().toISOString()),
+    read: Boolean(row.read),
+  };
+}
+
+/** Sync local cache — prefer fetchCardMessages() for dashboard. */
 export function getCardMessages(): CardMessage[] {
   return readMessages().sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
 
+export async function fetchCardMessages(opts?: {
+  ownerPhone?: string;
+  userId?: number;
+}): Promise<CardMessage[]> {
+  const auth = getAuthUser();
+  const ownerPhone =
+    normalizeIndianPhone(opts?.ownerPhone ?? "") ||
+    normalizeIndianPhone(auth?.phone ?? "");
+  const params = new URLSearchParams();
+  if (opts?.userId) params.set("userId", String(opts.userId));
+  else if (ownerPhone) params.set("ownerPhone", ownerPhone);
+
+  const qs = params.toString();
+  const res = await apiFetch<CardMessage[]>(
+    `/api/messages${qs ? `?${qs}` : ""}`,
+  );
+
+  if (res.ok && Array.isArray(res.data)) {
+    const mapped = res.data.map((d) =>
+      toCardMessage(d as CardMessage & Record<string, unknown>),
+    );
+    if (typeof window !== "undefined") {
+      try {
+        writeMessages(mapped);
+      } catch {
+        // ignore quota
+      }
+    }
+    return mapped;
+  }
+
+  return getCardMessages();
+}
+
 export function getUnreadMessageCount() {
   return getCardMessages().filter((m) => !m.read).length;
 }
 
-export function saveCardMessage(input: {
+export async function saveCardMessage(input: {
   name: string;
   email: string;
   phone: string;
   website?: string;
   message: string;
-}): CardMessage {
+  ownerPhone?: string;
+  userId?: number | null;
+  cardId?: number | null;
+  cardSlug?: string | null;
+}): Promise<CardMessage> {
+  const ownerPhone = normalizeIndianPhone(input.ownerPhone ?? "");
+  const id = `MSG-${Date.now().toString().slice(-8)}`;
   const next: CardMessage = {
-    id: `MSG-${Date.now().toString().slice(-8)}`,
+    id,
     name: input.name.trim(),
     email: input.email.trim(),
     phone: input.phone.trim(),
@@ -59,25 +116,85 @@ export function saveCardMessage(input: {
     createdAt: new Date().toISOString(),
     read: false,
   };
+
+  if (!ownerPhone) {
+    // Fallback: local-only (visitor can't route to an owner)
+    const all = readMessages();
+    all.unshift(next);
+    writeMessages(all);
+    console.warn(
+      "[messages] No ownerPhone — saved locally only. Pass card owner phone.",
+    );
+    return next;
+  }
+
+  const res = await apiFetch<CardMessage>("/api/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      ...next,
+      messageCode: id,
+      ownerPhone,
+      userId: input.userId ?? null,
+      cardId: input.cardId ?? null,
+      cardSlug: input.cardSlug ?? null,
+    }),
+  });
+
+  if (res.ok && res.data) {
+    const saved = toCardMessage(res.data as CardMessage & Record<string, unknown>);
+    window.dispatchEvent(new Event("hexa-card-messages-change"));
+    return saved;
+  }
+
+  console.error(
+    "[messages] Supabase save failed — stored locally:",
+    res.error,
+    res.details,
+  );
   const all = readMessages();
   all.unshift(next);
   writeMessages(all);
   return next;
 }
 
-export function markMessageRead(id: string) {
+export async function markMessageRead(id: string) {
   const all = readMessages().map((m) =>
     m.id === id ? { ...m, read: true } : m,
   );
   writeMessages(all);
+
+  const res = await apiFetch(`/api/messages/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({ read: true }),
+  });
+  if (!res.ok) {
+    console.error("[messages] mark read failed:", res.error);
+  }
 }
 
-export function markAllMessagesRead() {
+export async function markAllMessagesRead() {
   writeMessages(readMessages().map((m) => ({ ...m, read: true })));
+  const auth = getAuthUser();
+  const ownerPhone = normalizeIndianPhone(auth?.phone ?? "");
+  if (!ownerPhone) return;
+
+  const res = await apiFetch(`/api/messages/all`, {
+    method: "PUT",
+    body: JSON.stringify({ markAllForOwner: ownerPhone }),
+  });
+  if (!res.ok) {
+    console.error("[messages] mark all read failed:", res.error);
+  }
 }
 
-export function deleteCardMessage(id: string) {
+export async function deleteCardMessage(id: string) {
   writeMessages(readMessages().filter((m) => m.id !== id));
+  const res = await apiFetch(`/api/messages/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    console.error("[messages] delete failed:", res.error);
+  }
 }
 
 export function formatMessageDate(iso: string) {

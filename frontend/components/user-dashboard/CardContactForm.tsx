@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, X } from "lucide-react";
 import { saveCardMessage } from "@/lib/card-messages";
+import { useMessageOwner } from "@/lib/message-owner-context";
 import {
   getInvisibleRecaptchaToken,
   isRecaptchaConfigured,
@@ -14,12 +15,22 @@ import { resolveCardAccent } from "@/lib/card-profile";
 type CardContactFormProps = {
   accentColor: string;
   className?: string;
+  /** Override context — card owner phone for inbox routing */
+  ownerPhone?: string;
+  cardSlug?: string;
 };
 
 export default function CardContactForm({
   accentColor,
   className = "",
+  ownerPhone: ownerPhoneProp,
+  cardSlug: cardSlugProp,
 }: CardContactFormProps) {
+  const ownerCtx = useMessageOwner();
+  const ownerPhone = ownerPhoneProp || ownerCtx.ownerPhone || "";
+  const cardSlug = cardSlugProp || ownerCtx.cardSlug || "";
+  const userId = ownerCtx.userId ?? null;
+  const cardId = ownerCtx.cardId ?? null;
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const [contactForm, setContactForm] = useState({
     name: "",
@@ -90,7 +101,14 @@ export default function CardContactForm({
         }
       }
 
-      saveCardMessage({ ...contactForm, website: "" });
+      await saveCardMessage({
+        ...contactForm,
+        website: "",
+        ownerPhone,
+        userId,
+        cardId,
+        cardSlug: cardSlug || null,
+      });
       setContactForm({ name: "", email: "", phone: "", message: "" });
       setContactSent(true);
     } catch (err) {

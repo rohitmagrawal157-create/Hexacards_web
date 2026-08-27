@@ -286,9 +286,11 @@ export default function FranchiseEnquiry() {
                   idPrefix="franchise"
                   required
                   layout="stack"
-                  selectClassName={`${fieldClass} ${
-                    errors.state || errors.city ? "border-red-400 focus:ring-red-200" : ""
-                  }`}
+                  selectClassName={
+                    errors.state || errors.city
+                      ? "border-red-400 focus:ring-red-200"
+                      : undefined
+                  }
                   value={{
                     countryId: form.countryId,
                     stateId: form.stateId,

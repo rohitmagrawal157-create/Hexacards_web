@@ -8,23 +8,54 @@ import {
   type CardRow,
 } from "@/lib/server/card-types";
 
-function buildCardPayload(body: CardCreateBody, forCreate: boolean) {
+async function resolveUserId(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  body: CardCreateBody,
+): Promise<number | null> {
+  const explicit = Number(body.userId ?? body.user_id);
+  if (Number.isInteger(explicit) && explicit > 0) return explicit;
+
+  const phone = String(body.ownerPhone ?? body.mobileNumber ?? body.mobile ?? "")
+    .replace(/\D/g, "")
+    .slice(-10);
+  if (!phone) return null;
+
+  const { data } = await supabase
+    .from("users")
+    .select("user_id")
+    .eq("mobile", phone)
+    .maybeSingle();
+  return data?.user_id != null ? Number(data.user_id) : null;
+}
+
+function buildCardPayload(
+  body: CardCreateBody,
+  forCreate: boolean,
+  resolvedUserId?: number | null,
+) {
   const cardName = String(body.cardName ?? body.card_name ?? "").trim();
   const unic =
     String(body.unicCardName ?? body.unic_card_name ?? "").trim() ||
     (cardName ? slugifyCardName(cardName) : "");
-  const userId = Number(body.userId ?? body.user_id);
+  const userId = Number(resolvedUserId ?? body.userId ?? body.user_id);
 
   if (forCreate) {
     if (!unic) return { error: "unic_card_name is required" as const };
     if (!Number.isInteger(userId) || userId <= 0) {
-      return { error: "user_id must be a positive integer" as const };
+      return {
+        error:
+          "user_id is required — pass userId or ownerPhone of an existing user" as const,
+      };
     }
   }
 
   const payload: Record<string, unknown> = {};
 
-  if (forCreate || body.unicCardName !== undefined || body.unic_card_name !== undefined) {
+  if (
+    forCreate ||
+    body.unicCardName !== undefined ||
+    body.unic_card_name !== undefined
+  ) {
     if (unic) payload.unic_card_name = unic;
   }
   if (forCreate || body.cardName !== undefined || body.card_name !== undefined) {
@@ -34,9 +65,16 @@ function buildCardPayload(body: CardCreateBody, forCreate: boolean) {
     payload.job_name = String(body.jobName ?? body.job_name ?? "").trim();
   }
   if (body.businessName !== undefined || body.business_name !== undefined) {
-    payload.business_name = String(body.businessName ?? body.business_name ?? "").trim();
+    payload.business_name = String(
+      body.businessName ?? body.business_name ?? "",
+    ).trim();
   }
-  if (forCreate || body.userId !== undefined || body.user_id !== undefined) {
+  if (
+    forCreate ||
+    body.userId !== undefined ||
+    body.user_id !== undefined ||
+    resolvedUserId
+  ) {
     if (Number.isInteger(userId) && userId > 0) payload.user_id = userId;
   }
   if (body.logo !== undefined) payload.logo = body.logo || null;
@@ -49,12 +87,18 @@ function buildCardPayload(body: CardCreateBody, forCreate: boolean) {
   if (body.themeId !== undefined || body.theme_id !== undefined) {
     payload.theme_id = Number(body.themeId ?? body.theme_id) || 1;
   }
-  if (body.mobile !== undefined) payload.mobile = String(body.mobile ?? "").trim();
-  if (body.email !== undefined) payload.email = body.email ? String(body.email).trim() : null;
+  if (body.mobile !== undefined) {
+    payload.mobile = String(body.mobile ?? "").trim();
+  }
+  if (body.email !== undefined) {
+    payload.email = body.email ? String(body.email).trim() : null;
+  }
   if (body.website !== undefined) {
     payload.website = body.website ? String(body.website).trim() : null;
   }
-  if (body.code !== undefined) payload.code = String(body.code || "91").trim() || "91";
+  if (body.code !== undefined) {
+    payload.code = String(body.code || "91").trim() || "91";
+  }
   if (body.whatsapp !== undefined) {
     payload.whatsapp = body.whatsapp ? String(body.whatsapp).trim() : null;
   }
@@ -148,10 +192,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as CardCreateBody;
-    const built = buildCardPayload(body, true);
+    const supabase = getSupabaseAdmin();
+    const resolvedUserId = await resolveUserId(supabase, body);
+    const built = buildCardPayload(body, true, resolvedUserId);
     if ("error" in built && built.error) return jsonError(400, built.error);
 
-    const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("cards")
       .insert(built.payload)

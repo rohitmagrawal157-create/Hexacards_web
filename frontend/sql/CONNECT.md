@@ -10,8 +10,8 @@
 
 | Table | Purpose |
 |-------|---------|
-| `categories` | Super Admin product sections |
-| `products` | Catalog products |
+| `categories` | Product sections: `category_id`, `category_name`, `category_desc`, `category_img`, then `slug`, `sort_order`, `status`, timestamps |
+| `products` | Catalog: `product_id`, `product_name`, `product_category`, `product_desc`, `product_img`, `product_price`, `regular_price`, then `slug` + extras |
 | `users` | Login users (`user_id` 1, 2, 3…, `first_name`, `last_name`, `mobile`, `email`, `password`, flags, `otp`, `otp_expiry`) |
 | `user_session` | Login sessions (`id`, `session_id`, `session_token`, `datetime`, `user_id`) |
 | `country` | Countries — India = `country_id` 1 |
@@ -19,22 +19,35 @@
 | `city` | Cities / districts linked to state (`city_id`, `city_name`, `state_id`, `status`) — ~729 rows, IDs match source dump |
 | `admin` | Super admins (`aid`, `fname`, `lname`, `email`, `mobile`, `password`, `profile`, `status`) |
 | `card_theme` | Card layouts (`theme_id`, `theme_name`, `theme_path`, `status`) — classic, basic, modern… |
-| `cards` | Digital cards (`card_id`, `unic_card_name`, profile fields, `theme_id`, social URLs, `status`) |
+| `orders` | Primary: `order_id`, `user_id`, `product_id`, `name`, `mobile_number`, `designation`, `logo`, address fields, `amount`, `date`, `status`, `payment_status`, shipping fields… then extras (`order_code`, card_design, …) |
+| `order_items` | Line items per order (`order_item_id`, `order_id`, product snapshot, qty, prices) |
+| `payments` | Gateway payments (`id`, `client_txn_id`, `amount`, `customer_id`, `gateway_order_id`, `created_at`, `txn_at`, `remark`, `status`, `upi_txn_id`, `razorpay_payment_id`, `order_id`) |
+| `reviews` | Product reviews (`review_id`, `user_id`, `product_id`, `review_text`, `rating_value` 0–5) |
+| `messages` | Card contact leads → Dashboard Messages (`message_id`, `user_id`, `name`, `email`, `phone`, `website`, `message`, `is_read`, `owner_phone`, …) |
 
 ## One-time database setup (required)
 
 1. Open Supabase → **SQL Editor** → New query
 2. Run in this order:
    1. `frontend/sql/schema.sql`
-   2. `frontend/sql/country-seed.sql`
-   3. `frontend/sql/location-tables.sql` ← creates `state` + `city` if missing
-   4. `frontend/sql/state-seed.sql`
-   5. `frontend/sql/city-seed.sql`
-   6. `frontend/sql/admin-seed.sql` ← default admin login
-   7. `frontend/sql/card-theme-seed.sql` ← themes (run before cards if cards missing)
-   8. `frontend/sql/cards-table.sql` ← digital cards table (if not in latest schema)
+   2. `frontend/sql/categories-migrate.sql` ← **required if old categories used `id/title/subtitle/image_src`**
+   3. `frontend/sql/products-migrate.sql` ← **required if old products used `id/title/price/…`**
+   4. `frontend/sql/country-seed.sql`
+   5. `frontend/sql/location-tables.sql` ← creates `state` + `city` if missing
+   6. `frontend/sql/state-seed.sql`
+   7. `frontend/sql/city-seed.sql`
+   8. `frontend/sql/admin-seed.sql` ← default admin login
+   9. `frontend/sql/card-theme-seed.sql` ← themes (run before cards if cards missing)
+   10. `frontend/sql/cards-table.sql` ← digital cards table (if not in latest schema)
+   11. `frontend/sql/orders-table.sql` ← orders + order_items (fresh)
+   12. `frontend/sql/orders-migrate.sql` ← **required if older orders used `customer_name` / `phone` / `total`**
+   13. `frontend/sql/payments-table.sql` ← Razorpay / UPI payment rows
+   14. `frontend/sql/reviews-table.sql` ← product reviews
+   15. `frontend/sql/messages-table.sql` ← card contact messages (dashboard inbox)
 
 If you already ran an older `schema.sql` without these tables, run the matching create/seed files above.
+If Super Admin Products breaks after a schema update, run `categories-migrate.sql` → `products-migrate.sql`, then re-seed.
+If orders API fails after column rename, run `orders-migrate.sql`.
 
 Then seed catalog defaults:
 
@@ -97,6 +110,18 @@ curl http://localhost:3000/api/cards/by-slug/shripad-borde
 
 # Card themes
 curl http://localhost:3000/api/card-themes
+
+# Messages (card contact → dashboard)
+curl "http://localhost:3000/api/messages?ownerPhone=9876543210"
+
+# Payments (created automatically on checkout)
+curl http://localhost:3000/api/payments
+
+# Reviews
+curl http://localhost:3000/api/reviews
+curl -X POST http://localhost:3000/api/reviews \
+  -H "Content-Type: application/json" \
+  -d '{"productSlug":"nfc-business-card","reviewText":"Great card","ratingValue":5,"ownerPhone":"9876543210"}'
 ```
 
 ## Stop the old Express folder

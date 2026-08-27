@@ -30,8 +30,8 @@ import {
   touchSuperAdminSession,
   type SuperAdminUser,
 } from "@/lib/super-admin-auth";
-import { formatOrderDate, getOrders, statusLabel, type HexaOrder } from "@/lib/orders";
-import { getAdminUsers } from "@/lib/admin-directory";
+import { formatOrderDate, fetchOrders, getOrders, statusLabel, type HexaOrder } from "@/lib/orders";
+import { fetchAdminUsers, getAdminUsers } from "@/lib/admin-directory";
 import {
   addAdminProduct,
   addAdminSection,
@@ -252,6 +252,7 @@ export default function SuperAdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [orders, setOrders] = useState<HexaOrder[]>([]);
+  const [usersCount, setUsersCount] = useState(0);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [sections, setSections] = useState<AdminProductSection[]>([]);
   const [productsBySection, setProductsBySection] = useState<
@@ -309,7 +310,9 @@ export default function SuperAdminDashboard() {
       }
       const touched = touchSuperAdminSession() ?? auth;
       setUser(touched);
-      setOrders(getOrders());
+      setOrders(await fetchOrders());
+      const adminUsers = await fetchAdminUsers();
+      setUsersCount(adminUsers.length);
       const nextSections = await getAdminSections();
       const bySection = await getAdminProductsBySection();
       setSections(nextSections);
@@ -331,7 +334,9 @@ export default function SuperAdminDashboard() {
         return;
       }
       touchSuperAdminSession();
-      setOrders(getOrders());
+      setOrders(await fetchOrders());
+      const adminUsers = await fetchAdminUsers();
+      setUsersCount(adminUsers.length);
       const nextSections = await getAdminSections();
       const bySection = await getAdminProductsBySection();
       setSections(nextSections);
@@ -380,10 +385,10 @@ export default function SuperAdminDashboard() {
   const overviewStats = useMemo(() => {
     const totalOrders = orders.length;
     const todaysOrders = orders.filter((o) => isSameLocalDay(o.createdAt)).length;
-    const totalUsers = getAdminUsers().length;
+    const totalUsers = usersCount || getAdminUsers().length;
     const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
     return { todaysOrders, totalOrders, totalUsers, totalRevenue };
-  }, [orders]);
+  }, [orders, usersCount]);
   const editingProduct = editingId
     ? products.find((p) => p.id === editingId) ?? null
     : null;
@@ -403,10 +408,13 @@ export default function SuperAdminDashboard() {
 
   function handleRefresh() {
     setRefreshing(true);
-    setOrders(getOrders());
-    void syncProducts().finally(() => {
-      window.setTimeout(() => setRefreshing(false), 500);
-    });
+    void fetchOrders()
+      .then((list) => setOrders(list))
+      .finally(() => {
+        void syncProducts().finally(() => {
+          window.setTimeout(() => setRefreshing(false), 500);
+        });
+      });
   }
 
   function selectNav(key: NavKey) {

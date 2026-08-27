@@ -5,6 +5,7 @@ import {
   jsonError,
   jsonOk,
   mapProduct,
+  resolveCategoryRef,
   slugify,
   uniqueId,
 } from "@/lib/admin-catalog-db";
@@ -20,15 +21,38 @@ export async function GET(request: Request) {
       .from("products")
       .select("*")
       .order("sort_order", { ascending: true })
-      .order("title", { ascending: true });
+      .order("product_name", { ascending: true });
 
-    if (categoryId) query = query.eq("category_id", categoryId);
+    if (categoryId) {
+      const category = await resolveCategoryRef(supabase, categoryId);
+      if (!category) {
+        return jsonError(400, `Unknown categoryId "${categoryId}"`);
+      }
+      query = query.eq("product_category", category.category_id);
+    }
     if (active === "true") query = query.eq("active", true);
     if (active === "false") query = query.eq("active", false);
 
-    const { data, error } = await query;
+    const [{ data, error }, { data: cats }] = await Promise.all([
+      query,
+      supabase.from("categories").select("category_id, slug"),
+    ]);
     if (error) return jsonError(500, "Failed to load products", error.message);
-    return jsonOk((data as ProductRow[] | null ?? []).map(mapProduct));
+
+    const slugById = new Map(
+      ((cats as { category_id: number; slug: string }[] | null) ?? []).map(
+        (c) => [Number(c.category_id), c.slug] as const,
+      ),
+    );
+
+    return jsonOk(
+      ((data as ProductRow[] | null) ?? []).map((row) =>
+        mapProduct(
+          row,
+          slugById.get(Number(row.product_category)) ?? null,
+        ),
+      ),
+    );
   } catch (err) {
     return jsonError(
       500,
@@ -40,44 +64,48 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as ProductWriteBody;
-    const title = String(body.title ?? "").trim();
+    const title = String(
+      body.title ?? body.productName ?? body.product_name ?? "",
+    ).trim();
     if (!title) return jsonError(400, "title is required");
 
     const supabase = getSupabaseAdmin();
-    const categoryId = body.categoryId ?? body.category_id ?? null;
+    const categoryRef =
+      body.categoryId ?? body.category_id ?? body.product_category ?? null;
 
-    if (categoryId) {
-      const { data: category } = await supabase
-        .from("categories")
-        .select("id, title")
-        .eq("id", categoryId)
-        .maybeSingle();
-      if (!category) {
-        return jsonError(400, `Unknown categoryId "${categoryId}"`);
-      }
-      if (!body.category) body.category = String(category.title);
+    if (categoryRef === null || categoryRef === undefined || categoryRef === "") {
+      return jsonError(400, "categoryId is required");
     }
 
-    const { data: existing } = await supabase.from("products").select("id");
-    const existingIds = new Set((existing ?? []).map((r) => String(r.id)));
-    const id =
-      String(body.id ?? "").trim() ||
+    const category = await resolveCategoryRef(supabase, categoryRef);
+    if (!category) {
+      return jsonError(400, `Unknown categoryId "${categoryRef}"`);
+    }
+
+    if (!body.category) body.category = category.category_name;
+
+    const { data: existing } = await supabase.from("products").select("slug");
+    const existingSlugs = new Set((existing ?? []).map((r) => String(r.slug)));
+    const slug =
+      String(body.slug ?? body.id ?? "").trim() ||
       uniqueId(
         slugify(String(body.shortTitle ?? body.short_title ?? title)),
-        existingIds,
+        existingSlugs,
       );
 
-    if (existingIds.has(id)) {
-      return jsonError(409, `Product id "${id}" already exists`);
+    if (existingSlugs.has(slug)) {
+      return jsonError(409, `Product slug "${slug}" already exists`);
     }
 
     const payload: Record<string, unknown> = {
-      id,
+      slug,
       ...buildProductPayload(body, { forCreate: true }),
+      product_category: Number(category.category_id),
+      category: body.category,
     };
 
-    if (!payload.cta_href) payload.cta_href = `/product/${id}`;
-    if (payload.sort_order === 0) payload.sort_order = existingIds.size;
+    if (!payload.cta_href) payload.cta_href = `/product/${slug}`;
+    if (payload.sort_order === 0) payload.sort_order = existingSlugs.size;
 
     const { data, error } = await supabase
       .from("products")
@@ -86,7 +114,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error) return jsonError(500, "Failed to create product", error.message);
-    return jsonOk(mapProduct(data as ProductRow), 201);
+    return jsonOk(mapProduct(data as ProductRow, category.slug), 201);
   } catch (err) {
     return jsonError(
       500,

@@ -55,7 +55,9 @@ type ApiCategory = {
 
 type ApiProduct = {
   id: string;
-  categoryId?: string | null;
+  productId?: number;
+  categoryId?: number | null;
+  categorySlug?: string | null;
   category: string;
   title: string;
   shortTitle: string;

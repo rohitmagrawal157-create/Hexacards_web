@@ -236,6 +236,10 @@ export default function LocationSelects({
   }, [stateId, countryId]);
 
   function pickCountry(idStr: string) {
+    if (!idStr) {
+      onChange(emptyValue());
+      return;
+    }
     const id = Number(idStr) || null;
     const c = countries.find((x) => x.countryId === id);
     onChange({
@@ -250,6 +254,18 @@ export default function LocationSelects({
   }
 
   function pickState(idStr: string) {
+    if (!idStr) {
+      onChange({
+        countryId,
+        countryName: countryName || "",
+        countryIso: countryIso || "",
+        stateId: null,
+        stateName: "",
+        cityId: null,
+        cityName: "",
+      });
+      return;
+    }
     const id = Number(idStr) || null;
     const s = states.find((x) => x.stateId === id);
     onChange({
@@ -264,6 +280,18 @@ export default function LocationSelects({
   }
 
   function pickCity(idStr: string) {
+    if (!idStr) {
+      onChange({
+        countryId,
+        countryName: countryName || "",
+        countryIso: countryIso || "",
+        stateId,
+        stateName: stateName || "",
+        cityId: null,
+        cityName: "",
+      });
+      return;
+    }
     const id = Number(idStr) || null;
     const c = cities.find((x) => x.cityId === id);
     onChange({
@@ -285,10 +313,12 @@ export default function LocationSelects({
     value: String(s.stateId),
     label: s.stateName,
   }));
-  const cityOptions = cities.map((c) => ({
-    value: String(c.cityId),
-    label: c.cityName,
-  }));
+  const cityOptions = cities
+    .filter((c) => c.cityName.trim().length > 0)
+    .map((c) => ({
+      value: String(c.cityId),
+      label: c.cityName,
+    }));
 
   return (
     <div className={`space-y-4 ${className}`.trim()}>

@@ -5,23 +5,28 @@ import {
   jsonError,
   jsonOk,
   mapProduct,
+  resolveCategoryRef,
+  resolveProductRef,
 } from "@/lib/admin-catalog-db";
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string } };
+
+async function slugForProduct(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  row: ProductRow,
+): Promise<string | null> {
+  const category = await resolveCategoryRef(supabase, row.product_category);
+  return category?.slug ?? null;
+}
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const { id } = await Promise.resolve(context.params);
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
+    const row = await resolveProductRef(supabase, id);
 
-    if (error) return jsonError(500, "Failed to load product", error.message);
-    if (!data) return jsonError(404, "Product not found");
-    return jsonOk(mapProduct(data as ProductRow));
+    if (!row) return jsonError(404, "Product not found");
+    return jsonOk(mapProduct(row, await slugForProduct(supabase, row)));
   } catch (err) {
     return jsonError(
       500,
@@ -34,39 +39,60 @@ export async function PUT(request: Request, context: RouteContext) {
   try {
     const { id } = await Promise.resolve(context.params);
     const body = (await request.json().catch(() => ({}))) as ProductWriteBody;
+    const supabase = getSupabaseAdmin();
+    const existing = await resolveProductRef(supabase, id);
+    if (!existing) return jsonError(404, "Product not found");
+
     const patch = buildProductPayload(body, { forCreate: false });
+
+    let categorySlug: string | null | undefined;
+
+    if (
+      body.categoryId !== undefined ||
+      body.category_id !== undefined ||
+      body.product_category !== undefined
+    ) {
+      const ref =
+        body.categoryId ?? body.category_id ?? body.product_category ?? null;
+      if (ref === null || ref === "") {
+        return jsonError(400, "product_category cannot be empty");
+      }
+      const category = await resolveCategoryRef(supabase, ref);
+      if (!category) {
+        return jsonError(400, `Unknown categoryId "${String(ref)}"`);
+      }
+      patch.product_category = Number(category.category_id);
+      categorySlug = category.slug;
+      if (body.category === undefined) {
+        patch.category = category.category_name;
+      }
+    }
+
+    if (body.slug !== undefined) {
+      const slug = String(body.slug).trim();
+      if (!slug) return jsonError(400, "slug cannot be empty");
+      patch.slug = slug;
+    }
 
     if (Object.keys(patch).length === 0) {
       return jsonError(400, "No fields to update");
     }
 
-    const supabase = getSupabaseAdmin();
-
-    if (patch.category_id) {
-      const { data: category } = await supabase
-        .from("categories")
-        .select("id, title")
-        .eq("id", String(patch.category_id))
-        .maybeSingle();
-      if (!category) {
-        return jsonError(
-          400,
-          `Unknown categoryId "${String(patch.category_id)}"`,
-        );
-      }
-      if (body.category === undefined) patch.category = category.title;
-    }
-
     const { data, error } = await supabase
       .from("products")
       .update(patch)
-      .eq("id", id)
+      .eq("product_id", existing.product_id)
       .select("*")
       .maybeSingle();
 
     if (error) return jsonError(500, "Failed to update product", error.message);
     if (!data) return jsonError(404, "Product not found");
-    return jsonOk(mapProduct(data as ProductRow));
+    const row = data as ProductRow;
+    const slug =
+      categorySlug !== undefined
+        ? categorySlug
+        : await slugForProduct(supabase, row);
+    return jsonOk(mapProduct(row, slug));
   } catch (err) {
     return jsonError(
       500,
@@ -79,10 +105,16 @@ export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const { id } = await Promise.resolve(context.params);
     const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("products").delete().eq("id", id);
+    const existing = await resolveProductRef(supabase, id);
+    if (!existing) return jsonError(404, "Product not found");
+
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .eq("product_id", existing.product_id);
 
     if (error) return jsonError(500, "Failed to delete product", error.message);
-    return jsonOk({ deleted: id });
+    return jsonOk({ deleted: existing.slug, productId: existing.product_id });
   } catch (err) {
     return jsonError(
       500,

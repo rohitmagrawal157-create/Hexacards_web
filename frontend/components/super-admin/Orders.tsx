@@ -13,6 +13,7 @@ import {
 import {
   formatOrderAddress,
   formatOrderDate,
+  fetchOrders,
   getOrders,
   paymentStatusLabel,
   statusLabel,
@@ -186,15 +187,23 @@ export default function OrdersPanel({
   const [viewOrder, setViewOrder] = useState<HexaOrder | null>(null);
 
   useEffect(() => {
-    function sync() {
-      setRows(getOrders());
+    let cancelled = false;
+
+    async function sync() {
+      const list = await fetchOrders();
+      if (!cancelled) setRows(list);
     }
-    sync();
-    window.addEventListener("hexa-orders-change", sync);
-    window.addEventListener("focus", sync);
+
+    void sync();
+    function onChange() {
+      void sync();
+    }
+    window.addEventListener("hexa-orders-change", onChange);
+    window.addEventListener("focus", onChange);
     return () => {
-      window.removeEventListener("hexa-orders-change", sync);
-      window.removeEventListener("focus", sync);
+      cancelled = true;
+      window.removeEventListener("hexa-orders-change", onChange);
+      window.removeEventListener("focus", onChange);
     };
   }, []);
 

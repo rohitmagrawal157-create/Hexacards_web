@@ -48,28 +48,82 @@ export function asMedia(
   return [{ type: "image", src, alt }];
 }
 
+/** Public folder for category/product images (filename only stored in DB). */
+export const CATALOG_IMG_DIR = "/Images/Products/";
+/** @deprecated use CATALOG_IMG_DIR */
+export const CATEGORY_IMG_DIR = CATALOG_IMG_DIR;
+
+/** Persist only the file name (strip folders / query). */
+export function toCatalogImgFilename(
+  value: string | null | undefined,
+): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (raw.startsWith("data:")) return raw;
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const path = new URL(raw).pathname;
+      const base = path.split("/").filter(Boolean).pop() ?? "";
+      return base || null;
+    }
+  } catch {
+    // fall through
+  }
+  const base = raw.split(/[\\/]/).pop()?.split("?")[0]?.trim() ?? "";
+  return base || null;
+}
+
+/** @deprecated use toCatalogImgFilename */
+export const toCategoryImgFilename = toCatalogImgFilename;
+
+/** Build browser URL from stored filename (or pass through absolute/data URLs). */
+export function catalogImgPublicUrl(
+  stored: string | null | undefined,
+): string | null {
+  const raw = String(stored ?? "").trim();
+  if (!raw) return null;
+  if (
+    raw.startsWith("data:") ||
+    /^https?:\/\//i.test(raw) ||
+    raw.startsWith("/")
+  ) {
+    return raw;
+  }
+  return `${CATALOG_IMG_DIR}${raw}`;
+}
+
+/** @deprecated use catalogImgPublicUrl */
+export const categoryImgPublicUrl = catalogImgPublicUrl;
+
 export function mapCategory(row: CategoryRow): CategoryDto {
   return {
-    id: row.id,
-    title: row.title,
-    subtitle: row.subtitle ?? "",
-    imageSrc: row.image_src ?? null,
+    id: row.slug,
+    categoryId: Number(row.category_id),
+    title: row.category_name,
+    subtitle: row.category_desc ?? "",
+    imageSrc: catalogImgPublicUrl(row.category_img),
     sortOrder: Number(row.sort_order) || 0,
+    status: Number(row.status ?? 1) === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-export function mapProduct(row: ProductRow): ProductDto {
+export function mapProduct(
+  row: ProductRow,
+  categorySlug?: string | null,
+): ProductDto {
   return {
-    id: row.id,
-    categoryId: row.category_id ?? null,
+    id: row.slug,
+    productId: Number(row.product_id),
+    categoryId: Number(row.product_category),
+    categorySlug: categorySlug ?? null,
     category: row.category,
-    title: row.title,
-    shortTitle: row.short_title,
-    description: row.description ?? "",
-    price: Number(row.price) || 0,
-    compareAtPrice: Number(row.compare_at_price) || 0,
+    title: row.product_name,
+    shortTitle: row.short_title || row.product_name,
+    description: row.product_desc ?? "",
+    price: Number(row.product_price) || 0,
+    compareAtPrice: Number(row.regular_price) || 0,
     media: row.media ?? [],
     highlights: row.highlights ?? [],
     finishes: row.finishes ?? [],
@@ -77,12 +131,66 @@ export function mapProduct(row: ProductRow): ProductDto {
     ctaLabel: row.cta_label ?? "Order Now",
     ctaHref: row.cta_href ?? "",
     designable: Boolean(row.designable),
-    imageSrc: row.image_src ?? null,
+    imageSrc: catalogImgPublicUrl(row.product_img),
     sortOrder: Number(row.sort_order) || 0,
     active: row.active !== false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/** Resolve category by numeric id or slug (admin section id). */
+export async function resolveCategoryRef(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: { from: (table: string) => any },
+  ref: string | number | null | undefined,
+): Promise<CategoryRow | null> {
+  if (ref === null || ref === undefined || ref === "") return null;
+  const raw = String(ref).trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const { data } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("category_id", Number(raw))
+      .maybeSingle();
+    if (data) return data as CategoryRow;
+  }
+
+  const { data } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("slug", raw)
+    .maybeSingle();
+  return (data as CategoryRow | null) ?? null;
+}
+
+/** Resolve product by numeric product_id or slug. */
+export async function resolveProductRef(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: { from: (table: string) => any },
+  ref: string | number | null | undefined,
+): Promise<ProductRow | null> {
+  if (ref === null || ref === undefined || ref === "") return null;
+  const raw = String(ref).trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+      .eq("product_id", Number(raw))
+      .maybeSingle();
+    if (data) return data as ProductRow;
+  }
+
+  const { data } = await supabase
+    .from("products")
+    .select("*")
+    .eq("slug", raw)
+    .maybeSingle();
+  return (data as ProductRow | null) ?? null;
 }
 
 export function jsonOk<T>(data: T, status = 200) {
@@ -100,18 +208,32 @@ export function buildProductPayload(
   body: ProductWriteBody,
   { forCreate = false }: { forCreate?: boolean } = {},
 ): Record<string, unknown> {
-  const title = String(body.title ?? "").trim();
+  const title = String(
+    body.title ?? body.productName ?? body.product_name ?? "",
+  ).trim();
   const shortTitle = String(body.shortTitle ?? body.short_title ?? title).trim();
-  const imageSrc =
+  const imageRaw =
     body.imageSrc !== undefined
-      ? String(body.imageSrc ?? "").trim() || null
-      : body.image_src !== undefined
-        ? String(body.image_src ?? "").trim() || null
-        : undefined;
+      ? body.imageSrc
+      : body.productImg !== undefined
+        ? body.productImg
+        : body.product_img !== undefined
+          ? body.product_img
+          : body.image_src !== undefined
+            ? body.image_src
+            : undefined;
+  const imageFile =
+    imageRaw === undefined
+      ? undefined
+      : toCatalogImgFilename(
+          imageRaw == null ? null : String(imageRaw),
+        );
 
   const payload: Record<string, unknown> = {};
 
-  if (forCreate || body.title !== undefined) payload.title = title;
+  if (forCreate || body.title !== undefined || body.productName !== undefined || body.product_name !== undefined) {
+    payload.product_name = title;
+  }
   if (
     forCreate ||
     body.shortTitle !== undefined ||
@@ -124,29 +246,37 @@ export function buildProductPayload(
   }
   if (
     forCreate ||
-    body.categoryId !== undefined ||
-    body.category_id !== undefined
+    body.description !== undefined ||
+    body.productDesc !== undefined ||
+    body.product_desc !== undefined
   ) {
-    payload.category_id =
-      body.categoryId !== undefined
-        ? body.categoryId || null
-        : body.category_id !== undefined
-          ? body.category_id || null
-          : null;
+    payload.product_desc = String(
+      body.description ?? body.productDesc ?? body.product_desc ?? "",
+    ).trim();
   }
-  if (forCreate || body.description !== undefined) {
-    payload.description = String(body.description ?? "").trim();
-  }
-  if (forCreate || body.price !== undefined) {
-    payload.price = toNumber(body.price, 0);
+  if (
+    forCreate ||
+    body.price !== undefined ||
+    body.productPrice !== undefined ||
+    body.product_price !== undefined
+  ) {
+    payload.product_price = toNumber(
+      body.price ?? body.productPrice ?? body.product_price,
+      0,
+    );
   }
   if (
     forCreate ||
     body.compareAtPrice !== undefined ||
-    body.compare_at_price !== undefined
+    body.compare_at_price !== undefined ||
+    body.regularPrice !== undefined ||
+    body.regular_price !== undefined
   ) {
-    payload.compare_at_price = toNumber(
-      body.compareAtPrice ?? body.compare_at_price,
+    payload.regular_price = toNumber(
+      body.compareAtPrice ??
+        body.compare_at_price ??
+        body.regularPrice ??
+        body.regular_price,
       0,
     );
   }
@@ -184,14 +314,14 @@ export function buildProductPayload(
   if (forCreate || body.included !== undefined) {
     payload.included = asStringArray(body.included);
   }
-  if (forCreate || body.media !== undefined || imageSrc !== undefined) {
+  if (forCreate || body.media !== undefined || imageFile !== undefined) {
     payload.media = asMedia(
       body.media,
-      imageSrc,
+      imageFile ? catalogImgPublicUrl(imageFile) : null,
       shortTitle || title || "Product",
     );
   }
-  if (imageSrc !== undefined) payload.image_src = imageSrc;
+  if (imageFile !== undefined) payload.product_img = imageFile;
 
   return payload;
 }

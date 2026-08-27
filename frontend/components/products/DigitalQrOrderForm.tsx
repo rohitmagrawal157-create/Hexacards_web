@@ -26,7 +26,7 @@ import {
   updateOrder,
   type HexaOrder,
 } from "@/lib/orders";
-import { initOrderCardProfile } from "@/lib/order-card-profile";
+import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
 import { buildOrderCardSlug } from "@/lib/order-card";
 import { savedDesignToCardDesign } from "@/lib/user-cards";
 
@@ -177,15 +177,15 @@ export default function DigitalQrOrderForm() {
       const finalSlug = buildOrderCardSlug(cardName, contactPhone, order.id);
       const liveUrl = `https://hexacards.com/${finalSlug}`;
       const finalized =
-        updateOrder(order.id, {
+        (await updateOrder(order.id, {
           cardSlug: finalSlug,
           cardUrl: liveUrl,
           cardDesign: cardDesign
             ? { ...cardDesign, liveUrl }
             : undefined,
-        }) ?? order;
+        })) ?? order;
 
-      initOrderCardProfile(finalized);
+      await initOrderCardProfileAsync(finalized);
       clearDraft();
       setPlacedOrder(finalized);
       window.scrollTo({ top: 0, behavior: "smooth" });

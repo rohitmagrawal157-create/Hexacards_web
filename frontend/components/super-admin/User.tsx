@@ -17,6 +17,7 @@ import {
 import {
   addAdminUser,
   deleteAdminUser,
+  fetchAdminUsers,
   getAdminUsers,
   toggleAdminUser,
   updateAdminUser,
@@ -213,7 +214,7 @@ export default function UsersPanel({
 
   useEffect(() => {
     function sync() {
-      setRows(getAdminUsers());
+      void fetchAdminUsers().then(setRows);
     }
     sync();
     window.addEventListener("hexa-orders-change", sync);

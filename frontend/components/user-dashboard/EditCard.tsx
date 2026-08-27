@@ -35,7 +35,7 @@ import LocationSelects, {
 import { hasPlacedOrder, getOrdersForPhone, type HexaOrder } from "@/lib/orders";
 import {
   loadOrderCardProfile,
-  saveOrderCardProfile,
+  persistOrderCardProfile,
 } from "@/lib/order-card-profile";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
 import {
@@ -173,6 +173,11 @@ export default function EditCard() {
       if (order) {
         setEditingOrder(order);
         setProfile(loadOrderCardProfile(order, auth.name, auth.phone));
+        setLocIds({
+          countryId: order.countryId ?? null,
+          stateId: order.stateId ?? null,
+          cityId: order.cityId ?? null,
+        });
       } else {
         setEditingOrder(null);
         setProfile(getCardProfile(auth.name, auth.phone));
@@ -184,9 +189,9 @@ export default function EditCard() {
     setAuthReady(true);
   }, [router, orderId]);
 
-  function persistProfile(next: HexaCardProfile): HexaCardProfile {
+  async function persistProfile(next: HexaCardProfile): Promise<HexaCardProfile> {
     if (editingOrder) {
-      return saveOrderCardProfile(editingOrder.id, next);
+      return persistOrderCardProfile(editingOrder, next, locIds);
     }
     return saveCardProfile(next);
   }
@@ -247,7 +252,7 @@ export default function EditCard() {
     setLayoutConfirm(id);
   }
 
-  function applyLayout() {
+  async function applyLayout() {
     if (!layoutConfirm || !profile) return;
     const id = layoutConfirm;
     const next: HexaCardProfile = {
@@ -259,7 +264,7 @@ export default function EditCard() {
     };
     setLayoutConfirm(null);
     try {
-      const saved = persistProfile(next);
+      const saved = await persistProfile(next);
       setProfile(saved);
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1800);
@@ -395,10 +400,10 @@ export default function EditCard() {
     });
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!profile) return;
     try {
-      const next = persistProfile(profile);
+      const next = await persistProfile(profile);
       setProfile(next);
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1800);
@@ -413,7 +418,7 @@ export default function EditCard() {
           shareImage: null,
         },
       };
-      const next = persistProfile(stripped);
+      const next = await persistProfile(stripped);
       setProfile(next);
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1800);
@@ -693,7 +698,6 @@ export default function EditCard() {
                       showState
                       showCity
                       layout="grid"
-                      selectClassName={fieldClass()}
                       value={locationValue}
                       onChange={handleLocationChange}
                     />
