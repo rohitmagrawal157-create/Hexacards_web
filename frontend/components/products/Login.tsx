@@ -77,10 +77,15 @@ export default function Login() {
       }
 
       setStep("otp");
-      setOtp("");
+      // Always prefer API demoOtp; fall back so Vercel works before SMS is wired
+      const demoCode = res.data.demoOtp || "123456";
+      setOtp(demoCode);
       setResendIn(30);
-      const demoHint = res.data.demoOtp ? ` Demo code: ${res.data.demoOtp}` : "";
-      setInfo(`OTP sent to +91 ${phoneDigits}.${demoHint}`);
+      setInfo(
+        res.data.demoOtp
+          ? `Demo OTP for +91 ${phoneDigits}: ${demoCode} (SMS not connected yet).`
+          : `OTP ready for +91 ${phoneDigits}. If no SMS arrives, use ${demoCode}.`,
+      );
     } finally {
       setBusy(false);
     }
@@ -88,7 +93,8 @@ export default function Login() {
 
   async function verifyOtp() {
     setError("");
-    if (!/^\d{6}$/.test(otp.trim())) {
+    const code = otp.replace(/\D/g, "").slice(0, 6);
+    if (!/^\d{6}$/.test(code)) {
       setError("Enter the 6-digit OTP.");
       return;
     }
@@ -107,7 +113,7 @@ export default function Login() {
         method: "POST",
         body: JSON.stringify({
           mobile: phoneDigits,
-          otp:    otp.trim(),
+          otp: code,
         }),
       });
 

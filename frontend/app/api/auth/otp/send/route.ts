@@ -3,6 +3,7 @@ import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import type { OtpSendBody, UserRow } from "@/lib/server/user-types";
 import {
   generateOtp,
+  isDemoOtpMode,
   isValidIndianMobile,
   mapUser,
   normalizeMobile,
@@ -82,11 +83,12 @@ export async function POST(request: Request) {
     }
 
     const isDev = process.env.NODE_ENV !== "production";
+    const showDemo = isDev || isDemoOtpMode();
 
     return jsonOk({
       user:         mapUser(row),
       otpExpiresAt: otpExpiry,
-      ...(isDev ? { demoOtp: otp } : {}),
+      ...(showDemo ? { demoOtp: otp } : {}),
     });
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");

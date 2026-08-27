@@ -41,11 +41,22 @@ export function verifyPassword(password: string, stored: string | null): boolean
 // ── OTP helpers ─────────────────────────────────────────────────────────────
 
 export function generateOtp(): string {
-  // In development always returns 123456 so you can test without SMS
-  if (process.env.NODE_ENV !== "production") {
-    return "123456";
+  // No SMS provider wired yet — always use a fixed demo OTP unless
+  // OTP_SMS_ENABLED=true (then generate a random 6-digit code).
+  const smsEnabled =
+    process.env.OTP_SMS_ENABLED === "1" ||
+    process.env.OTP_SMS_ENABLED === "true";
+  if (!smsEnabled) {
+    return process.env.OTP_DEMO_CODE?.trim() || "123456";
   }
   return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+export function isDemoOtpMode(): boolean {
+  const smsEnabled =
+    process.env.OTP_SMS_ENABLED === "1" ||
+    process.env.OTP_SMS_ENABLED === "true";
+  return !smsEnabled;
 }
 
 export function otpExpiryIso(minutes = 5): string {

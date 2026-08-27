@@ -3,6 +3,7 @@ import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import type { OtpVerifyBody, UserRow, UserSessionRow } from "@/lib/server/user-types";
 import {
   createSessionIds,
+  isDemoOtpMode,
   isOtpExpired,
   isValidIndianMobile,
   mapSession,
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   try {
     const body   = (await request.json().catch(() => ({}))) as OtpVerifyBody;
     const mobile = normalizeMobile(String(body.mobile ?? ""));
-    const otp    = String(body.otp ?? "").trim();
+    const otp = String(body.otp ?? "").replace(/\D/g, "").slice(0, 6);
 
     if (!isValidIndianMobile(mobile)) {
       return jsonError(400, "Valid 10-digit mobile number is required");
@@ -44,11 +45,25 @@ export async function POST(request: Request) {
     if (!data)  return jsonError(404, "User not found — please request OTP first");
 
     const row = data as UserRow;
+    const demoCode = process.env.OTP_DEMO_CODE?.trim() || "123456";
+    const demoAccepted = isDemoOtpMode() && otp === demoCode;
+    const matchesStored = Boolean(row.otp) && row.otp === otp;
 
-    if (!row.otp || row.otp !== otp) {
-      return jsonError(401, "Invalid OTP");
+    if (!demoAccepted && !matchesStored) {
+      if (!row.otp) {
+        return jsonError(
+          401,
+          "No active OTP — tap Resend OTP, then enter the new code",
+        );
+      }
+      return jsonError(
+        401,
+        isDemoOtpMode()
+          ? `Invalid OTP — SMS is not connected yet. Use demo code ${demoCode}`
+          : "Invalid OTP",
+      );
     }
-    if (isOtpExpired(row.otp_expiry)) {
+    if (!demoAccepted && isOtpExpired(row.otp_expiry)) {
       return jsonError(401, "OTP expired — request a new one");
     }
 
