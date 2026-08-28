@@ -177,6 +177,17 @@ export default function Checkout() {
   }, [router]);
 
   useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      script.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       const raw = sessionStorage.getItem("hexaCardDesign");
       if (raw) setDesign(JSON.parse(raw) as SavedDesign);
@@ -324,15 +335,14 @@ export default function Checkout() {
         discount: discountAmount,
         total,
         coupon: appliedCoupon?.label ?? null,
+        paymentStatus: "pending",
         productTitle,
         productId: orderProductId,
         status: "placed",
-        // Only NFC / business card orders carry a digital card design
         cardDesign: orderProductId && NON_CARD_PRODUCT_IDS_CHECKOUT.has(orderProductId)
           ? undefined
           : cardDesign,
         jobTitle: design?.subTitle?.trim() || undefined,
-        // Standee / social-media order details
         businessName: orderDetails?.businessName || undefined,
         reviewLink: orderDetails?.link || undefined,
         orderLogoSrc: orderDetails?.logoDataUrl || undefined,
@@ -340,7 +350,7 @@ export default function Checkout() {
 
       const finalSlug = buildOrderCardSlug(cardName, contactPhone, order.id);
       const liveUrl = `https://hexacards.com/${finalSlug}`;
-      const finalized =
+      const withCardMeta =
         (await updateOrder(order.id, {
           cardSlug: finalSlug,
           cardUrl: liveUrl,
@@ -349,21 +359,129 @@ export default function Checkout() {
             : undefined,
         })) ?? order;
 
-      await initOrderCardProfileAsync(finalized);
+      const clientTxnId = order.clientTxnId ?? `ord_${withCardMeta.id}_${Date.now().toString(36)}`;
+      const createRes = await fetch("/api/razorpay/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(withCardMeta.total || total),
+          currency: "INR",
+          orderId: String(withCardMeta.orderId ?? withCardMeta.id),
+          clientTxnId,
+          receipt: clientTxnId,
+        }),
+      });
+      const createJson = (await createRes.json().catch(() => null)) as
+        | { ok?: boolean; data?: { key?: string; orderId?: string; amount?: number; currency?: string }; error?: string }
+        | null;
 
-      try {
-        sessionStorage.removeItem("hexaCardDesign");
-        sessionStorage.removeItem("hexaOrderDetails");
-      } catch {
-        // ignore
+      if (!createRes.ok || !createJson?.ok || !createJson.data?.orderId) {
+        throw new Error(createJson?.error || "Razorpay checkout could not be started.");
       }
 
-      setPlacedOrder(finalized);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const razorpayKey = createJson.data.key;
+      if (!razorpayKey || !(window as any).Razorpay) {
+        throw new Error("Razorpay script is not loaded yet. Please try again.");
+      }
+
+      const paymentWindow = new (window as any).Razorpay({
+        key: razorpayKey,
+        amount: createJson.data.amount,
+        currency: createJson.data.currency || "INR",
+        order_id: createJson.data.orderId,
+        name: "HexaCards",
+        description: withCardMeta.productTitle,
+        handler: async (response: {
+          razorpay_payment_id?: string;
+          razorpay_order_id?: string;
+          razorpay_signature?: string;
+        }) => {
+          const verifyRes = await fetch("/api/razorpay/create", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            }),
+          });
+          const verifyJson = (await verifyRes.json().catch(() => null)) as
+            | { ok?: boolean; error?: string }
+            | null;
+
+          if (!verifyRes.ok || !verifyJson?.ok) {
+            throw new Error(verifyJson?.error || "Payment verification failed.");
+          }
+
+          await fetch("/api/payments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              clientTxnId,
+              amount: Number(withCardMeta.total || total),
+              customerId: auth.userId ?? null,
+              gatewayOrderId: response.razorpay_order_id ?? null,
+              remark: `Order ${withCardMeta.id}`,
+              status: "success",
+              razorpayPaymentId: response.razorpay_payment_id ?? null,
+              orderId: withCardMeta.orderId ?? null,
+              txnAt: new Date().toISOString(),
+            }),
+          });
+
+          const paidOrder = await updateOrder(withCardMeta.id, {
+            paymentStatus: "paid",
+          });
+          const finalized = paidOrder ?? withCardMeta;
+          await initOrderCardProfileAsync(finalized);
+
+          try {
+            sessionStorage.removeItem("hexaCardDesign");
+            sessionStorage.removeItem("hexaOrderDetails");
+          } catch {
+            // ignore
+          }
+
+          setPlacedOrder(finalized);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        },
+        prefill: {
+          name: customerName,
+          email: form.email,
+          contact: contactPhone,
+        },
+        notes: {
+          orderId: withCardMeta.id,
+          clientTxnId,
+        },
+        theme: {
+          color: "#BC7C10",
+        },
+        modal: {
+          ondismiss: async () => {
+            await fetch("/api/payments", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                clientTxnId,
+                amount: Number(withCardMeta.total || total),
+                customerId: auth.userId ?? null,
+                remark: `Order ${withCardMeta.id} payment dismissed`,
+                status: "failed",
+                orderId: withCardMeta.orderId ?? null,
+                txnAt: new Date().toISOString(),
+              }),
+            });
+            await updateOrder(withCardMeta.id, { paymentStatus: "failed" });
+          },
+        },
+      });
+
+      paymentWindow.open();
     } catch (err) {
       console.error("Failed to place order", err);
       const message =
-        err instanceof Error && /storage|quota/i.test(err.message)
+        err instanceof Error && /storage|quota|Razorpay|verification|checkout/i.test(err.message)
           ? err.message
           : "Could not place your order. Please sign in again and retry.";
       window.alert(message);

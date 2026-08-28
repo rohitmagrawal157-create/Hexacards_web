@@ -30,9 +30,11 @@ function readMessages(): CardMessage[] {
   }
 }
 
-function writeMessages(messages: CardMessage[]) {
+function writeMessages(messages: CardMessage[], notify = true) {
   localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages.slice(0, 100)));
-  window.dispatchEvent(new Event("hexa-card-messages-change"));
+  if (notify) {
+    window.dispatchEvent(new Event("hexa-card-messages-change"));
+  }
 }
 
 function toCardMessage(row: CardMessage & Record<string, unknown>): CardMessage {
@@ -78,7 +80,7 @@ export async function fetchCardMessages(opts?: {
     );
     if (typeof window !== "undefined") {
       try {
-        writeMessages(mapped);
+        writeMessages(mapped, false);
       } catch {
         // ignore quota
       }

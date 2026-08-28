@@ -95,7 +95,7 @@ function compactProfile(profile: HexaCardProfile): HexaCardProfile {
   };
 }
 
-function writeAll(profiles: Record<string, HexaCardProfile>) {
+function writeAll(profiles: Record<string, HexaCardProfile>, notify = true) {
   const compact: Record<string, HexaCardProfile> = {};
   for (const [id, profile] of Object.entries(profiles)) {
     compact[id] = compactProfile(profile);
@@ -114,11 +114,34 @@ function writeAll(profiles: Record<string, HexaCardProfile>) {
       // Order placement should still succeed even if profiles cannot persist.
     }
   }
-  window.dispatchEvent(new Event("hexa-order-profiles-change"));
+  if (notify) {
+    window.dispatchEvent(new Event("hexa-order-profiles-change"));
+  }
 }
 
-export function getOrderCardProfile(orderId: string): HexaCardProfile | null {
-  return readAll()[orderId] ?? null;
+/** Read a saved card profile for a specific order id. */
+export function getOrderCardProfile(
+  orderId: string,
+): HexaCardProfile | undefined {
+  if (!orderId) return undefined;
+  const all = readAll();
+  const profile = all[orderId];
+  return profile && typeof profile === "object" ? profile : undefined;
+}
+
+/** Cache profile locally without events or order sync (safe during page load). */
+export function cacheOrderCardProfile(
+  orderId: string,
+  profile: HexaCardProfile,
+): HexaCardProfile {
+  const next: HexaCardProfile = {
+    ...profile,
+    updatedAt: profile.updatedAt || new Date().toISOString(),
+  };
+  const all = readAll();
+  all[orderId] = next;
+  writeAll(all, false);
+  return next;
 }
 
 /** Local-only save (sync). Prefer persistOrderCardProfile for DB. */

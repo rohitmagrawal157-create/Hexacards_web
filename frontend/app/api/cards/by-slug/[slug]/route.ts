@@ -8,11 +8,14 @@ type RouteContext = { params: Promise<{ slug: string }> };
  * GET /api/cards/by-slug/[slug]
  * Public card lookup by unic_card_name; increments page_view.
  */
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
     const { slug: raw } = await context.params;
     const slug = decodeURIComponent(raw).trim().toLowerCase();
     if (!slug) return jsonError(400, "slug is required");
+
+    const countView =
+      new URL(request.url).searchParams.get("count") !== "0";
 
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -26,13 +29,16 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!data) return jsonError(404, "Card not found");
 
     const row = data as CardRow;
-    const nextViews = (Number(row.page_view) || 0) + 1;
-    await supabase
-      .from("cards")
-      .update({ page_view: nextViews })
-      .eq("card_id", row.card_id);
+    let pageView = Number(row.page_view) || 0;
+    if (countView) {
+      pageView += 1;
+      void supabase
+        .from("cards")
+        .update({ page_view: pageView })
+        .eq("card_id", row.card_id);
+    }
 
-    return jsonOk(mapCard({ ...row, page_view: nextViews }));
+    return jsonOk(mapCard({ ...row, page_view: pageView }));
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }

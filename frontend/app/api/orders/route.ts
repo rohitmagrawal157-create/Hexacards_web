@@ -141,11 +141,12 @@ export async function POST(request: Request) {
           : Number(row.payment_status) === 3
             ? "refunded"
             : "pending";
+    const clientTxnId =
+      String(body.clientTxnId ?? body.client_txn_id ?? `ord_${row.order_code}_${Date.now().toString(36)}`)
+        .trim()
+        .slice(0, 64) || `ord_${row.order_code}_${Date.now().toString(36)}`;
     await supabase.from("payments").insert({
-      client_txn_id: `ord_${row.order_code}_${Date.now().toString(36)}`.slice(
-        0,
-        64,
-      ),
+      client_txn_id: clientTxnId,
       amount: Number(row.amount) || 0,
       customer_id: row.user_id,
       gateway_order_id: null,

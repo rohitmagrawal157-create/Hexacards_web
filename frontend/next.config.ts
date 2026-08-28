@@ -5,9 +5,9 @@ import { fileURLToPath } from "url";
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
-  reactCompiler: true,
-  // Pin Turbopack to the frontend app so the parent HexaCards lockfile
-  // is not treated as the workspace root.
+  // The experimental React compiler can add significant CPU/memory overhead
+  // on larger Next.js apps and make local dev/build feel stuck.
+  // Keep the default compiler to avoid the heavy compile path.
   turbopack: {
     root: rootDir,
   },

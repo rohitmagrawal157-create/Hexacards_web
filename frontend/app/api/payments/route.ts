@@ -95,20 +95,42 @@ export async function POST(request: Request) {
     };
 
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from("payments")
-      .insert(payload)
       .select(PAYMENT_COLS)
-      .single();
+      .eq("client_txn_id", clientTxnId)
+      .maybeSingle();
 
-    if (error) {
-      if (error.code === "23505") {
-        return jsonError(409, "client_txn_id already exists");
-      }
-      return jsonError(500, "Failed to create payment", error.message);
+    if (existingError) {
+      return jsonError(500, "Failed to load existing payment", existingError.message);
     }
 
-    return jsonOk(mapPayment(data as PaymentRow), 201);
+    const { data, error } = existing
+      ? await supabase
+          .from("payments")
+          .update(payload)
+          .eq("client_txn_id", clientTxnId)
+          .select(PAYMENT_COLS)
+          .single()
+      : await supabase
+          .from("payments")
+          .insert(payload)
+          .select(PAYMENT_COLS)
+          .single();
+
+    if (error) {
+      return jsonError(500, "Failed to save payment", error.message);
+    }
+
+    if (payload.order_id != null) {
+      const nextPaymentStatus = status.toLowerCase() === "success" ? "paid" : status.toLowerCase() === "failed" ? "failed" : status.toLowerCase() === "refunded" ? "refunded" : "pending";
+      await supabase
+        .from("orders")
+        .update({ payment_status: nextPaymentStatus === "paid" ? 1 : nextPaymentStatus === "failed" ? 2 : nextPaymentStatus === "refunded" ? 3 : 0 })
+        .eq("order_id", payload.order_id);
+    }
+
+    return jsonOk(mapPayment(data as PaymentRow), existing ? 200 : 201);
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }

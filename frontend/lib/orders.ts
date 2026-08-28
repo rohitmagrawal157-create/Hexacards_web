@@ -14,6 +14,7 @@ export type HexaPaymentStatus = "paid" | "pending" | "failed" | "refunded";
 
 export type HexaOrder = {
   id: string;
+  orderId?: number;
   createdAt: string;
   status: HexaOrderStatus;
   paymentStatus?: HexaPaymentStatus;
@@ -37,6 +38,7 @@ export type HexaOrder = {
   discount: number;
   total: number;
   coupon?: string | null;
+  clientTxnId?: string;
   productTitle: string;
   /** Product slug from catalog (e.g. "google-standee") */
   productId?: string;
@@ -162,6 +164,10 @@ function readOrders(): HexaOrder[] {
 function dtoToHexaOrder(dto: HexaOrder & Record<string, unknown>): HexaOrder {
   return {
     id: String(dto.id),
+    orderId:
+      dto.orderId != null && Number(dto.orderId) > 0
+        ? Number(dto.orderId)
+        : undefined,
     createdAt: String(dto.createdAt),
     status: (dto.status as HexaOrderStatus) || "placed",
     paymentStatus: (dto.paymentStatus as HexaPaymentStatus) || "paid",
@@ -183,6 +189,7 @@ function dtoToHexaOrder(dto: HexaOrder & Record<string, unknown>): HexaOrder {
     discount: Number(dto.discount) || 0,
     total: Number(dto.total) || 0,
     coupon: (dto.coupon as string | null | undefined) ?? null,
+    clientTxnId: dto.clientTxnId ? String(dto.clientTxnId) : undefined,
     productTitle: String(dto.productTitle ?? ""),
     productId: dto.productId ? String(dto.productId) : undefined,
     userId:
@@ -221,6 +228,7 @@ function orderToApiBody(order: Partial<HexaOrder> & { id?: string }) {
     discount: order.discount,
     total: order.total,
     coupon: order.coupon ?? null,
+    clientTxnId: order.clientTxnId ?? null,
     productTitle: order.productTitle,
     productId: order.productId ?? null,
     productSlug: order.productId ?? null,
@@ -310,13 +318,7 @@ export function findOrderByCardSlug(slug: string): HexaOrder | null {
 
   if (!found.cardSlug?.trim()) {
     const { slug: computed, liveUrl } = resolveOrderLiveUrl(found);
-    void updateOrder(found.id, {
-      cardSlug: computed,
-      cardUrl: liveUrl,
-      cardDesign: found.cardDesign
-        ? { ...found.cardDesign, liveUrl }
-        : undefined,
-    });
+    // Do not call updateOrder here — that dispatched events and froze the UI.
     return {
       ...found,
       cardSlug: computed,
@@ -347,12 +349,15 @@ export async function saveOrder(
   }
 
   const id = `HC-${Date.now().toString().slice(-8)}`;
+  const clientTxnId =
+    order.clientTxnId ?? `ord_${id}_${Date.now().toString(36)}`;
   const next: HexaOrder = {
     ...order,
     id,
+    clientTxnId,
     createdAt: new Date().toISOString(),
     status: order.status ?? "placed",
-    paymentStatus: order.paymentStatus ?? "paid",
+    paymentStatus: order.paymentStatus ?? "pending",
     ownerPhone,
     phone: phoneKey(order.phone) || ownerPhone,
   };
@@ -372,10 +377,14 @@ export async function saveOrder(
 
   let saved = next;
   if (apiRes.ok && apiRes.data) {
+    const mapped = dtoToHexaOrder(
+      apiRes.data as HexaOrder & Record<string, unknown>,
+    );
     saved = {
       ...next,
-      ...dtoToHexaOrder(apiRes.data as HexaOrder & Record<string, unknown>),
-      cardDesign: next.cardDesign ?? dtoToHexaOrder(apiRes.data as HexaOrder & Record<string, unknown>).cardDesign,
+      ...mapped,
+      orderId: mapped.orderId ?? next.orderId,
+      cardDesign: next.cardDesign ?? mapped.cardDesign,
     };
   } else {
     console.error(

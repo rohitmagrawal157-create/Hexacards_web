@@ -200,11 +200,15 @@ export function cardDtoToProfile(
   };
 }
 
-export async function fetchCardBySlug(slug: string): Promise<CardDto | null> {
+export async function fetchCardBySlug(
+  slug: string,
+  opts?: { countView?: boolean },
+): Promise<CardDto | null> {
   const s = slug.trim().toLowerCase();
   if (!s) return null;
+  const qs = opts?.countView === false ? "?count=0" : "";
   const res = await apiFetch<CardDto>(
-    `/api/cards/by-slug/${encodeURIComponent(s)}`,
+    `/api/cards/by-slug/${encodeURIComponent(s)}${qs}`,
   );
   return res.ok && res.data ? res.data : null;
 }
