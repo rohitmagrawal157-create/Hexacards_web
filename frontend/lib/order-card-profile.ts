@@ -122,11 +122,11 @@ function writeAll(profiles: Record<string, HexaCardProfile>, notify = true) {
 /** Read a saved card profile for a specific order id. */
 export function getOrderCardProfile(
   orderId: string,
-): HexaCardProfile | undefined {
-  if (!orderId) return undefined;
+): HexaCardProfile | null {
+  if (!orderId) return null;
   const all = readAll();
   const profile = all[orderId];
-  return profile && typeof profile === "object" ? profile : undefined;
+  return profile && typeof profile === "object" ? profile : null;
 }
 
 /** Cache profile locally without events or order sync (safe during page load). */

@@ -4,6 +4,7 @@ import {
   type ProductMedia,
 } from "@/lib/product-catalog";
 import { apiFetch } from "@/lib/api-config";
+import { clearHomeCategoriesCache } from "@/lib/home-categories";
 
 const ADMIN_STORE_KEY = "hexaAdminProductStore";
 const ADMIN_PRODUCTS_CHANGE = "hexa-admin-products-change";
@@ -92,7 +93,7 @@ const DEFAULT_SECTIONS: AdminProductSection[] = [
   {
     id: "social-media-card",
     title: "Social Media Card",
-    subtitle: "Google review, Instagram, YouTube, and keychain QR cards.",
+    subtitle: "Google review, Instagram, and YouTube social cards.",
     imageSrc: "/Images/Products/googleReview.jpg",
   },
   {
@@ -101,6 +102,12 @@ const DEFAULT_SECTIONS: AdminProductSection[] = [
     subtitle: "Google, Instagram, and YouTube review standees.",
     imageSrc: "/Images/Products/reviewStandy.jpg",
   },
+  {
+    id: "review-keychain",
+    title: "Review Keychain QR",
+    subtitle: "NFC + QR keychains that open your Google review page.",
+    imageSrc: "/Images/Products/keychain-front-back.jpg",
+  },
 ];
 
 const SECTION_DISPLAY_ORDER = [
@@ -108,6 +115,7 @@ const SECTION_DISPLAY_ORDER = [
   "digital-profile-qr",
   "social-media-card",
   "standee",
+  "review-keychain",
 ] as const;
 
 const DEFAULT_ORDERS: Record<string, string[]> = {
@@ -118,8 +126,8 @@ const DEFAULT_ORDERS: Record<string, string[]> = {
     "google-review-card",
     "instagram-card",
     "youtube-card",
-    "review-keychain-qr",
   ],
+  "review-keychain": ["review-keychain-qr"],
 };
 
 function normalizeSectionOrder(
@@ -180,6 +188,7 @@ function uniqueId(preferred: string, existing: Set<string>): string {
 
 function notifyProductsChanged() {
   if (typeof window === "undefined") return;
+  clearHomeCategoriesCache();
   window.dispatchEvent(new Event(ADMIN_PRODUCTS_CHANGE));
 }
 

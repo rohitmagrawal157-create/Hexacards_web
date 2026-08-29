@@ -12,6 +12,10 @@ import {
 import type { CardDto } from "@/lib/server/card-types";
 import { updateOrder, type HexaOrder } from "@/lib/orders";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
+import {
+  resolveCardImageSrc,
+  toCardImageDbName,
+} from "@/lib/card-images";
 
 const LAYOUT_TO_THEME: Record<CardLayoutId, number> = {
   classic: 1,
@@ -33,12 +37,9 @@ const THEME_TO_LAYOUT: Record<number, CardLayoutId> = {
   6: "minimalist",
 };
 
-/** Only persist short URL/path values — DB columns are varchar(255). */
+/** Persist file name only in DB — never full paths or data URLs. */
 function dbImagePath(src: string | null | undefined): string | null {
-  if (!src) return null;
-  const t = src.trim();
-  if (!t || t.startsWith("data:") || t.startsWith("idb:")) return null;
-  return t.slice(0, 255);
+  return toCardImageDbName(src);
 }
 
 function servicesToDb(services: string[] | undefined): string | null {
@@ -105,6 +106,10 @@ export function profileToCardBody(
     twitterUrl: profile.social.twitter.trim() || null,
     youtubeUrl: profile.social.youtube.trim() || null,
     googleUrl: profile.social.googleReview.trim() || null,
+    telegramUrl: profile.social.telegram.trim() || null,
+    snapchatUrl: profile.social.snapchat.trim() || null,
+    pinterestUrl: profile.social.pinterest.trim() || null,
+    tripadvisorUrl: profile.social.tripadvisor.trim() || null,
     services: servicesToDb(profile.business.services),
     brochure: profile.contact.brochureName
       ? profile.contact.brochureName.slice(0, 500)
@@ -180,6 +185,10 @@ export function cardDtoToProfile(
       twitter: card.twitterUrl || fallback.social.twitter,
       youtube: card.youtubeUrl || fallback.social.youtube,
       googleReview: card.googleUrl || fallback.social.googleReview,
+      telegram: card.telegramUrl || fallback.social.telegram,
+      snapchat: card.snapchatUrl || fallback.social.snapchat,
+      pinterest: card.pinterestUrl || fallback.social.pinterest,
+      tripadvisor: card.tripadvisorUrl || fallback.social.tripadvisor,
     },
     business: {
       about: card.about || card.aboutCompany || fallback.business.about,
@@ -190,9 +199,14 @@ export function cardDtoToProfile(
     },
     appearance: {
       ...fallback.appearance,
-      logoImage: normalizeLogoImage(card.logo || fallback.appearance.logoImage),
+      logoImage: normalizeLogoImage(
+        resolveCardImageSrc(card.logo, fallback.appearance.logoImage || DEFAULT_CARD_AVATAR),
+      ),
       coverImage: normalizeCoverImage(
-        card.bgUrl || card.bgImg || fallback.appearance.coverImage,
+        resolveCardImageSrc(
+          card.bgUrl || card.bgImg,
+          fallback.appearance.coverImage || DEFAULT_CARD_BANNER,
+        ),
       ),
       layout: layoutFromThemeId(card.themeId),
     },

@@ -6,6 +6,13 @@ import {
   type CardRow,
   type CardUpdateBody,
 } from "@/lib/server/card-types";
+import {
+  applyLinksToCard,
+  extractLinksFromBody,
+  fetchLinksForCard,
+  stripLinkFieldsFromCardPayload,
+  upsertCardLinks,
+} from "@/lib/server/card-links-db";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -31,7 +38,9 @@ export async function GET(_request: Request, context: RouteContext) {
     if (error) return jsonError(500, "Failed to load card", error.message);
     if (!data) return jsonError(404, "Card not found");
 
-    return jsonOk(mapCard(data as CardRow));
+    const card = mapCard(data as CardRow);
+    const links = await fetchLinksForCard(supabase, cardId);
+    return jsonOk(applyLinksToCard(card, links));
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }
@@ -76,9 +85,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     if (body.mobile !== undefined) set("mobile", String(body.mobile ?? "").trim());
     if (body.email !== undefined) set("email", body.email ? String(body.email).trim() : null);
-    if (body.website !== undefined) {
-      set("website", body.website ? String(body.website).trim() : null);
-    }
     if (body.code !== undefined) set("code", String(body.code || "91").trim() || "91");
     if (body.whatsapp !== undefined) {
       set("whatsapp", body.whatsapp ? String(body.whatsapp).trim() : null);
@@ -93,29 +99,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     if (body.address !== undefined) set("address", body.address || null);
     if (body.about !== undefined) set("about", body.about || null);
-    if (body.facebookUrl !== undefined || body.facebook_url !== undefined) {
-      set("facebook_url", body.facebookUrl ?? body.facebook_url ?? null);
-    }
-    if (body.instagramUrl !== undefined || body.instagram_url !== undefined) {
-      set("instagram_url", body.instagramUrl ?? body.instagram_url ?? null);
-    }
-    if (body.linkedinUrl !== undefined || body.linkedin_url !== undefined) {
-      set("linkedin_url", body.linkedinUrl ?? body.linkedin_url ?? null);
-    }
-    if (body.twitterUrl !== undefined || body.twitter_url !== undefined) {
-      set("twitter_url", body.twitterUrl ?? body.twitter_url ?? null);
-    }
-    if (body.youtubeUrl !== undefined || body.youtube_url !== undefined) {
-      set("youtube_url", body.youtubeUrl ?? body.youtube_url ?? null);
-    }
-    if (body.googleUrl !== undefined || body.google_url !== undefined) {
-      set("google_url", body.googleUrl ?? body.google_url ?? null);
-    }
     if (body.aboutCompany !== undefined || body.about_company !== undefined) {
       set("about_company", body.aboutCompany ?? body.about_company ?? null);
     }
     if (body.services !== undefined) set("services", body.services || null);
-    if (body.brochure !== undefined) set("brochure", body.brochure || null);
     if (body.startDate !== undefined || body.start_date !== undefined) {
       set("start_date", body.startDate ?? body.start_date ?? null);
     }
@@ -124,27 +111,59 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     if (body.status !== undefined) set("status", Number(body.status) ? 1 : 0);
 
-    if (Object.keys(payload).length === 0) {
+    const linkValues = extractLinksFromBody(body);
+    const cardPayload = stripLinkFieldsFromCardPayload(payload);
+    const hasCardFields = Object.keys(cardPayload).length > 0;
+    const hasLinkFields = Object.keys(linkValues).length > 0;
+
+    if (!hasCardFields && !hasLinkFields) {
       return jsonError(400, "No fields to update");
     }
 
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("cards")
-      .update(payload)
-      .eq("card_id", cardId)
-      .select(CARD_COLS)
-      .maybeSingle();
+    let cardRow: CardRow | null = null;
 
-    if (error) {
-      if (error.code === "23505") {
-        return jsonError(409, "unic_card_name already exists");
+    if (hasCardFields) {
+      const { data, error } = await supabase
+        .from("cards")
+        .update(cardPayload)
+        .eq("card_id", cardId)
+        .select(CARD_COLS)
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === "23505") {
+          return jsonError(409, "unic_card_name already exists");
+        }
+        return jsonError(500, "Failed to update card", error.message);
       }
-      return jsonError(500, "Failed to update card", error.message);
+      if (!data) return jsonError(404, "Card not found");
+      cardRow = data as CardRow;
+    } else {
+      const { data, error } = await supabase
+        .from("cards")
+        .select(CARD_COLS)
+        .eq("card_id", cardId)
+        .maybeSingle();
+      if (error) return jsonError(500, "Failed to load card", error.message);
+      if (!data) return jsonError(404, "Card not found");
+      cardRow = data as CardRow;
     }
-    if (!data) return jsonError(404, "Card not found");
 
-    return jsonOk(mapCard(data as CardRow));
+    let links = await fetchLinksForCard(supabase, cardId);
+    if (hasLinkFields) {
+      try {
+        links = await upsertCardLinks(supabase, cardId, linkValues);
+      } catch (err) {
+        return jsonError(
+          500,
+          "Failed to update links — run frontend/sql/links-table.sql",
+          err instanceof Error ? err.message : undefined,
+        );
+      }
+    }
+
+    return jsonOk(applyLinksToCard(mapCard(cardRow), links));
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }
@@ -157,6 +176,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     if (!cardId) return jsonError(400, "card_id must be a positive integer");
 
     const supabase = getSupabaseAdmin();
+    // links cascade via FK on delete
     const { data, error } = await supabase
       .from("cards")
       .delete()

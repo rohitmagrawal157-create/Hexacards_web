@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const supabase = getSupabaseAdmin();
 
-    const [catRes, prodRes, userRes, sessionRes, countryRes, stateRes, cityRes, adminRes, themeRes, cardsRes, ordersRes, orderItemsRes, paymentsRes, reviewsRes, messagesRes] =
+    const [catRes, prodRes, userRes, sessionRes, countryRes, stateRes, cityRes, adminRes, themeRes, cardsRes, linksRes, ordersRes, orderItemsRes, paymentsRes, reviewsRes, messagesRes] =
       await Promise.all([
         supabase.from("categories").select("category_id").limit(1),
         supabase.from("products").select("product_id").limit(1),
@@ -17,6 +17,7 @@ export async function GET() {
         supabase.from("admin").select("aid").limit(1),
         supabase.from("card_theme").select("theme_id").limit(1),
         supabase.from("cards").select("card_id").limit(1),
+        supabase.from("links").select("link_id").limit(1),
         supabase.from("orders").select("order_id").limit(1),
         supabase.from("order_items").select("order_item_id").limit(1),
         supabase.from("payments").select("id").limit(1),
@@ -35,6 +36,7 @@ export async function GET() {
       ["admin", adminRes],
       ["card_theme", themeRes],
       ["cards", cardsRes],
+      ["links", linksRes],
       ["orders", ordersRes],
       ["order_items", orderItemsRes],
       ["payments", paymentsRes],

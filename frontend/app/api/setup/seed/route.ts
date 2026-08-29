@@ -27,8 +27,7 @@ const DEFAULT_CATEGORIES = [
     category_id: 3,
     slug: "social-media-card",
     category_name: "Social Media Card",
-    category_desc:
-      "Google review, Instagram, YouTube, and keychain QR cards.",
+    category_desc: "Google review, Instagram, and YouTube social cards.",
     category_img: "googleReview.jpg",
     sort_order: 3,
     status: 1,
@@ -42,6 +41,15 @@ const DEFAULT_CATEGORIES = [
     sort_order: 4,
     status: 1,
   },
+  {
+    category_id: 5,
+    slug: "review-keychain",
+    category_name: "Review Keychain QR",
+    category_desc: "NFC + QR keychains that open your Google review page.",
+    category_img: "keychain-front-back.jpg",
+    sort_order: 5,
+    status: 1,
+  },
 ] as const;
 
 /** Which category slug each product belongs to */
@@ -53,13 +61,13 @@ const PRODUCT_CATEGORY_MAP: Record<string, string> = {
   "google-review-card": "social-media-card",
   "instagram-card": "social-media-card",
   "youtube-card": "social-media-card",
-  "review-keychain-qr": "social-media-card",
   "social-media-cards": "social-media-card",
   "google-reviews": "social-media-card",
   "google-standee": "standee",
   "instagram-standee": "standee",
   "youtube-standee": "standee",
   "review-stand": "standee",
+  "review-keychain-qr": "review-keychain",
 };
 
 const SEED_PRODUCT_IDS = [

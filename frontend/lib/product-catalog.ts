@@ -734,7 +734,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
   },
   "review-keychain-qr": {
     id: "review-keychain-qr",
-    category: "For Reviews",
+    category: "Review Keychain QR",
     title: "Review Keychain QR",
     shortTitle: "Review Keychain QR",
     description:

@@ -33,11 +33,12 @@ import LocationSelects, {
   type LocationValue,
 } from "@/components/shared/LocationSelects";
 import { hasPlacedOrder, getOrdersForPhone, type HexaOrder } from "@/lib/orders";
+import { resolveOrderLiveUrl } from "@/lib/order-card";
+import { uploadCardImage } from "@/lib/card-image-upload";
 import {
   loadOrderCardProfile,
   persistOrderCardProfile,
 } from "@/lib/order-card-profile";
-import { resolveOrderLiveUrl } from "@/lib/order-card";
 import {
   cardPublicSlug,
   cardPublicUrl,
@@ -149,6 +150,7 @@ export default function EditCard() {
     src: string;
     kind: CropKind;
   } | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
   const [defaultConfirm, setDefaultConfirm] = useState<
     null | "cover" | "logo"
   >(null);
@@ -339,13 +341,62 @@ export default function EditCard() {
     }
   }
 
-  function applyCroppedImage(dataUrl: string) {
-    if (!cropState) return;
-    if (cropState.kind === "profile") updateAppearance("logoImage", dataUrl);
-    else if (cropState.kind === "background")
-      updateAppearance("coverImage", dataUrl);
-    else updateAppearance("shareImage", dataUrl);
+  function resolveCardUsername(p: HexaCardProfile): string {
+    if (editingOrder) return resolveOrderLiveUrl(editingOrder).slug;
+    return cardPublicSlug(p);
+  }
+
+  async function applyCroppedImage(dataUrl: string) {
+    if (!cropState || !profile) return;
+    const kind = cropState.kind;
     setCropState(null);
+
+    // Share image stays local-only (not stored as card profile/bg)
+    if (kind === "share") {
+      updateAppearance("shareImage", dataUrl);
+      return;
+    }
+
+    const username = resolveCardUsername(profile);
+    setImageUploading(true);
+    try {
+      const uploaded = await uploadCardImage({
+        username,
+        kind: kind === "profile" ? "profile" : "background",
+        dataUrl,
+        cardId: editingOrder?.cardId ?? null,
+      });
+
+      const next: HexaCardProfile = {
+        ...profile,
+        appearance: {
+          ...profile.appearance,
+          ...(kind === "profile"
+            ? { logoImage: uploaded.url }
+            : { coverImage: uploaded.url }),
+        },
+      };
+      setProfile(next);
+
+      // Keep local cache + ensure cards row has paths (upload API also patches DB)
+      try {
+        await persistProfile(next);
+      } catch {
+        // Path is already on disk/DB from upload; local save can retry on Save
+      }
+
+      if (editingOrder && uploaded.cardId && !editingOrder.cardId) {
+        setEditingOrder({ ...editingOrder, cardId: uploaded.cardId });
+      }
+    } catch (err) {
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "Could not upload image. Please try again.",
+      );
+    } finally {
+      setImageUploading(false);
+    }
   }
 
   async function handleBrochureUpload(file: File | undefined) {
@@ -1203,8 +1254,26 @@ export default function EditCard() {
           imageSrc={cropState.src}
           kind={cropState.kind}
           onCancel={() => setCropState(null)}
-          onComplete={applyCroppedImage}
+          onComplete={(dataUrl) => void applyCroppedImage(dataUrl)}
         />
+      ) : null}
+
+      {imageUploading ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="rounded-2xl bg-white px-6 py-5 text-center shadow-xl">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#BC7C10]/25 border-t-[#BC7C10]" />
+            <p className="mt-3 text-sm font-semibold text-[#141414]">
+              Saving image…
+            </p>
+            <p className="mt-1 text-xs text-[#6b6560]">
+              Replacing the previous file for this card
+            </p>
+          </div>
+        </div>
       ) : null}
 
       {defaultConfirm ? (

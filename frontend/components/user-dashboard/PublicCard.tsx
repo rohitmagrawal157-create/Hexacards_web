@@ -15,7 +15,7 @@ import { findOrderByCardSlug } from "@/lib/orders";
 import {
   getOrderCardProfile,
   loadOrderCardProfile,
-  saveOrderCardProfile,
+  cacheOrderCardProfile,
 } from "@/lib/order-card-profile";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
 import {
@@ -54,7 +54,7 @@ export default function PublicCard() {
         const loaded = cardDtoToProfile(dbCard, local);
         if (order) {
           try {
-            saveOrderCardProfile(order.id, loaded);
+            cacheOrderCardProfile(order.id, loaded);
           } catch {
             // ignore quota
           }

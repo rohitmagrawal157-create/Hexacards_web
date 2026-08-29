@@ -4,56 +4,30 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  cardsEqual,
+  clearHomeCategoriesCache,
+  fetchHomeCategories,
+  type HomeCategoryCard,
+} from "@/lib/home-categories";
 
-type Product = {
-  title: string;
-  description: string;
-  image: string;
-  href: string;
-};
+function RevealHeading({ count }: { count: number }) {
+  const label =
+    count === 1
+      ? "One"
+      : count === 2
+        ? "Two"
+        : count === 3
+          ? "Three"
+          : count === 4
+            ? "Four"
+            : count === 5
+              ? "Five"
+              : String(count);
 
-const products: Product[] = [
-  {
-    title: "Digital Business Card",
-    description:
-      "Your full digital identity on NFC and QR — share contacts, links, and leads in one tap.",
-    image: "/Images/Products/digitalCard.jpg",
-    href: "/product/nfc-business-card",
-  },
-  {
-    title: "Digital Profile + QR",
-    description:
-      "Print-ready QR that opens your profile instantly. No app, no friction, works on every phone.",
-    image: "/Images/Products/digitalQR.jpg",
-    href: "/product/digital-profile-qr",
-  },
-  {
-    title: "Social Media Cards",
-    description:
-      "Google, Instagram & YouTube cards — pick a platform and share in one tap.",
-    image: "/Images/Products/googleReview.jpg",
-    href: "/product/social-media-cards",
-  },
-  {
-    title: "Google Review Standee",
-    description:
-      "Google, Instagram & YouTube standees — pick a platform for your counter.",
-    image: "/Images/Products/reviewStandy.jpg",
-    href: "/product/google-review-standee",
-  },
-  {
-    title: "Review Keychain QR",
-    description:
-      "Tap or scan keychain that opens your Google review page — always with you on your keys.",
-    image: "/Images/Products/keychain-front-back.jpg",
-    href: "/product/review-keychain-qr",
-  },
-];
-
-function RevealHeading() {
   const words: { text: string; gradient?: boolean; lineBreak?: boolean }[] = [
-    { text: "Five", gradient: true },
-    { text: "products." },
+    { text: label, gradient: true },
+    { text: count === 1 ? "product." : "products." },
     { text: "One", gradient: true },
     { text: "tap", lineBreak: true },
     { text: "to", gradient: true },
@@ -114,7 +88,7 @@ function RevealSubtext() {
   );
 }
 
-function ProductCard({ item }: { item: Product }) {
+function ProductCard({ item }: { item: HomeCategoryCard }) {
   return (
     <Link
       href={item.href}
@@ -128,9 +102,6 @@ function ProductCard({ item }: { item: Product }) {
           sizes="(max-width: 640px) 62vw, (max-width: 1024px) 42vw, 23vw"
           className="object-contain p-4 transition-transform duration-500 ease-out group-hover:scale-105 sm:p-5"
         />
-        {/* <span className="absolute top-3 left-3 inline-flex items-center rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold tracking-wide text-[#BC7C10] uppercase shadow-sm ring-1 ring-[#BC7C10]/20 sm:text-[11px]">
-          View Product
-        </span> */}
       </div>
 
       <div className="flex flex-1 flex-col px-3 pt-3 pb-4 sm:px-4 sm:pt-4 sm:pb-5">
@@ -149,10 +120,56 @@ function ProductCard({ item }: { item: Product }) {
   );
 }
 
+function CategorySkeleton() {
+  return (
+    <li className="w-[62%] shrink-0 snap-start sm:w-[42%] lg:w-[23%]">
+      <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
+        <div className="aspect-[4/5] animate-pulse bg-[#F3F4F6] sm:aspect-square" />
+        <div className="space-y-2 px-3 pt-3 pb-4 sm:px-4 sm:pt-4 sm:pb-5">
+          <div className="h-4 w-2/3 animate-pulse rounded bg-[#F3F4F6]" />
+          <div className="h-3 w-full animate-pulse rounded bg-[#F3F4F6]" />
+          <div className="h-3 w-4/5 animate-pulse rounded bg-[#F3F4F6]" />
+        </div>
+      </div>
+    </li>
+  );
+}
+
 function ProductsGrid() {
   const [hasAnimated, setHasAnimated] = useState(false);
+  const [categories, setCategories] = useState<HomeCategoryCard[] | null>(
+    null,
+  );
+  const [ready, setReady] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load(force = false) {
+      if (force) clearHomeCategoriesCache();
+      const { cards } = await fetchHomeCategories();
+      if (cancelled) return;
+      setCategories((prev) => {
+        if (prev && cardsEqual(prev, cards)) return prev;
+        return cards;
+      });
+      setReady(true);
+    }
+
+    void load();
+
+    function onCatalogChange() {
+      void load(true);
+    }
+
+    window.addEventListener("hexa-admin-products-change", onCatalogChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("hexa-admin-products-change", onCatalogChange);
+    };
+  }, []);
 
   useEffect(() => {
     const el = sectionRef.current;
@@ -173,9 +190,6 @@ function ProductsGrid() {
   function scrollByCard(direction: "prev" | "next") {
     const el = scrollerRef.current;
     if (!el) return;
-    // Scroll by roughly one card's width (first child's width + gap)
-    // rather than a hardcoded pixel value, so this stays correct across
-    // the different card widths at each breakpoint.
     const card = el.firstElementChild as HTMLElement | null;
     const amount = card ? card.offsetWidth + 20 : 320;
     el.scrollBy({
@@ -183,6 +197,8 @@ function ProductsGrid() {
       behavior: "smooth",
     });
   }
+
+  const count = categories?.length ?? 5;
 
   return (
     <div ref={sectionRef} className="mx-auto max-w-7xl px-5 sm:px-8">
@@ -192,7 +208,7 @@ function ProductsGrid() {
         </p>
         {hasAnimated ? (
           <>
-            <RevealHeading />
+            <RevealHeading count={count} />
             <RevealSubtext />
           </>
         ) : (
@@ -200,31 +216,30 @@ function ProductsGrid() {
         )}
       </div>
 
-      {/* Horizontal snap-scroll slider, replacing the old 2/4-column
-          grid — with 5 items a fixed grid always orphans one card on
-          its own row at some breakpoint. Scroll-snap keeps cards
-          aligned as the user swipes/scrolls instead. Scrollbar is
-          hidden (cross-browser) since the arrow buttons below and
-          direct touch/drag scrolling are the intended way to navigate. */}
       <ul
         ref={scrollerRef}
         className="flex list-none snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth p-0 pb-1 sm:gap-5 lg:gap-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {products.map((item) => (
-          <li
-            key={item.title}
-            className="w-[62%] shrink-0 snap-start sm:w-[42%] lg:w-[23%]"
-          >
-            <ProductCard item={item} />
-          </li>
-        ))}
+        {!ready || !categories ? (
+          <>
+            <CategorySkeleton />
+            <CategorySkeleton />
+            <CategorySkeleton />
+            <CategorySkeleton />
+            <CategorySkeleton />
+          </>
+        ) : (
+          categories.map((item) => (
+            <li
+              key={item.id}
+              className="w-[62%] shrink-0 snap-start sm:w-[42%] lg:w-[23%]"
+            >
+              <ProductCard item={item} />
+            </li>
+          ))
+        )}
       </ul>
 
-      {/* Arrow controls — placed below the slider. Visible on all
-          screen sizes now (not desktop-only) since hiding the
-          scrollbar removes the only other visual cue that this row
-          scrolls, so touch users benefit from these too, not just
-          mouse/trackpad users. */}
       <div className="mt-6 flex justify-center gap-3">
         <button
           type="button"

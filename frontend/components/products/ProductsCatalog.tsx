@@ -37,7 +37,7 @@ export const FULL_CATALOG_ORDER: CatalogEntry[] = [
     badge: "Standee",
   },
   { id: "youtube-standee", href: "/product/youtube-standee", badge: "Standee" },
-  { id: "review-keychain-qr", href: "/product/review-keychain-qr" },
+  { id: "review-keychain-qr", href: "/product/review-keychain-qr", badge: "Keychain" },
   { id: "metal-card", href: "/product/metal-card" },
   { id: "pvc-card", href: "/product/pvc-card" },
   { id: "wooden-card", href: "/product/wooden-card" },

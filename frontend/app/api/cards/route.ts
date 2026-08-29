@@ -7,6 +7,13 @@ import {
   type CardCreateBody,
   type CardRow,
 } from "@/lib/server/card-types";
+import {
+  applyLinksToCard,
+  extractLinksFromBody,
+  fetchLinksForCards,
+  stripLinkFieldsFromCardPayload,
+  upsertCardLinks,
+} from "@/lib/server/card-links-db";
 
 async function resolveUserId(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -93,9 +100,6 @@ function buildCardPayload(
   if (body.email !== undefined) {
     payload.email = body.email ? String(body.email).trim() : null;
   }
-  if (body.website !== undefined) {
-    payload.website = body.website ? String(body.website).trim() : null;
-  }
   if (body.code !== undefined) {
     payload.code = String(body.code || "91").trim() || "91";
   }
@@ -112,29 +116,10 @@ function buildCardPayload(
   }
   if (body.address !== undefined) payload.address = body.address || null;
   if (body.about !== undefined) payload.about = body.about || null;
-  if (body.facebookUrl !== undefined || body.facebook_url !== undefined) {
-    payload.facebook_url = body.facebookUrl ?? body.facebook_url ?? null;
-  }
-  if (body.instagramUrl !== undefined || body.instagram_url !== undefined) {
-    payload.instagram_url = body.instagramUrl ?? body.instagram_url ?? null;
-  }
-  if (body.linkedinUrl !== undefined || body.linkedin_url !== undefined) {
-    payload.linkedin_url = body.linkedinUrl ?? body.linkedin_url ?? null;
-  }
-  if (body.twitterUrl !== undefined || body.twitter_url !== undefined) {
-    payload.twitter_url = body.twitterUrl ?? body.twitter_url ?? null;
-  }
-  if (body.youtubeUrl !== undefined || body.youtube_url !== undefined) {
-    payload.youtube_url = body.youtubeUrl ?? body.youtube_url ?? null;
-  }
-  if (body.googleUrl !== undefined || body.google_url !== undefined) {
-    payload.google_url = body.googleUrl ?? body.google_url ?? null;
-  }
   if (body.aboutCompany !== undefined || body.about_company !== undefined) {
     payload.about_company = body.aboutCompany ?? body.about_company ?? null;
   }
   if (body.services !== undefined) payload.services = body.services || null;
-  if (body.brochure !== undefined) payload.brochure = body.brochure || null;
   if (body.startDate !== undefined || body.start_date !== undefined) {
     payload.start_date = body.startDate ?? body.start_date ?? null;
   }
@@ -145,7 +130,8 @@ function buildCardPayload(
     payload.status = Number(body.status) ? 1 : 0;
   }
 
-  return { payload };
+  // website / social / brochure → `links` table (not cards columns)
+  return { payload: stripLinkFieldsFromCardPayload(payload) };
 }
 
 export async function GET(request: Request) {
@@ -183,7 +169,18 @@ export async function GET(request: Request) {
       return jsonError(500, "Failed to load cards", error.message);
     }
 
-    return jsonOk((data as CardRow[] | null ?? []).map(mapCard));
+    const rows = (data as CardRow[] | null) ?? [];
+    const cards = rows.map(mapCard);
+    const linksMap = await fetchLinksForCards(
+      supabase,
+      cards.map((c) => c.cardId),
+    );
+
+    return jsonOk(
+      cards.map((card) =>
+        applyLinksToCard(card, linksMap.get(card.cardId) ?? []),
+      ),
+    );
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }
@@ -213,7 +210,19 @@ export async function POST(request: Request) {
       return jsonError(500, "Failed to create card", error.message);
     }
 
-    return jsonOk(mapCard(data as CardRow), 201);
+    const card = mapCard(data as CardRow);
+    const linkValues = extractLinksFromBody(body);
+    let links: Awaited<ReturnType<typeof upsertCardLinks>> = [];
+    try {
+      links = await upsertCardLinks(supabase, card.cardId, linkValues);
+    } catch (err) {
+      console.warn(
+        "[cards] links upsert after create:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+
+    return jsonOk(applyLinksToCard(card, links), 201);
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }

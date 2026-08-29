@@ -142,9 +142,7 @@ export async function POST(request: Request) {
             ? "refunded"
             : "pending";
     const clientTxnId =
-      String(body.clientTxnId ?? body.client_txn_id ?? `ord_${row.order_code}_${Date.now().toString(36)}`)
-        .trim()
-        .slice(0, 64) || `ord_${row.order_code}_${Date.now().toString(36)}`;
+      `ord_${row.order_code}_${Date.now().toString(36)}`.slice(0, 64);
     await supabase.from("payments").insert({
       client_txn_id: clientTxnId,
       amount: Number(row.amount) || 0,

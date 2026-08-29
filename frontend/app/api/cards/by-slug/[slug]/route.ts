@@ -1,12 +1,17 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import { CARD_COLS, mapCard, type CardRow } from "@/lib/server/card-types";
+import {
+  applyLinksToCard,
+  fetchLinksForCard,
+} from "@/lib/server/card-links-db";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
 /**
  * GET /api/cards/by-slug/[slug]
  * Public card lookup by unic_card_name; increments page_view.
+ * Links loaded from `links` table (social, brochure, website).
  */
 export async function GET(request: Request, context: RouteContext) {
   try {
@@ -38,7 +43,9 @@ export async function GET(request: Request, context: RouteContext) {
         .eq("card_id", row.card_id);
     }
 
-    return jsonOk(mapCard({ ...row, page_view: pageView }));
+    const card = mapCard({ ...row, page_view: pageView });
+    const links = await fetchLinksForCard(supabase, card.cardId);
+    return jsonOk(applyLinksToCard(card, links));
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }

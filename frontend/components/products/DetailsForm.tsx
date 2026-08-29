@@ -100,6 +100,15 @@ const ORDER_FORM_CONFIG: Record<string, OrderFormConfig> = {
     logoLabel: "Your YouTube / channel logo",
     logoHint: "Upload your channel logo or brand mark (PNG, JPG)",
   },
+  "review-keychain-qr": {
+    platform: "google",
+    productId: "review-keychain-qr",
+    backHref: "/product/review-keychain-qr",
+    linkLabel: "Your Google review link",
+    linkPlaceholder: "https://g.page/r/your-review-link",
+    logoLabel: "Your business logo",
+    logoHint: "Upload your business logo for the keychain (PNG, JPG)",
+  },
 };
 
 const PLATFORM_LABEL: Record<OrderPlatform, string> = {

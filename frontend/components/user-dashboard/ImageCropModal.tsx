@@ -10,7 +10,7 @@ type ImageCropModalProps = {
   imageSrc: string;
   kind: CropKind;
   onCancel: () => void;
-  onComplete: (dataUrl: string) => void;
+  onComplete: (dataUrl: string) => void | Promise<void>;
 };
 
 type AspectMode = {

@@ -19,6 +19,8 @@
 | `city` | Cities / districts linked to state (`city_id`, `city_name`, `state_id`, `status`) — ~729 rows, IDs match source dump |
 | `admin` | Super admins (`aid`, `fname`, `lname`, `email`, `mobile`, `password`, `profile`, `status`) |
 | `card_theme` | Card layouts (`theme_id`, `theme_name`, `theme_path`, `status`) — classic, basic, modern… |
+| `cards` | Digital NFC cards (`card_id`, `unic_card_name`, contact, images, theme…) |
+| `links` | Card links — one row per type (`instagram`, `youtube`, `google_review`, `brochure`, `telegram`, …) |
 | `orders` | Primary: `order_id`, `user_id`, `product_id`, `name`, `mobile_number`, `designation`, `logo`, address fields, `amount`, `date`, `status`, `payment_status`, shipping fields… then extras (`order_code`, card_design, …) |
 | `order_items` | Line items per order (`order_item_id`, `order_id`, product snapshot, qty, prices) |
 | `payments` | Gateway payments (`id`, `client_txn_id`, `amount`, `customer_id`, `gateway_order_id`, `created_at`, `txn_at`, `remark`, `status`, `upi_txn_id`, `razorpay_payment_id`, `order_id`) |
@@ -38,22 +40,38 @@
    7. `frontend/sql/city-seed.sql`
    8. `frontend/sql/admin-seed.sql` ← default admin login
    9. `frontend/sql/card-theme-seed.sql` ← themes (run before cards if cards missing)
-   10. `frontend/sql/cards-table.sql` ← digital cards table (if not in latest schema)
-   11. `frontend/sql/orders-table.sql` ← orders + order_items (fresh)
-   12. `frontend/sql/orders-migrate.sql` ← **required if older orders used `customer_name` / `phone` / `total`**
-   13. `frontend/sql/payments-table.sql` ← Razorpay / UPI payment rows
-   14. `frontend/sql/reviews-table.sql` ← product reviews
-   15. `frontend/sql/messages-table.sql` ← card contact messages (dashboard inbox)
+  10. `frontend/sql/cards-table.sql` ← digital cards table (if not in latest schema)
+  11. `frontend/sql/links-table.sql` ← **card links** (Instagram, YouTube, brochure, …) + migrates from cards columns
+  12. `frontend/sql/orders-table.sql` ← orders + order_items (fresh)
+  13. `frontend/sql/orders-migrate.sql` ← **required if older orders used `customer_name` / `phone` / `total`**
+  14. `frontend/sql/payments-table.sql` ← Razorpay / UPI payment rows
+  15. `frontend/sql/reviews-table.sql` ← product reviews
+  16. `frontend/sql/messages-table.sql` ← card contact messages (dashboard inbox)
+  17. `frontend/sql/review-keychain-category.sql` ← **Review Keychain QR as its own category**
+  18. `frontend/sql/card-images-storage.sql` ← **optional** Supabase Storage bucket for card profile/background images
 
 If you already ran an older `schema.sql` without these tables, run the matching create/seed files above.
 If Super Admin Products breaks after a schema update, run `categories-migrate.sql` → `products-migrate.sql`, then re-seed.
 If orders API fails after column rename, run `orders-migrate.sql`.
-
-Then seed catalog defaults:
+After adding Review Keychain category, run `review-keychain-category.sql` then:
 
 ```bash
 curl -X POST http://localhost:3000/api/setup/seed
 ```
+
+### Card links (`links` table)
+- Run `frontend/sql/links-table.sql` once in Supabase
+- Stores each card link as its own row: `website`, `facebook`, `instagram`, `linkedin`, `twitter`, `youtube`, `google_review`, `telegram`, `snapchat`, `pinterest`, `tripadvisor`, `brochure`
+- Edit Card / card APIs read & write `links` (legacy columns on `cards` are left as fallback only)
+- Inspect: `GET /api/links?card_id=1`
+
+### Card profile + background images
+- Edit Card uploads overwrite fixed files named `{unic_card_name}-profile.jpg` and `{unic_card_name}-background.jpg`
+- DB stores **file name only** on `cards.logo`, `cards.bg_img`, `cards.bg_url` (e.g. `rohit-agrawal7256-profile.jpg`)
+- App resolves names to `/uploads/cards/{name}` for display
+- Local files: `frontend/public/uploads/cards/`
+- Production: run `card-images-storage.sql` (or create public bucket `card-images` in Supabase Dashboard)
+- Optional env: `CARD_IMAGES_BUCKET=card-images`
 
 ## Env (already in frontend/.env.local)
 - `NEXT_PUBLIC_SUPABASE_URL`

@@ -62,6 +62,10 @@ export type CardDto = {
   twitterUrl: string | null;
   youtubeUrl: string | null;
   googleUrl: string | null;
+  telegramUrl?: string | null;
+  snapchatUrl?: string | null;
+  pinterestUrl?: string | null;
+  tripadvisorUrl?: string | null;
   aboutCompany: string | null;
   services: string | null;
   brochure: string | null;
@@ -71,6 +75,8 @@ export type CardDto = {
   dateTime: string;
   updateTime: string;
   status: boolean;
+  /** Populated from `links` table when available */
+  links?: import("@/lib/server/link-types").LinkDto[];
 };
 
 export type CardCreateBody = {
@@ -117,6 +123,14 @@ export type CardCreateBody = {
   youtube_url?: string | null;
   googleUrl?: string | null;
   google_url?: string | null;
+  telegramUrl?: string | null;
+  telegram_url?: string | null;
+  snapchatUrl?: string | null;
+  snapchat_url?: string | null;
+  pinterestUrl?: string | null;
+  pinterest_url?: string | null;
+  tripadvisorUrl?: string | null;
+  tripadvisor_url?: string | null;
   aboutCompany?: string | null;
   about_company?: string | null;
   services?: string | null;
