@@ -95,7 +95,11 @@ export async function POST(request: Request) {
     const productSlug =
       String(body.productSlug ?? body.productId ?? "").trim() || null;
     const [userId, productDbId] = await Promise.all([
-      resolveUserId(supabase, body.ownerPhone || phone, body.userId),
+      resolveUserId(
+        supabase,
+        body.ownerPhone || phone,
+        body.userId ?? body.user_id,
+      ),
       resolveProductId(supabase, productSlug),
     ]);
 
@@ -117,8 +121,8 @@ export async function POST(request: Request) {
 
     const row = data as OrderRow;
     const qty = Number(row.qty) || 1;
-    const unit =
-      qty > 0 ? Number(row.subtotal || 0) / qty : Number(row.amount || 0);
+    const lineTotal = Number(row.amount) || 0;
+    const unit = qty > 0 ? lineTotal / qty : lineTotal;
 
     await supabase.from("order_items").insert({
       order_id: row.order_id,
@@ -128,11 +132,11 @@ export async function POST(request: Request) {
       pack_title: row.pack_title || "",
       qty,
       unit_price: unit,
-      line_total: Number(row.amount) || 0,
+      line_total: lineTotal,
       sort_order: 0,
     });
 
-    // Record a payment row for this order (gateway can update later)
+    // Record a payment row for this order (gateway updates on Razorpay success)
     const payStatus =
       Number(row.payment_status) === 1
         ? "success"
@@ -141,17 +145,17 @@ export async function POST(request: Request) {
           : Number(row.payment_status) === 3
             ? "refunded"
             : "pending";
-    const clientTxnId =
+    const clientTxnId = String(body.clientTxnId ?? body.client_txn_id ?? "")
+      .trim()
+      .slice(0, 64) ||
       `ord_${row.order_code}_${Date.now().toString(36)}`.slice(0, 64);
     await supabase.from("payments").insert({
       client_txn_id: clientTxnId,
-      amount: Number(row.amount) || 0,
+      amount: lineTotal,
       customer_id: row.user_id,
       gateway_order_id: null,
       txn_at: payStatus === "success" ? new Date().toISOString() : null,
-      remark: row.payment_method
-        ? `method:${row.payment_method}`
-        : "order checkout",
+      remark: `Order ${row.order_code}${row.payment_method ? ` · ${row.payment_method}` : ""}`,
       status: payStatus,
       upi_txn_id: null,
       razorpay_payment_id: null,

@@ -414,6 +414,7 @@ export default function CardsPanel({
   onToggleStatus?: (id: string, active: boolean) => void;
 }) {
   const [rows, setRows] = useState<AdminCardRow[]>(() => cards ?? getAdminCards());
+  const [loading, setLoading] = useState(!cards);
   const [view, setView] = useState<CardsView>("all");
   const [search, setSearch] = useState("");
   const [sortAsc, setSortAsc] = useState(false);
@@ -423,7 +424,10 @@ export default function CardsPanel({
 
   useEffect(() => {
     function sync() {
-      void fetchAdminCards().then(setRows);
+      setLoading(true);
+      void fetchAdminCards()
+        .then(setRows)
+        .finally(() => setLoading(false));
     }
     sync();
     window.addEventListener("hexa-orders-change", sync);
@@ -801,11 +805,13 @@ export default function CardsPanel({
                       colSpan={9}
                       className="px-4 py-10 text-center text-sm text-[#8a8174]"
                     >
-                      {view === "active"
-                        ? "No active cards found."
-                        : view === "expiry"
-                          ? "No expired or expiring cards found."
-                          : "No cards found."}
+                      {loading
+                        ? "Loading cards from database…"
+                        : view === "active"
+                          ? "No active cards found."
+                          : view === "expiry"
+                            ? "No expired or expiring cards found."
+                            : "No cards found."}
                     </td>
                   </tr>
                 ) : null}

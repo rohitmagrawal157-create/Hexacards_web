@@ -77,7 +77,9 @@ export function isCardProductOrder(order: HexaOrder): boolean {
     title.includes("business card") ||
     title.includes("hexa card") ||
     title.includes("metal card") ||
-    title.includes("hexa nfc")
+    title.includes("hexa nfc") ||
+    title.includes("digital profile") ||
+    title.includes("digital qr")
   );
 }
 

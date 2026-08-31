@@ -25,7 +25,7 @@ create table if not exists public.orders (
   -- status: 0=placed, 1=shipped, 2=delivered
   status               smallint       not null default 0 check (status in (0, 1, 2)),
   -- payment_status: 0=pending, 1=paid, 2=failed, 3=refunded
-  payment_status       smallint       not null default 1 check (payment_status in (0, 1, 2, 3)),
+  payment_status       smallint       not null default 0 check (payment_status in (0, 1, 2, 3)),
   payment_method       varchar(50)    not null default '',
   delivery_charges     numeric(10, 2) not null default 0.00,
   ord_date             timestamptz    not null default now(),

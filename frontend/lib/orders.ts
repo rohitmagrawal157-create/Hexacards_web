@@ -138,7 +138,7 @@ function readOrders(): HexaOrder[] {
       ...o,
       ownerPhone: phoneKey(o.ownerPhone) || phoneKey(o.phone),
       phone: phoneKey(o.phone) || phoneKey(o.ownerPhone),
-      paymentStatus: o.paymentStatus ?? "paid",
+      paymentStatus: o.paymentStatus ?? "pending",
     }));
 
     if (
@@ -170,7 +170,7 @@ function dtoToHexaOrder(dto: HexaOrder & Record<string, unknown>): HexaOrder {
         : undefined,
     createdAt: String(dto.createdAt),
     status: (dto.status as HexaOrderStatus) || "placed",
-    paymentStatus: (dto.paymentStatus as HexaPaymentStatus) || "paid",
+    paymentStatus: (dto.paymentStatus as HexaPaymentStatus) || "pending",
     ownerPhone: phoneKey(String(dto.ownerPhone ?? "")),
     customerName: String(dto.customerName ?? ""),
     phone: phoneKey(String(dto.phone ?? "")),
@@ -235,7 +235,7 @@ function orderToApiBody(order: Partial<HexaOrder> & { id?: string }) {
     userId: order.userId ?? null,
     cardId: order.cardId ?? null,
     jobTitle: order.jobTitle,
-    companyName: order.companyName,
+    companyName: order.companyName ?? order.businessName,
     businessName: order.businessName,
     reviewLink: order.reviewLink ?? null,
     orderLogoSrc: order.orderLogoSrc ?? null,
@@ -244,6 +244,8 @@ function orderToApiBody(order: Partial<HexaOrder> & { id?: string }) {
     cardDesign: order.cardDesign ?? null,
     status: order.status,
     paymentStatus: order.paymentStatus,
+    paymentMethod:
+      order.paymentStatus === "pending" ? "razorpay" : undefined,
   };
 }
 
@@ -360,6 +362,13 @@ export async function saveOrder(
     paymentStatus: order.paymentStatus ?? "pending",
     ownerPhone,
     phone: phoneKey(order.phone) || ownerPhone,
+    userId:
+      order.userId && order.userId > 0
+        ? order.userId
+        : auth?.userId && auth.userId > 0
+          ? auth.userId
+          : null,
+    companyName: order.companyName ?? order.businessName,
   };
 
   if (next.cardDesign?.logoSrc?.startsWith("data:image/")) {

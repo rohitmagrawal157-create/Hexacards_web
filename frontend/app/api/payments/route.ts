@@ -123,10 +123,30 @@ export async function POST(request: Request) {
     }
 
     if (payload.order_id != null) {
-      const nextPaymentStatus = status.toLowerCase() === "success" ? "paid" : status.toLowerCase() === "failed" ? "failed" : status.toLowerCase() === "refunded" ? "refunded" : "pending";
+      const nextPaymentStatus =
+        status.toLowerCase() === "success"
+          ? "paid"
+          : status.toLowerCase() === "failed"
+            ? "failed"
+            : status.toLowerCase() === "refunded"
+              ? "refunded"
+              : "pending";
+      const orderPatch: Record<string, unknown> = {
+        payment_status:
+          nextPaymentStatus === "paid"
+            ? 1
+            : nextPaymentStatus === "failed"
+              ? 2
+              : nextPaymentStatus === "refunded"
+                ? 3
+                : 0,
+      };
+      if (status.toLowerCase() === "success") {
+        orderPatch.payment_method = "razorpay";
+      }
       await supabase
         .from("orders")
-        .update({ payment_status: nextPaymentStatus === "paid" ? 1 : nextPaymentStatus === "failed" ? 2 : nextPaymentStatus === "refunded" ? 3 : 0 })
+        .update(orderPatch)
         .eq("order_id", payload.order_id);
     }
 

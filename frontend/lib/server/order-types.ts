@@ -172,6 +172,8 @@ export type OrderWriteBody = {
   paymentMethod?: string;
   payment_method?: string;
   coupon?: string | null;
+  clientTxnId?: string | null;
+  client_txn_id?: string | null;
   productTitle?: string;
   productId?: string | null;
   productSlug?: string | null;
@@ -190,6 +192,7 @@ export type OrderWriteBody = {
   status?: string | number;
   paymentStatus?: string | number;
   userId?: number | null;
+  user_id?: number | null;
   nimbusPushed?: boolean | number;
   awbNumber?: string | null;
   courierName?: string | null;
@@ -207,11 +210,11 @@ export function statusToDb(value: string | number | undefined | null): number {
 
 export function paymentToDb(value: string | number | undefined | null): number {
   if (typeof value === "number" && value >= 0 && value <= 3) return value;
-  const key = String(value ?? "paid").toLowerCase();
+  const key = String(value ?? "pending").toLowerCase();
   if (key in PAYMENT_STATUS) {
     return PAYMENT_STATUS[key as keyof typeof PAYMENT_STATUS];
   }
-  return 1;
+  return 0;
 }
 
 export function statusFromDb(n: number): (typeof ORDER_STATUS_LABEL)[number] {
@@ -221,7 +224,7 @@ export function statusFromDb(n: number): (typeof ORDER_STATUS_LABEL)[number] {
 export function paymentFromDb(
   n: number,
 ): (typeof PAYMENT_STATUS_LABEL)[number] {
-  return PAYMENT_STATUS_LABEL[n] ?? "paid";
+  return PAYMENT_STATUS_LABEL[n] ?? "pending";
 }
 
 export function mapOrder(row: OrderRow): OrderDto {
@@ -312,14 +315,31 @@ export function buildOrderInsertPayload(
     .slice(-10);
   const name =
     String(body.name ?? body.customerName ?? "").trim() || "Customer";
-  const bungalow = String(body.bungalow ?? body.address ?? "").trim();
+  const bungalow = String(body.bungalow ?? "").trim();
   const street = String(body.streetName ?? body.street_name ?? "").trim();
   const landmark = String(body.landmark ?? "").trim();
+  const fullAddress = String(body.address ?? "").trim();
+  const business = String(body.businessName ?? "").trim();
+  const company = String(body.companyName ?? business).trim();
+
+  // When checkout sends a single address line, fill structured columns too
+  const resolvedBungalow = bungalow || (street || landmark ? bungalow : "");
+  const resolvedStreet = street || (fullAddress && !bungalow ? fullAddress : street);
+  const resolvedLandmark = landmark;
+  const resolvedAddress = fullAddress || [resolvedBungalow, resolvedStreet, resolvedLandmark].filter(Boolean).join(", ");
+
   const logoRaw = body.logo ?? body.orderLogoSrc ?? null;
   const logo = logoRaw ? String(logoRaw).trim().slice(0, 255) : null;
   const productSlug =
     String(body.productSlug ?? body.productId ?? "").trim() || null;
   const now = new Date();
+
+  const paymentKey = String(body.paymentStatus ?? "pending").toLowerCase();
+  const paymentMethod = String(
+    body.paymentMethod ??
+      body.payment_method ??
+      (paymentKey === "pending" ? "razorpay" : ""),
+  ).trim();
 
   return {
     user_id: opts.userId,
@@ -328,19 +348,17 @@ export function buildOrderInsertPayload(
     mobile_number: mobile,
     designation: String(body.designation ?? body.jobTitle ?? "").trim(),
     logo,
-    bungalow,
-    street_name: street,
-    landmark,
+    bungalow: resolvedBungalow || fullAddress.slice(0, 255),
+    street_name: resolvedStreet.slice(0, 255),
+    landmark: resolvedLandmark.slice(0, 255),
     pincode: String(body.pincode ?? body.postalCode ?? "").trim(),
     city: String(body.city ?? "").trim(),
     state: String(body.state ?? "").trim(),
     amount,
     date: now.toISOString().slice(0, 10),
     status: statusToDb(body.status),
-    payment_status: paymentToDb(body.paymentStatus ?? "paid"),
-    payment_method: String(
-      body.paymentMethod ?? body.payment_method ?? "",
-    ).trim(),
+    payment_status: paymentToDb(body.paymentStatus ?? "pending"),
+    payment_method: paymentMethod,
     delivery_charges: Number(
       body.deliveryCharges ?? body.delivery_charges ?? 0,
     ) || 0,
@@ -355,7 +373,7 @@ export function buildOrderInsertPayload(
       .replace(/\D/g, "")
       .slice(-10),
     email: String(body.email ?? "").trim(),
-    address: String(body.address ?? bungalow).trim(),
+    address: resolvedAddress,
     pack_title: String(body.packTitle ?? "").trim(),
     qty,
     subtotal,
@@ -382,8 +400,8 @@ export function buildOrderInsertPayload(
         : null,
     card_slug: body.cardSlug ? String(body.cardSlug).trim() : null,
     card_url: body.cardUrl ? String(body.cardUrl).trim() : null,
-    company_name: String(body.companyName ?? "").trim(),
-    business_name: String(body.businessName ?? "").trim(),
+    company_name: company,
+    business_name: business,
     review_link: body.reviewLink ? String(body.reviewLink).trim() : null,
     card_design: sanitizeCardDesignForDb(body.cardDesign ?? null),
   };

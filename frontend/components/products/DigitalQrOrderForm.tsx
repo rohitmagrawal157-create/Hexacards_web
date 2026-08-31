@@ -28,6 +28,8 @@ import {
 } from "@/lib/orders";
 import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
 import { buildOrderCardSlug } from "@/lib/order-card";
+import { INDIA_COUNTRY_ID } from "@/lib/location-api";
+import { syncUserProfileFromCheckout } from "@/lib/user-profile-sync";
 import { savedDesignToCardDesign } from "@/lib/user-cards";
 
 const PRODUCT_ID = "digital-profile-qr";
@@ -160,18 +162,29 @@ export default function DigitalQrOrderForm() {
         address: "",
         city: "",
         postalCode: "",
-        country: "IN",
+        country: "India",
+        countryId: INDIA_COUNTRY_ID,
         packTitle: "1 Digital Profile + QR",
         qty: 1,
         subtotal: product.price,
         discount: 0,
         total: product.price,
         coupon: null,
+        paymentStatus: "pending",
         productTitle: product.shortTitle,
         productId: PRODUCT_ID,
         status: "placed",
         cardDesign,
       });
+
+      if (auth.userId) {
+        void syncUserProfileFromCheckout({
+          userId: auth.userId,
+          firstName: draft.firstName.trim(),
+          lastName: draft.lastName.trim(),
+          email: draft.email.trim(),
+        });
+      }
 
       const cardName = cardDesign?.name || customerName;
       const finalSlug = buildOrderCardSlug(cardName, contactPhone, order.id);

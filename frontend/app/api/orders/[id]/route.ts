@@ -11,6 +11,46 @@ import {
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string } };
 
+async function syncOrderItems(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  row: OrderRow,
+) {
+  const qty = Number(row.qty) || 1;
+  const lineTotal = Number(row.amount) || 0;
+  const unit = qty > 0 ? lineTotal / qty : lineTotal;
+
+  const { data: existing } = await supabase
+    .from("order_items")
+    .select("order_item_id")
+    .eq("order_id", row.order_id)
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const itemPayload = {
+    product_id: row.product_id,
+    product_slug: row.product_slug,
+    product_title: row.product_title || "Product",
+    pack_title: row.pack_title || "",
+    qty,
+    unit_price: unit,
+    line_total: lineTotal,
+  };
+
+  if (existing?.order_item_id) {
+    await supabase
+      .from("order_items")
+      .update(itemPayload)
+      .eq("order_item_id", existing.order_item_id);
+  } else {
+    await supabase.from("order_items").insert({
+      order_id: row.order_id,
+      ...itemPayload,
+      sort_order: 0,
+    });
+  }
+}
+
 async function findOrder(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   id: string,
@@ -102,6 +142,10 @@ export async function PUT(request: Request, context: RouteContext) {
       patch.city_id =
         body.cityId == null ? null : Number(body.cityId) || null;
     }
+    if (body.userId !== undefined || body.user_id !== undefined) {
+      const uid = body.userId ?? body.user_id;
+      patch.user_id = uid == null ? null : Number(uid) || null;
+    }
     if (body.packTitle !== undefined) {
       patch.pack_title = String(body.packTitle).trim();
     }
@@ -184,6 +228,11 @@ export async function PUT(request: Request, context: RouteContext) {
     if (body.paymentStatus !== undefined) {
       patch.payment_status = paymentToDb(body.paymentStatus);
     }
+    if (body.paymentMethod !== undefined || body.payment_method !== undefined) {
+      patch.payment_method = String(
+        body.paymentMethod ?? body.payment_method ?? "",
+      ).trim();
+    }
     if (body.nimbusPushed !== undefined) {
       patch.nimbus_pushed =
         body.nimbusPushed === true || Number(body.nimbusPushed) === 1 ? 1 : 0;
@@ -215,7 +264,21 @@ export async function PUT(request: Request, context: RouteContext) {
 
     if (error) return jsonError(500, "Failed to update order", error.message);
     if (!data) return jsonError(404, "Order not found");
-    return jsonOk(mapOrder(data as OrderRow));
+
+    const updated = data as OrderRow;
+    if (
+      patch.qty !== undefined ||
+      patch.amount !== undefined ||
+      patch.subtotal !== undefined ||
+      patch.product_id !== undefined ||
+      patch.product_slug !== undefined ||
+      patch.product_title !== undefined ||
+      patch.pack_title !== undefined
+    ) {
+      await syncOrderItems(supabase, updated);
+    }
+
+    return jsonOk(mapOrder(updated));
   } catch (err) {
     return jsonError(
       500,

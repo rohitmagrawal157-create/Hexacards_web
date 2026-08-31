@@ -2,7 +2,10 @@ import { apiFetch } from "@/lib/api-config";
 import { fetchOrders, getOrders, type HexaOrder } from "@/lib/orders";
 import type { CardDto } from "@/lib/server/card-types";
 import type { UserDto } from "@/lib/server/user-types";
-import { isCardProductOrder, orderToDashboardCard } from "@/lib/user-cards";
+import {
+  isCardProductOrder,
+  orderToDashboardCard,
+} from "@/lib/user-cards";
 
 export type AdminUserRecord = {
   id: string;
@@ -173,6 +176,68 @@ function cardDtoToAdmin(card: CardDto): AdminCardRecord {
   };
 }
 
+function slugFromLiveUrl(url: string): string {
+  try {
+    return new URL(url).pathname.replace(/^\//, "").toLowerCase();
+  } catch {
+    return url.replace(/^https?:\/\/[^/]+\//, "").toLowerCase();
+  }
+}
+
+function orderToAdminCard(order: HexaOrder): AdminCardRecord {
+  const card = orderToDashboardCard(order, false);
+  const id =
+    order.cardId && order.cardId > 0 ? `card-${order.cardId}` : order.id;
+  return {
+    id,
+    srNo: 0,
+    name: card.slug || card.name,
+    liveUrl: card.publicUrl,
+    email: order.email?.trim() || "",
+    mobile: (order.ownerPhone || order.phone || "")
+      .replace(/\D/g, "")
+      .slice(-10),
+    startDate: formatShortDateDashed(order.createdAt),
+    expiryDate: addYears(order.createdAt, 20),
+    pageViews: 0,
+    editHref: `/super-admin?tab=cards`,
+    active: true,
+  };
+}
+
+/** Merge DB cards with order-derived cards; DB wins on overlapping fields. */
+function mergeAdminCards(
+  dbRows: AdminCardRecord[],
+  orderRows: AdminCardRecord[],
+): AdminCardRecord[] {
+  const map = new Map<string, AdminCardRecord>();
+
+  for (const row of orderRows) {
+    const key = slugFromLiveUrl(row.liveUrl) || row.id;
+    map.set(key, row);
+  }
+
+  for (const row of dbRows) {
+    const key = slugFromLiveUrl(row.liveUrl) || row.id;
+    const prev = map.get(key);
+    map.set(key, {
+      ...prev,
+      ...row,
+      id: row.id.startsWith("card-") ? row.id : (prev?.id ?? row.id),
+      name: row.name || prev?.name || key,
+      email: row.email || prev?.email || "",
+      mobile: row.mobile || prev?.mobile || "",
+      pageViews: row.pageViews ?? prev?.pageViews ?? 0,
+      startDate: row.startDate || prev?.startDate || "",
+      expiryDate: row.expiryDate || prev?.expiryDate || "",
+      active: row.active,
+      liveUrl: row.liveUrl || prev?.liveUrl || "",
+    });
+  }
+
+  return Array.from(map.values());
+}
+
 function assignSrNos<T extends { srNo: number }>(rows: T[]): T[] {
   return rows.map((row, index) => ({ ...row, srNo: rows.length - index }));
 }
@@ -328,26 +393,54 @@ export function getAdminCards(): AdminCardRecord[] {
   return assignSrNos(rows);
 }
 
-/** Load cards from Supabase `cards` table; falls back to order-derived list. */
+/** Load cards from Supabase + orders (merged); backfills missing DB rows first. */
 export async function fetchAdminCards(): Promise<AdminCardRecord[]> {
-  const res = await apiFetch<CardDto[]>("/api/cards");
-  if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
-    const store = readJson<CardsStore>(CARDS_KEY, emptyCardsStore());
-    const rows = res.data
-      .map(cardDtoToAdmin)
-      .filter((c) => !store.deletedIds.includes(c.id))
-      .map((c) => ({ ...c, ...store.overrides[c.id] }));
-    return assignSrNos(
-      rows.sort(
-        (a, b) =>
-          new Date(b.startDate.replace(/-/g, " ")).getTime() -
-          new Date(a.startDate.replace(/-/g, " ")).getTime(),
-      ),
+  const store = readJson<CardsStore>(CARDS_KEY, emptyCardsStore());
+
+  try {
+    await apiFetch<{ synced: number; linked: number }>(
+      "/api/cards/sync-from-orders",
+      { method: "POST" },
     );
+  } catch {
+    // sync is best-effort — still show merged list from API + orders
   }
 
-  await fetchOrders();
-  return getAdminCards();
+  const [cardsRes, orders] = await Promise.all([
+    apiFetch<CardDto[]>("/api/cards"),
+    fetchOrders(),
+  ]);
+
+  const dbRows =
+    cardsRes.ok && Array.isArray(cardsRes.data)
+      ? cardsRes.data
+          .map(cardDtoToAdmin)
+          .filter((c) => !store.deletedIds.includes(c.id))
+      : [];
+
+  const orderRows = orders
+    .filter(isCardProductOrder)
+    .filter((o) => {
+      const dbId = o.cardId && o.cardId > 0 ? `card-${o.cardId}` : null;
+      return (
+        !store.deletedIds.includes(o.id) &&
+        (!dbId || !store.deletedIds.includes(dbId))
+      );
+    })
+    .map(orderToAdminCard);
+
+  const merged = mergeAdminCards(dbRows, orderRows).map((c) => ({
+    ...c,
+    ...store.overrides[c.id],
+  }));
+
+  return assignSrNos(
+    merged.sort(
+      (a, b) =>
+        new Date(b.startDate.replace(/-/g, " ")).getTime() -
+        new Date(a.startDate.replace(/-/g, " ")).getTime(),
+    ),
+  );
 }
 
 export function updateAdminCard(id: string, patch: Partial<AdminCardRecord>) {

@@ -148,6 +148,7 @@ export function cacheOrderCardProfile(
 export function saveOrderCardProfile(
   orderId: string,
   profile: HexaCardProfile,
+  loc?: { countryId?: number | null; stateId?: number | null; cityId?: number | null },
 ): HexaCardProfile {
   const next: HexaCardProfile = {
     ...profile,
@@ -156,7 +157,7 @@ export function saveOrderCardProfile(
   const all = readAll();
   all[orderId] = next;
   writeAll(all);
-  syncOrderCardDesignFromProfile(orderId, next);
+  syncOrderCardDesignFromProfile(orderId, next, loc);
   return next;
 }
 
@@ -166,12 +167,15 @@ export function saveOrderCardProfile(
 export async function persistOrderCardProfile(
   order: HexaOrder,
   profile: HexaCardProfile,
-  loc?: { stateId?: number | null; cityId?: number | null },
+  loc?: { countryId?: number | null; stateId?: number | null; cityId?: number | null },
 ): Promise<HexaCardProfile> {
-  const next = saveOrderCardProfile(order.id, profile);
+  const next = saveOrderCardProfile(order.id, profile, loc);
   const result = await upsertOrderCardInDb(order, next, loc);
   if (result.error) {
     console.warn("[cards] DB persist warning:", result.error);
+  }
+  if (result.cardId && order.cardId !== result.cardId) {
+    await updateOrder(order.id, { cardId: result.cardId });
   }
   return next;
 }
@@ -191,10 +195,13 @@ export async function initOrderCardProfileAsync(
   order: HexaOrder,
 ): Promise<HexaCardProfile> {
   const profile = initOrderCardProfile(order);
-  await upsertOrderCardInDb(order, profile, {
+  const result = await upsertOrderCardInDb(order, profile, {
     stateId: order.stateId ?? null,
     cityId: order.cityId ?? null,
   });
+  if (result.cardId && order.cardId !== result.cardId) {
+    await updateOrder(order.id, { cardId: result.cardId });
+  }
   return profile;
 }
 
@@ -217,6 +224,7 @@ export function loadOrderCardProfile(
 function syncOrderCardDesignFromProfile(
   orderId: string,
   profile: HexaCardProfile,
+  loc?: { countryId?: number | null; stateId?: number | null; cityId?: number | null },
 ) {
   const order = getOrderById(orderId);
   if (!order) return;
@@ -231,6 +239,11 @@ function syncOrderCardDesignFromProfile(
     address: profile.contact.address.trim() || order.address,
     businessName:
       profile.contact.businessName.trim() || order.businessName,
+    companyName:
+      profile.contact.businessName.trim() || order.companyName,
+    countryId: loc?.countryId ?? order.countryId ?? null,
+    stateId: loc?.stateId ?? order.stateId ?? null,
+    cityId: loc?.cityId ?? order.cityId ?? null,
     cardDesign: order.cardDesign
       ? {
           ...order.cardDesign,
