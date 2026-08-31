@@ -77,6 +77,18 @@ curl -X POST http://localhost:3000/api/setup/seed
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `RAZORPAY_KEY_ID` — Razorpay **Key ID** (test: `rzp_test_…`, live: `rzp_live_…`)
+- `RAZORPAY_KEY_SECRET` — Razorpay **Key Secret** (server only — never commit or use `NEXT_PUBLIC_`)
+
+### Razorpay on Vercel (required for checkout)
+1. Vercel → Project → **Settings** → **Environment Variables**
+2. Add both variables for **Production** (and Preview if you test preview URLs):
+   - `RAZORPAY_KEY_ID` = your Key ID from Razorpay Dashboard → Account & Settings → API Keys
+   - `RAZORPAY_KEY_SECRET` = matching Key Secret
+3. **Redeploy** (Deployments → … → Redeploy) — env changes do not apply until redeploy
+4. Local: same keys in `frontend/.env.local`, then restart `npm run dev`
+
+If checkout shows *"Razorpay keys are not configured"*, one or both env vars are missing on that deployment.
 
 ## Run app
 ```bash

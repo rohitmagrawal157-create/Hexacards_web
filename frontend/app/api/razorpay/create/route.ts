@@ -2,11 +2,19 @@ import crypto from "node:crypto";
 import Razorpay from "razorpay";
 import { NextResponse } from "next/server";
 
-const keyId = process.env.RAZORPAY_KEY_ID?.trim();
-const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+export const runtime = "nodejs";
+
+function getRazorpayKeys() {
+  const keyId =
+    process.env.RAZORPAY_KEY_ID?.trim() ||
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim();
+  const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+  return { keyId, keySecret };
+}
 
 export async function POST(request: Request) {
   try {
+    const { keyId, keySecret } = getRazorpayKeys();
     const body = await request.json().catch(() => ({}));
     const amount = Number(body.amount ?? 0);
     const currency = String(body.currency ?? "INR");
@@ -18,7 +26,14 @@ export async function POST(request: Request) {
     }
 
     if (!keyId || !keySecret) {
-      return NextResponse.json({ ok: false, error: "Razorpay keys are not configured" }, { status: 500 });
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Razorpay keys are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Vercel → Settings → Environment Variables, then redeploy.",
+        },
+        { status: 500 },
+      );
     }
 
     const razorpay = new Razorpay({
@@ -54,6 +69,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const { keySecret } = getRazorpayKeys();
     const body = await request.json().catch(() => ({}));
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body ?? {};
 
@@ -62,7 +78,14 @@ export async function PUT(request: Request) {
     }
 
     if (!keySecret) {
-      return NextResponse.json({ ok: false, error: "Razorpay keys are not configured" }, { status: 500 });
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Razorpay keys are not configured. Set RAZORPAY_KEY_SECRET on the server (Vercel env), then redeploy.",
+        },
+        { status: 500 },
+      );
     }
 
     const expected = crypto
