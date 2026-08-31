@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
   Trash2,
   ExternalLink,
   FileDown,
@@ -23,10 +24,11 @@ import {
   Calendar,
 } from "lucide-react";
 import CardLogsPanel, { sampleCardLogs } from "@/components/super-admin/Cardslogs";
+import { showAdminToast } from "@/lib/admin-toast";
 import {
   deleteAdminCard,
   fetchAdminCards,
-  getAdminCards,
+  syncAdminCardsFromOrders,
   toggleAdminCard,
   updateAdminCard,
 } from "@/lib/admin-directory";
@@ -413,8 +415,10 @@ export default function CardsPanel({
   onDeleteCard?: (id: string) => void;
   onToggleStatus?: (id: string, active: boolean) => void;
 }) {
-  const [rows, setRows] = useState<AdminCardRow[]>(() => cards ?? getAdminCards());
-  const [loading, setLoading] = useState(!cards);
+  const [rows, setRows] = useState<AdminCardRow[]>(() => cards ?? []);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const loadSeq = useRef(0);
   const [view, setView] = useState<CardsView>("all");
   const [search, setSearch] = useState("");
   const [sortAsc, setSortAsc] = useState(false);
@@ -423,20 +427,34 @@ export default function CardsPanel({
   const [detailCard, setDetailCard] = useState<AdminCardRow | null>(null);
 
   useEffect(() => {
-    function sync() {
+    let cancelled = false;
+
+    async function loadCards() {
+      const seq = ++loadSeq.current;
       setLoading(true);
-      void fetchAdminCards()
-        .then(setRows)
-        .finally(() => setLoading(false));
+      try {
+        const next = await fetchAdminCards();
+        if (cancelled || seq !== loadSeq.current) return;
+        setRows(next);
+      } finally {
+        if (!cancelled && seq === loadSeq.current) {
+          setLoading(false);
+        }
+      }
     }
-    sync();
-    window.addEventListener("hexa-orders-change", sync);
-    window.addEventListener("hexa-admin-directory-change", sync);
-    window.addEventListener("focus", sync);
+
+    void loadCards();
+
+    function onExternalChange() {
+      void loadCards();
+    }
+
+    window.addEventListener("hexa-orders-change", onExternalChange);
+    window.addEventListener("hexa-admin-directory-change", onExternalChange);
     return () => {
-      window.removeEventListener("hexa-orders-change", sync);
-      window.removeEventListener("hexa-admin-directory-change", sync);
-      window.removeEventListener("focus", sync);
+      cancelled = true;
+      window.removeEventListener("hexa-orders-change", onExternalChange);
+      window.removeEventListener("hexa-admin-directory-change", onExternalChange);
     };
   }, []);
 
@@ -495,10 +513,15 @@ export default function CardsPanel({
     setDeleteTarget(null);
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     setRows((prev) => prev.filter((c) => c.id !== id));
     setDeleteTarget(null);
-    deleteAdminCard(id);
+    const ok = await deleteAdminCard(id);
+    if (ok) {
+      showAdminToast("Card deleted successfully");
+    } else {
+      showAdminToast("Failed to delete card", "error");
+    }
     onDeleteCard?.(id);
   }
 
@@ -524,8 +547,36 @@ export default function CardsPanel({
     printTable(filtered, currentViewMeta.label);
   }
 
+  async function handleSyncFromOrders() {
+    if (syncing || loading) return;
+    setSyncing(true);
+    try {
+      await syncAdminCardsFromOrders();
+      const seq = ++loadSeq.current;
+      const next = await fetchAdminCards();
+      if (seq === loadSeq.current) setRows(next);
+    } finally {
+      setSyncing(false);
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => void handleSyncFromOrders()}
+          disabled={syncing || loading}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-black/[0.08] bg-white px-4 py-2.5 text-sm font-semibold text-[#141414] transition-colors hover:bg-[#FAFAF8] disabled:opacity-50"
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`}
+          />
+          {syncing ? "Syncing…" : "Sync from orders"}
+        </button>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {CARD_VIEWS.map((item) => {
           const Icon = item.icon;

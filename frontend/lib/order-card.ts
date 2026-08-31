@@ -34,6 +34,8 @@ export type OrderCardDesignData = {
   logoSrc?: string;
   logoLayout?: OrderCardLogoLayout;
   liveUrl?: string;
+  /** Set when Super Admin removes card from user dashboard (no DB column needed). */
+  dashboardHidden?: boolean;
 };
 
 export type ResolvedOrderCardDesign = OrderCardDesignData & {

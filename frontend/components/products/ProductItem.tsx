@@ -91,16 +91,16 @@ const products: Product[] = [
     weight: "20g",
     href: "/product/pvc-card",
   },
-  {
-    title: "Black Metal NFC Card with Gold Engraving",
-    price: 2399,
-    originalPrice: 2899,
-    rating: 5,
-    image: media[4].src,
-    alt: media[4].alt,
-    weight: "20g",
-    href: "/product/metal-card",
-  },
+  // {
+  //   title: "Black Metal NFC Card with Gold Engraving",
+  //   price: 2399,
+  //   originalPrice: 2899,
+  //   rating: 5,
+  //   image: media[4].src,
+  //   alt: media[4].alt,
+  //   weight: "20g",
+  //   href: "/product/metal-card",
+  // },
 ];
 
 function discountPercent(price: number, originalPrice: number) {

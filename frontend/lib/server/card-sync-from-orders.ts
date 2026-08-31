@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import type { OrderRow } from "@/lib/server/order-types";
+import type { OrderCardDesignData } from "@/lib/order-card";
+import { isOrderCardHidden, type OrderRow } from "@/lib/server/order-types";
 import { slugifyCardName } from "@/lib/server/card-types";
 
 const NON_CARD_PRODUCT_SLUGS = new Set([
@@ -141,6 +142,7 @@ export async function syncCardsFromOrders(): Promise<{
   let linked = 0;
 
   for (const order of rows) {
+    if (isOrderCardHidden(order)) continue;
     if (!isCardProductOrderRow(order)) continue;
 
     const slug = buildSlugFromOrder(order);

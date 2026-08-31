@@ -1,9 +1,8 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Playfair_Display } from "next/font/google";
-import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import HeroHexBackground from "./HeroHexBackground";
 
@@ -15,7 +14,7 @@ const playfair = Playfair_Display({
 });
 
 const SLIDE_BG = "bg-white";
-const HERO_BANNER = "/Images/banner.png";
+const HERO_VIDEO = "/Hero.mp4";
 
 const DEFAULT_STATS = [
   { value: "1M+", label: "Connections made" },
@@ -60,6 +59,50 @@ const slide: Slide = {
   ctaText: "text-[#BC7C10]",
   stats: [...DEFAULT_STATS],
 };
+
+function HeroVideo() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const markReady = () => setReady(true);
+
+    video.addEventListener("canplay", markReady);
+    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      markReady();
+    }
+
+    void video.play().catch(() => {
+      // Autoplay may be blocked; still reveal once frames are available.
+    });
+
+    return () => {
+      video.removeEventListener("canplay", markReady);
+    };
+  }, []);
+
+  return (
+    <div className="relative w-full max-w-[520px] overflow-hidden rounded-2xl bg-white">
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        className={`pointer-events-none h-auto w-full object-contain transition-opacity duration-500 ${
+          ready ? "opacity-100" : "opacity-0"
+        }`}
+        aria-label="Hexa Cards NFC card and digital profile demonstration"
+      >
+        <source src={HERO_VIDEO} type="video/mp4" />
+      </video>
+    </div>
+  );
+}
 
 export default function Hero() {
   return (
@@ -128,18 +171,7 @@ export default function Hero() {
           </div>
 
           <div className="hero-card-enter relative z-10 flex min-h-[440px] items-center justify-center lg:min-h-[500px]">
-            <div className="relative w-full max-w-[520px]">
-              <Image
-                src={HERO_BANNER}
-                alt="Hexa Cards NFC card and digital profile on phone"
-                width={500}
-                height={500}
-                priority
-                unoptimized
-                className="h-auto w-full bg-transparent object-contain"
-                sizes="(max-width: 1024px) 90vw, 520px"
-              />
-            </div>
+            <HeroVideo />
           </div>
         </div>
       </div>

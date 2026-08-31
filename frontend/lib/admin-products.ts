@@ -5,6 +5,7 @@ import {
 } from "@/lib/product-catalog";
 import { apiFetch } from "@/lib/api-config";
 import { clearHomeCategoriesCache } from "@/lib/home-categories";
+import { clearPublicProductsCache } from "@/lib/public-product-catalog";
 
 const ADMIN_STORE_KEY = "hexaAdminProductStore";
 const ADMIN_PRODUCTS_CHANGE = "hexa-admin-products-change";
@@ -189,6 +190,7 @@ function uniqueId(preferred: string, existing: Set<string>): string {
 function notifyProductsChanged() {
   if (typeof window === "undefined") return;
   clearHomeCategoriesCache();
+  clearPublicProductsCache();
   window.dispatchEvent(new Event(ADMIN_PRODUCTS_CHANGE));
 }
 

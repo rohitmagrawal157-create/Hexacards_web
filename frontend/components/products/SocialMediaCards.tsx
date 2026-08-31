@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { HowItWorks, FAQ } from "@/components/landing";
+import { getPublicProductsCatalogServer } from "@/lib/server/get-public-product";
 import ProductsCatalog, { SOCIAL_MEDIA_CATALOG } from "./ProductsCatalog";
 
 /**
  * Social Media Cards category hub:
  * Landing → grid (Google → Instagram → YouTube) → product detail
  */
-export default function SocialMediaCards() {
+export default async function SocialMediaCards() {
+  const initialCatalog = await getPublicProductsCatalogServer();
+
   return (
     <>
       <div className="border-b border-black/[0.06] bg-white/80">
@@ -40,6 +43,7 @@ export default function SocialMediaCards() {
         title="Pick your platform"
         description="1. Google Reviews · 2. Instagram · 3. YouTube — each card opens your page in one tap or scan."
         compact
+        initialCatalog={initialCatalog}
       />
       <HowItWorks />
       <FAQ />

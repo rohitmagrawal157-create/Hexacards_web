@@ -53,6 +53,7 @@ create table if not exists public.orders (
   card_id              bigint         references public.cards (card_id) on delete set null,
   card_slug            varchar(150),
   card_url             varchar(500),
+  card_hidden          smallint       not null default 0 check (card_hidden in (0, 1)),
   company_name         varchar(255)   not null default '',
   business_name        varchar(255)   not null default '',
   review_link          text,

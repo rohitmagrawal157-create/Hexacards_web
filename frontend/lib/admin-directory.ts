@@ -1,5 +1,13 @@
 import { apiFetch } from "@/lib/api-config";
-import { fetchOrders, getOrders, type HexaOrder } from "@/lib/orders";
+import {
+  applyHiddenOrdersToLocalCache,
+  fetchOrders,
+  getOrders,
+  isOrderDashboardHidden,
+  type HexaOrder,
+} from "@/lib/orders";
+import { resolveOrderLiveUrl } from "@/lib/order-card";
+import { removeOrderCardProfile } from "@/lib/order-card-profile";
 import type { CardDto } from "@/lib/server/card-types";
 import type { UserDto } from "@/lib/server/user-types";
 import {
@@ -205,14 +213,22 @@ function orderToAdminCard(order: HexaOrder): AdminCardRecord {
   };
 }
 
-/** Merge DB cards with order-derived cards; DB wins on overlapping fields. */
+/** Merge DB cards with order-only rows (no duplicate slugs). DB wins on overlap. */
 function mergeAdminCards(
   dbRows: AdminCardRecord[],
   orderRows: AdminCardRecord[],
 ): AdminCardRecord[] {
+  const dbSlugs = new Set(
+    dbRows.map((row) => slugFromLiveUrl(row.liveUrl)).filter(Boolean),
+  );
+  const orderOnly = orderRows.filter((row) => {
+    const slug = slugFromLiveUrl(row.liveUrl);
+    return slug ? !dbSlugs.has(slug) : true;
+  });
+
   const map = new Map<string, AdminCardRecord>();
 
-  for (const row of orderRows) {
+  for (const row of orderOnly) {
     const key = slugFromLiveUrl(row.liveUrl) || row.id;
     map.set(key, row);
   }
@@ -344,7 +360,7 @@ export function updateAdminUser(id: string, patch: Partial<AdminUserRecord>) {
   }
 }
 
-export function deleteAdminUser(id: string) {
+export function deleteAdminUser(id: string): Promise<boolean> {
   const store = readJson<UsersStore>(USERS_KEY, emptyUsersStore());
   if (!store.deletedIds.includes(id)) store.deletedIds.push(id);
   store.extras = store.extras.filter((user) => user.id !== id);
@@ -352,12 +368,38 @@ export function deleteAdminUser(id: string) {
   writeJson(USERS_KEY, store);
   window.dispatchEvent(new Event("hexa-admin-directory-change"));
 
-  const dbId = id.startsWith("db-") ? Number(id.slice(3)) : null;
-  if (dbId && Number.isInteger(dbId) && dbId > 0) {
-    void apiFetch(`/api/users/${dbId}`, { method: "DELETE" }).then((res) => {
-      if (!res.ok) console.error("[admin-users] DB delete failed:", res.error);
-    });
-  }
+  return apiFetch<{
+    hiddenOrderCodes?: string[];
+    deletedCardIds?: number[];
+  }>("/api/users/admin-delete", {
+    method: "POST",
+    body: JSON.stringify({ adminId: id }),
+  }).then((res) => {
+    if (!res.ok) {
+      console.error("[admin-users] delete failed:", res.error);
+      return false;
+    }
+
+    const cardsStore = readJson<CardsStore>(CARDS_KEY, emptyCardsStore());
+    for (const orderCode of res.data?.hiddenOrderCodes ?? []) {
+      removeOrderCardProfile(orderCode);
+      if (!cardsStore.deletedIds.includes(orderCode)) {
+        cardsStore.deletedIds.push(orderCode);
+      }
+    }
+    for (const cardId of res.data?.deletedCardIds ?? []) {
+      const cardKey = `card-${cardId}`;
+      if (!cardsStore.deletedIds.includes(cardKey)) {
+        cardsStore.deletedIds.push(cardKey);
+      }
+    }
+    writeJson(CARDS_KEY, cardsStore);
+
+    applyHiddenOrdersToLocalCache(res.data?.hiddenOrderCodes ?? []);
+    window.dispatchEvent(new Event("hexa-admin-directory-change"));
+    window.dispatchEvent(new Event("hexa-orders-change"));
+    return true;
+  });
 }
 
 export function toggleAdminUser(id: string, active: boolean) {
@@ -367,7 +409,9 @@ export function toggleAdminUser(id: string, active: boolean) {
 /** Sync local cache — prefer fetchAdminCards() for admin UI. */
 export function getAdminCards(): AdminCardRecord[] {
   const store = readJson<CardsStore>(CARDS_KEY, emptyCardsStore());
-  const orders = getOrders().filter(isCardProductOrder);
+  const orders = getOrders()
+    .filter(isCardProductOrder)
+    .filter((o) => !isOrderDashboardHidden(o));
   const rows = orders
     .filter((order) => !store.deletedIds.includes(order.id))
     .map((order) => {
@@ -393,39 +437,82 @@ export function getAdminCards(): AdminCardRecord[] {
   return assignSrNos(rows);
 }
 
-/** Load cards from Supabase + orders (merged); backfills missing DB rows first. */
+function sortAdminCards(rows: AdminCardRecord[]): AdminCardRecord[] {
+  return [...rows].sort((a, b) => {
+    const aTime = new Date(a.startDate.replace(/-/g, " ")).getTime();
+    const bTime = new Date(b.startDate.replace(/-/g, " ")).getTime();
+    if (bTime !== aTime) return bTime - aTime;
+    return slugFromLiveUrl(a.liveUrl).localeCompare(
+      slugFromLiveUrl(b.liveUrl),
+    );
+  });
+}
+
+/** Backfill missing cards in DB from orders — run manually, not on every list load. */
+export async function syncAdminCardsFromOrders(): Promise<{
+  synced: number;
+  linked: number;
+  totalCards: number;
+} | null> {
+  const res = await apiFetch<{
+    synced: number;
+    linked: number;
+    totalCards: number;
+  }>("/api/cards/sync-from-orders", { method: "POST" });
+  if (!res.ok) {
+    console.error("[admin-cards] sync failed:", res.error);
+    return null;
+  }
+  return res.data ?? null;
+}
+
+/** Load cards from Supabase + orders (read-only merge, stable list). */
 export async function fetchAdminCards(): Promise<AdminCardRecord[]> {
   const store = readJson<CardsStore>(CARDS_KEY, emptyCardsStore());
-
-  try {
-    await apiFetch<{ synced: number; linked: number }>(
-      "/api/cards/sync-from-orders",
-      { method: "POST" },
-    );
-  } catch {
-    // sync is best-effort — still show merged list from API + orders
-  }
 
   const [cardsRes, orders] = await Promise.all([
     apiFetch<CardDto[]>("/api/cards"),
     fetchOrders(),
   ]);
 
+  const hiddenSlugs = new Set(
+    orders
+      .filter(isOrderDashboardHidden)
+      .flatMap((o) => {
+        const fromOrder = o.cardSlug?.trim().toLowerCase();
+        const computed = resolveOrderLiveUrl(o).slug.toLowerCase();
+        return [fromOrder, computed].filter(Boolean) as string[];
+      }),
+  );
+
   const dbRows =
     cardsRes.ok && Array.isArray(cardsRes.data)
       ? cardsRes.data
           .map(cardDtoToAdmin)
           .filter((c) => !store.deletedIds.includes(c.id))
+          .filter((c) => {
+            const slug = slugFromLiveUrl(c.liveUrl);
+            return slug ? !hiddenSlugs.has(slug) : true;
+          })
       : [];
+
+  const dbSlugs = new Set(
+    dbRows.map((row) => slugFromLiveUrl(row.liveUrl)).filter(Boolean),
+  );
 
   const orderRows = orders
     .filter(isCardProductOrder)
+    .filter((o) => !isOrderDashboardHidden(o))
     .filter((o) => {
       const dbId = o.cardId && o.cardId > 0 ? `card-${o.cardId}` : null;
       return (
         !store.deletedIds.includes(o.id) &&
         (!dbId || !store.deletedIds.includes(dbId))
       );
+    })
+    .filter((o) => {
+      const slug = resolveOrderLiveUrl(o).slug.toLowerCase();
+      return slug ? !dbSlugs.has(slug) && !hiddenSlugs.has(slug) : true;
     })
     .map(orderToAdminCard);
 
@@ -434,13 +521,7 @@ export async function fetchAdminCards(): Promise<AdminCardRecord[]> {
     ...store.overrides[c.id],
   }));
 
-  return assignSrNos(
-    merged.sort(
-      (a, b) =>
-        new Date(b.startDate.replace(/-/g, " ")).getTime() -
-        new Date(a.startDate.replace(/-/g, " ")).getTime(),
-    ),
-  );
+  return assignSrNos(sortAdminCards(merged));
 }
 
 export function updateAdminCard(id: string, patch: Partial<AdminCardRecord>) {
@@ -470,19 +551,45 @@ export function updateAdminCard(id: string, patch: Partial<AdminCardRecord>) {
   }
 }
 
-export function deleteAdminCard(id: string) {
+export function deleteAdminCard(id: string): Promise<boolean> {
   const store = readJson<CardsStore>(CARDS_KEY, emptyCardsStore());
   if (!store.deletedIds.includes(id)) store.deletedIds.push(id);
   delete store.overrides[id];
   writeJson(CARDS_KEY, store);
   window.dispatchEvent(new Event("hexa-admin-directory-change"));
 
-  const dbId = id.startsWith("card-") ? Number(id.slice(5)) : null;
-  if (dbId && Number.isInteger(dbId) && dbId > 0) {
-    void apiFetch(`/api/cards/${dbId}`, { method: "DELETE" }).then((res) => {
-      if (!res.ok) console.error("[admin-cards] DB delete failed:", res.error);
-    });
-  }
+  return apiFetch<{
+    deletedCardId?: number | null;
+    hiddenOrderCodes?: string[];
+  }>("/api/cards/admin-delete", {
+    method: "POST",
+    body: JSON.stringify({ adminId: id }),
+  }).then((res) => {
+    if (!res.ok) {
+      console.error("[admin-cards] delete failed:", res.error);
+      return false;
+    }
+
+    const cardsStore = readJson<CardsStore>(CARDS_KEY, emptyCardsStore());
+    for (const orderCode of res.data?.hiddenOrderCodes ?? []) {
+      removeOrderCardProfile(orderCode);
+      if (!cardsStore.deletedIds.includes(orderCode)) {
+        cardsStore.deletedIds.push(orderCode);
+      }
+    }
+    if (res.data?.deletedCardId) {
+      const cardKey = `card-${res.data.deletedCardId}`;
+      if (!cardsStore.deletedIds.includes(cardKey)) {
+        cardsStore.deletedIds.push(cardKey);
+      }
+    }
+    writeJson(CARDS_KEY, cardsStore);
+
+    applyHiddenOrdersToLocalCache(res.data?.hiddenOrderCodes ?? []);
+    window.dispatchEvent(new Event("hexa-admin-directory-change"));
+    window.dispatchEvent(new Event("hexa-orders-change"));
+    return true;
+  });
 }
 
 export function toggleAdminCard(id: string, active: boolean) {

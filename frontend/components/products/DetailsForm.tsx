@@ -12,7 +12,7 @@ import {
   X,
   Check,
 } from "lucide-react";
-import { getProduct } from "@/lib/product-catalog";
+import { usePublicProduct } from "@/lib/public-product-catalog";
 import { goToCheckout } from "@/lib/auth";
 
 export type OrderPlatform = "instagram" | "youtube" | "google";
@@ -130,7 +130,7 @@ export default function DetailsForm({ productId }: { productId: string }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const config = ORDER_FORM_CONFIG[productId] ?? ORDER_FORM_CONFIG["instagram-card"];
-  const product = getProduct(config.productId);
+  const product = usePublicProduct(config.productId);
 
   const [link, setLink] = useState("");
   const [businessName, setBusinessName] = useState("");

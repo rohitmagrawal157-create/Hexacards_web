@@ -49,6 +49,8 @@ import type { CatalogProduct } from "@/lib/product-catalog";
 import UsersPanel from "@/components/super-admin/User";
 import CardsPanel from "@/components/super-admin/Cards";
 import OrdersPanel from "@/components/super-admin/Orders";
+import AdminToast from "@/components/super-admin/AdminToast";
+import { showAdminToast } from "@/lib/admin-toast";
 
 type NavKey = "overview" | "orders" | "products" | "users" | "cards";
 
@@ -814,10 +816,15 @@ export default function SuperAdminDashboard() {
 
   async function runDelete() {
     if (!deleteConfirmId) return;
-    await deleteAdminProduct(deleteConfirmId);
+    const ok = await deleteAdminProduct(deleteConfirmId);
     await syncProducts();
     if (editingId === deleteConfirmId) closeEdit();
     setDeleteConfirmId(null);
+    if (ok) {
+      showAdminToast("Product deleted successfully");
+    } else {
+      showAdminToast("Failed to delete product", "error");
+    }
   }
 
   function confirmDeleteSection(id: string) {
@@ -830,12 +837,17 @@ export default function SuperAdminDashboard() {
 
   async function runDeleteSection() {
     if (!deleteSectionId) return;
-    await deleteAdminSection(deleteSectionId, { deleteProducts: true });
+    const ok = await deleteAdminSection(deleteSectionId, { deleteProducts: true });
     await syncProducts();
     if (addProductSectionId === deleteSectionId) {
       setAddProductSectionId("");
     }
     setDeleteSectionId(null);
+    if (ok) {
+      showAdminToast("Category deleted successfully");
+    } else {
+      showAdminToast("Failed to delete category", "error");
+    }
   }
 
   function renderProductTable(list: CatalogProduct[]) {
@@ -948,6 +960,7 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#FAFAF8] text-[#141414]">
+      <AdminToast />
       <header className="z-40 shrink-0 border-b border-black/[0.06] bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-3 px-4 sm:h-[60px] sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">

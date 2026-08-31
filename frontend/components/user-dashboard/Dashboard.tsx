@@ -36,6 +36,7 @@ import {
 import {
   formatOrderDate,
   fetchOrdersForPhone,
+  isOrderDashboardHidden,
   statusLabel,
   type HexaOrder,
   type HexaOrderStatus,
@@ -584,7 +585,10 @@ function CardsPanel({
   const [profileTick, setProfileTick] = useState(0);
 
   useEffect(() => {
-    orders.filter(isCardProductOrder).forEach((order) => {
+    orders
+      .filter(isCardProductOrder)
+      .filter((order) => !isOrderDashboardHidden(order))
+      .forEach((order) => {
       ensureOrderCardProfile(order);
     });
   }, [orders]);

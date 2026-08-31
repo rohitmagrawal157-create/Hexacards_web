@@ -19,7 +19,7 @@ import {
   loginPathWithNext,
   normalizeIndianPhone,
 } from "@/lib/auth";
-import { getProduct } from "@/lib/product-catalog";
+import { usePublicProduct } from "@/lib/public-product-catalog";
 import {
   formatOrderDate,
   saveOrder,
@@ -80,7 +80,7 @@ function clearDraft() {
 
 export default function DigitalQrOrderForm() {
   const router = useRouter();
-  const product = getProduct(PRODUCT_ID);
+  const product = usePublicProduct(PRODUCT_ID);
   const thumb =
     product.media.find((m) => m.type === "image") ?? product.media[0];
   const thumbSrc = thumb.type === "image" ? thumb.src : thumb.thumbnail;

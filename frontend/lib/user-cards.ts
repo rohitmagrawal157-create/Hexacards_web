@@ -2,7 +2,7 @@ import type { OrderCardDesignData } from "@/lib/order-card";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
 import { compressCardLogoDataUrl } from "@/lib/order-logo-store";
 import { getOrderCardProfile } from "@/lib/order-card-profile";
-import { getOrdersForPhone, type HexaOrder } from "@/lib/orders";
+import { getOrdersForPhone, isOrderDashboardHidden, type HexaOrder } from "@/lib/orders";
 
 export type SavedCardDesign = {
   title?: string;
@@ -209,14 +209,19 @@ export function orderToDashboardCard(
 }
 
 export function getUserDashboardCards(phone: string): UserDashboardCard[] {
-  const orders = getOrdersForPhone(phone).filter(isCardProductOrder);
+  const orders = getOrdersForPhone(phone).filter(
+    (order) => !isOrderDashboardHidden(order) && isCardProductOrder(order),
+  );
   return orders.map((order, index) => orderToDashboardCard(order, index === 0));
 }
 
 export function getUserDashboardCardsFromOrders(
   orders: HexaOrder[],
 ): UserDashboardCard[] {
-  return orders.map((order, index) => orderToDashboardCard(order, index === 0));
+  return orders
+    .filter((order) => !isOrderDashboardHidden(order))
+    .filter(isCardProductOrder)
+    .map((order, index) => orderToDashboardCard(order, index === 0));
 }
 
 /** @deprecated use initOrderCardProfile — each order keeps its own profile */

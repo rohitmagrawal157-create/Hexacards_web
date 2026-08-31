@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk, toNumber } from "@/lib/admin-catalog-db";
+import type { OrderCardDesignData } from "@/lib/order-card";
 import {
   mapOrder,
   paymentToDb,
@@ -200,6 +201,22 @@ export async function PUT(request: Request, context: RouteContext) {
     }
     if (body.cardUrl !== undefined) {
       patch.card_url = body.cardUrl ? String(body.cardUrl).trim() : null;
+    }
+    if (body.cardHidden !== undefined) {
+      const hidden =
+        body.cardHidden === true || Number(body.cardHidden) === 1;
+      patch.card_hidden = hidden ? 1 : 0;
+      if (hidden) {
+        patch.card_slug = null;
+        patch.card_url = null;
+        const existingDesign = sanitizeCardDesignForDb(
+          (existing.card_design as OrderCardDesignData | null) ?? null,
+        );
+        patch.card_design = {
+          ...(existingDesign ?? {}),
+          dashboardHidden: true,
+        };
+      }
     }
     if (body.jobTitle !== undefined || body.designation !== undefined) {
       patch.designation = String(

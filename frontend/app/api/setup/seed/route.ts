@@ -41,15 +41,15 @@ const DEFAULT_CATEGORIES = [
     sort_order: 4,
     status: 1,
   },
-  {
-    category_id: 5,
-    slug: "review-keychain",
-    category_name: "Review Keychain QR",
-    category_desc: "NFC + QR keychains that open your Google review page.",
-    category_img: "keychain-front-back.jpg",
-    sort_order: 5,
-    status: 1,
-  },
+  // {
+  //   category_id: 5,
+  //   slug: "review-keychain",
+  //   category_name: "Review Keychain QR",
+  //   category_desc: "NFC + QR keychains that open your Google review page.",
+  //   category_img: "keychain-front-back.jpg",
+  //   sort_order: 5,
+  //   status: 1,
+  // },
 ] as const;
 
 /** Which category slug each product belongs to */

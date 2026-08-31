@@ -129,6 +129,15 @@ export function getOrderCardProfile(
   return profile && typeof profile === "object" ? profile : null;
 }
 
+/** Remove cached profile when Super Admin deletes the card. */
+export function removeOrderCardProfile(orderId: string) {
+  if (!orderId || typeof window === "undefined") return;
+  const all = readAll();
+  if (!all[orderId]) return;
+  delete all[orderId];
+  writeAll(all);
+}
+
 /** Cache profile locally without events or order sync (safe during page load). */
 export function cacheOrderCardProfile(
   orderId: string,

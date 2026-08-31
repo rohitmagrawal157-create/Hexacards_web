@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
-import { productCatalog, type CatalogProduct } from "@/lib/product-catalog";
+import { type CatalogProduct } from "@/lib/product-catalog";
+import { usePublicProductsCatalog } from "@/lib/public-product-catalog";
 
 export type CatalogEntry = {
   id: string;
@@ -37,8 +40,8 @@ export const FULL_CATALOG_ORDER: CatalogEntry[] = [
     badge: "Standee",
   },
   { id: "youtube-standee", href: "/product/youtube-standee", badge: "Standee" },
-  { id: "review-keychain-qr", href: "/product/review-keychain-qr", badge: "Keychain" },
-  { id: "metal-card", href: "/product/metal-card" },
+  // { id: "review-keychain-qr", href: "/product/review-keychain-qr", badge: "Keychain" },
+  // { id: "metal-card", href: "/product/metal-card" },
   { id: "pvc-card", href: "/product/pvc-card" },
   { id: "wooden-card", href: "/product/wooden-card" },
 ];
@@ -157,6 +160,8 @@ type ProductsCatalogProps = {
   description?: string;
   /** Tighter 3-column layout for category hubs */
   compact?: boolean;
+  /** SSR catalog from Supabase — correct prices on first paint */
+  initialCatalog?: Record<string, CatalogProduct>;
 };
 
 /** Product catalog grid — full catalog or filtered category */
@@ -166,7 +171,9 @@ export default function ProductsCatalog({
   title = "Choose a card, open the details",
   description = "Instagram, YouTube, Google Reviews, NFC business cards, stands, and more — tap any product to view full details.",
   compact = false,
+  initialCatalog,
 }: ProductsCatalogProps) {
+  const productCatalog = usePublicProductsCatalog(initialCatalog);
   const items: CatalogItem[] = entries
     .map(({ id, href, badge }) => ({
       product: productCatalog[id],

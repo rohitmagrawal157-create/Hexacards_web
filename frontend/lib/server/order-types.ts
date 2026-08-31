@@ -71,6 +71,7 @@ export type OrderRow = {
   business_name: string;
   review_link: string | null;
   card_design: OrderCardDesignData | null;
+  card_hidden?: number;
   created_at: string;
   updated_at?: string;
 };
@@ -137,6 +138,7 @@ export type OrderDto = {
   reviewLink: string | null;
   orderLogoSrc: string | null;
   cardDesign: OrderCardDesignData | null;
+  cardHidden: boolean;
 };
 
 export type OrderWriteBody = {
@@ -189,6 +191,7 @@ export type OrderWriteBody = {
   cardSlug?: string | null;
   cardUrl?: string | null;
   cardDesign?: OrderCardDesignData | null;
+  cardHidden?: boolean | number;
   status?: string | number;
   paymentStatus?: string | number;
   userId?: number | null;
@@ -225,6 +228,16 @@ export function paymentFromDb(
   n: number,
 ): (typeof PAYMENT_STATUS_LABEL)[number] {
   return PAYMENT_STATUS_LABEL[n] ?? "pending";
+}
+
+/** True when admin removed this order's card from the user dashboard. */
+export function isOrderCardHidden(row: {
+  card_hidden?: number | null;
+  card_design?: OrderCardDesignData | Record<string, unknown> | null;
+}): boolean {
+  if (Number(row.card_hidden ?? 0) === 1) return true;
+  const design = row.card_design as { dashboardHidden?: boolean } | null;
+  return design?.dashboardHidden === true;
 }
 
 export function mapOrder(row: OrderRow): OrderDto {
@@ -280,6 +293,7 @@ export function mapOrder(row: OrderRow): OrderDto {
     reviewLink: row.review_link,
     orderLogoSrc: row.logo,
     cardDesign: row.card_design ?? null,
+    cardHidden: isOrderCardHidden(row),
   };
 }
 

@@ -48,6 +48,8 @@ export type HexaOrder = {
   cardId?: number | null;
   cardSlug?: string;
   cardUrl?: string;
+  /** Hidden from user dashboard after Super Admin card delete */
+  cardHidden?: boolean;
   companyName?: string;
   jobTitle?: string;
   businessName?: string;
@@ -57,6 +59,14 @@ export type HexaOrder = {
 };
 
 const ORDERS_KEY = "hexaOrders";
+
+/** True when Super Admin removed this order's card from the user dashboard. */
+export function isOrderDashboardHidden(order: HexaOrder): boolean {
+  return (
+    Boolean(order.cardHidden) ||
+    Boolean(order.cardDesign?.dashboardHidden)
+  );
+}
 
 function phoneKey(phone: string | undefined | null): string {
   return normalizeIndianPhone(phone ?? "");
@@ -198,6 +208,11 @@ function dtoToHexaOrder(dto: HexaOrder & Record<string, unknown>): HexaOrder {
       dto.cardId != null && Number(dto.cardId) > 0 ? Number(dto.cardId) : null,
     cardSlug: dto.cardSlug ? String(dto.cardSlug) : undefined,
     cardUrl: dto.cardUrl ? String(dto.cardUrl) : undefined,
+    cardHidden:
+      Boolean(dto.cardHidden) ||
+      Boolean(
+        (dto.cardDesign as OrderCardDesignData | undefined)?.dashboardHidden,
+      ),
     companyName: dto.companyName ? String(dto.companyName) : undefined,
     jobTitle: dto.jobTitle ? String(dto.jobTitle) : undefined,
     businessName: dto.businessName ? String(dto.businessName) : undefined,
@@ -313,10 +328,40 @@ export function getOrderById(id: string): HexaOrder | null {
   return getOrders().find((o) => o.id === id) ?? null;
 }
 
+/** Hide card(s) on the user dashboard in local cache after admin delete. */
+export function applyHiddenOrdersToLocalCache(orderCodes: string[]) {
+  if (typeof window === "undefined" || orderCodes.length === 0) return;
+  const codes = new Set(orderCodes.map((c) => String(c).trim()).filter(Boolean));
+  if (codes.size === 0) return;
+
+  const orders = readOrders();
+  const next = orders.map((order) =>
+    codes.has(order.id)
+      ? {
+          ...order,
+          cardHidden: true,
+          cardId: null,
+          cardSlug: undefined,
+          cardUrl: undefined,
+          cardDesign: order.cardDesign
+            ? { ...order.cardDesign, dashboardHidden: true }
+            : ({ dashboardHidden: true } as OrderCardDesignData),
+        }
+      : order,
+  );
+  writeOrders(next);
+  window.dispatchEvent(new Event("hexa-orders-change"));
+}
+
+/** Hide a card on the user dashboard after Super Admin delete (local cache). */
+export function hideOrderCardOnDashboard(orderId: string) {
+  applyHiddenOrdersToLocalCache([orderId]);
+}
+
 export function findOrderByCardSlug(slug: string): HexaOrder | null {
   const orders = getOrders();
   const found = findOrderByPublicSlug(slug, orders);
-  if (!found) return null;
+  if (!found || isOrderDashboardHidden(found)) return null;
 
   if (!found.cardSlug?.trim()) {
     const { slug: computed, liveUrl } = resolveOrderLiveUrl(found);

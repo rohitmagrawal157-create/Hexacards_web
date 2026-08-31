@@ -13,7 +13,8 @@ import {
   UserRound,
   Share2,
 } from "lucide-react";
-import { getProduct, type CatalogProduct } from "@/lib/product-catalog";
+import { type CatalogProduct } from "@/lib/product-catalog";
+import { usePublicProduct } from "@/lib/public-product-catalog";
 
 function formatInr(n: number) {
   return `₹${n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
@@ -56,7 +57,7 @@ export default function ProductDetails({
   backHref?: string;
   backLabel?: string;
 }) {
-  const product = productProp ?? getProduct(productId);
+  const product = usePublicProduct(productId, productProp);
   const media = product.media;
   const price = product.price;
   const compareAtPrice = product.compareAtPrice;

@@ -22,6 +22,7 @@ import {
   toggleAdminUser,
   updateAdminUser,
 } from "@/lib/admin-directory";
+import { showAdminToast } from "@/lib/admin-toast";
 import { setAuthUser } from "@/lib/auth";
 
 export type AdminUserRow = {
@@ -356,10 +357,15 @@ export default function UsersPanel({
     }
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     setRows((prev) => prev.filter((u) => u.id !== id));
     setDeleteTarget(null);
-    deleteAdminUser(id);
+    const ok = await deleteAdminUser(id);
+    if (ok) {
+      showAdminToast("User deleted successfully");
+    } else {
+      showAdminToast("Failed to delete user", "error");
+    }
     onDeleteUser?.(id);
   }
 

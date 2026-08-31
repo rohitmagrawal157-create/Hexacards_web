@@ -30,12 +30,24 @@ const CATEGORY_HUB_HREF: Record<string, string> = {
   "digital-profile-qr": "/product/digital-profile-qr",
   "social-media-card": "/product/social-media-cards",
   standee: "/product/google-review-standee",
-  "review-keychain": "/product/review-keychain-qr",
 };
 
 const FALLBACK_IMAGE = "/Images/Products/digitalCard.jpg";
 const CATALOG_IMG_DIR = "/Images/Products/";
-const HOME_CATEGORIES_CACHE_KEY = "hexaHomeCategories.v2";
+/** Public site — categories/products hidden from marketing surfaces */
+export const HIDDEN_PUBLIC_CATEGORY_IDS = new Set(["review-keychain"]);
+export const HIDDEN_PUBLIC_PRODUCT_IDS = new Set([
+  "review-keychain-qr",
+  "metal-card",
+]);
+
+const HOME_CATEGORIES_CACHE_KEY = "hexaHomeCategories.v3";
+
+function filterHiddenHomeCategories(
+  cards: HomeCategoryCard[],
+): HomeCategoryCard[] {
+  return cards.filter((c) => !HIDDEN_PUBLIC_CATEGORY_IDS.has(c.id));
+}
 
 function publicImg(stored: string | null | undefined): string | null {
   const raw = String(stored ?? "").trim();
@@ -50,13 +62,13 @@ function publicImg(stored: string | null | undefined): string | null {
   return `${CATALOG_IMG_DIR}${raw}`;
 }
 
-/** Offline / API-down fallback — same 5 Super Admin categories */
-export const FALLBACK_HOME_CATEGORIES: HomeCategoryCard[] = [
+/** Offline / API-down fallback — Super Admin categories shown on homepage */
+export const FALLBACK_HOME_CATEGORIES: HomeCategoryCard[] = filterHiddenHomeCategories([
   {
     id: "business-card",
     title: "Business Card",
     description:
-      "NFC, PVC, and metal cards — your full digital identity in one tap.",
+      "NFC and PVC cards — your full digital identity in one tap.",
     image: "/Images/Products/digitalCard.jpg",
     href: "/product/nfc-business-card",
   },
@@ -84,15 +96,15 @@ export const FALLBACK_HOME_CATEGORIES: HomeCategoryCard[] = [
     image: "/Images/Products/reviewStandy.jpg",
     href: "/product/google-review-standee",
   },
-  {
-    id: "review-keychain",
-    title: "Review Keychain QR",
-    description:
-      "NFC + QR keychain that opens your Google review page — always on your keys.",
-    image: "/Images/Products/keychain-front-back.jpg",
-    href: "/product/review-keychain-qr",
-  },
-];
+  // {
+  //   id: "review-keychain",
+  //   title: "Review Keychain QR",
+  //   description:
+  //     "NFC + QR keychain that opens your Google review page — always on your keys.",
+  //   image: "/Images/Products/keychain-front-back.jpg",
+  //   href: "/product/review-keychain-qr",
+  // },
+]);
 
 function productImage(product: ApiProduct | undefined): string | null {
   if (!product) return null;
@@ -132,7 +144,7 @@ export function readHomeCategoriesCache(): HomeCategoryCard[] | null {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
     if (!parsed.every(isValidCard)) return null;
-    return parsed;
+    return filterHiddenHomeCategories(parsed);
   } catch {
     return null;
   }
@@ -161,7 +173,7 @@ function mapApiToCards(
   productsByCategory: Record<string, ApiProduct[]>,
 ): HomeCategoryCard[] {
   return categories
-    .filter((c) => c.status !== false)
+    .filter((c) => c.status !== false && !HIDDEN_PUBLIC_CATEGORY_IDS.has(c.id))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
     .map((cat) => {
       const products = productsByCategory[cat.id] ?? [];
@@ -218,9 +230,11 @@ export async function fetchHomeCategories(): Promise<{
     };
   }
 
-  const cards = mapApiToCards(
-    res.data.categories,
-    res.data.productsByCategory ?? {},
+  const cards = filterHiddenHomeCategories(
+    mapApiToCards(
+      res.data.categories,
+      res.data.productsByCategory ?? {},
+    ),
   );
   if (cards.length === 0) {
     const cached = readHomeCategoriesCache();

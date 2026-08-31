@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
+import { deleteCardForAdmin } from "@/lib/server/card-admin-delete";
 import {
   CARD_COLS,
   mapCard,
@@ -175,19 +176,15 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const cardId = parseCardId(id);
     if (!cardId) return jsonError(400, "card_id must be a positive integer");
 
-    const supabase = getSupabaseAdmin();
-    // links cascade via FK on delete
-    const { data, error } = await supabase
-      .from("cards")
-      .delete()
-      .eq("card_id", cardId)
-      .select("card_id")
-      .maybeSingle();
+    const result = await deleteCardForAdmin(`card-${cardId}`);
+    if (!result.deletedCardId && result.hiddenOrderCodes.length === 0) {
+      return jsonError(404, "Card not found");
+    }
 
-    if (error) return jsonError(500, "Failed to delete card", error.message);
-    if (!data) return jsonError(404, "Card not found");
-
-    return jsonOk({ cardId: Number(data.card_id) });
+    return jsonOk({
+      cardId: result.deletedCardId ?? cardId,
+      hiddenOrderCodes: result.hiddenOrderCodes,
+    });
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }

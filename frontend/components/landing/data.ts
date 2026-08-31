@@ -15,7 +15,7 @@ export const navLinks: NavLink[] = [
     href: "/product/nfc-business-card",
     children: [
       { label: "NFC Business Card", href: "/product/nfc-business-card" },
-      { label: "Metal Card", href: "/product/metal-card" },
+      // { label: "Metal Card", href: "/product/metal-card" },
       { label: "PVC Card", href: "/product/pvc-card" },
       // { label: "Wooden Card", href: "/product/wooden-card" },
     ],
@@ -31,7 +31,7 @@ export const navLinks: NavLink[] = [
       { label: "Review Standee", href: "/product/google-review-standee" },
       { label: "Instagram Standee", href: "/product/instagram-standee" },
       { label: "YouTube Standee", href: "/product/youtube-standee" },
-      { label: "Review Keychain QR", href: "/product/review-keychain-qr" },
+      // { label: "Review Keychain QR", href: "/product/review-keychain-qr" },
     ],
   },
   { label: "Products", href: "/products" },
@@ -229,7 +229,7 @@ export const faqs = [
 export const footerLinks = {
   product: [
     { label: "NFC Business Card", href: "/product/nfc-business-card" },
-    { label: "Metal Card", href: "/product/metal-card" },
+    // { label: "Metal Card", href: "/product/metal-card" },
     { label: "PVC Card", href: "/product/pvc-card" },
     { label: "Wooden Card", href: "/product/wooden-card" },
   ],
@@ -242,7 +242,7 @@ export const footerLinks = {
     { label: "Google Standee", href: "/product/google-standee" },
     { label: "Instagram Standee", href: "/product/instagram-standee" },
     { label: "YouTube Standee", href: "/product/youtube-standee" },
-    { label: "Review Keychain QR", href: "/product/review-keychain-qr" },
+    // { label: "Review Keychain QR", href: "/product/review-keychain-qr" },
     { label: "Services", href: "/services" },
     { label: "Design Your Card", href: "/design-your-card" },
   ],

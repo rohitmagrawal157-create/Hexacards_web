@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { HowItWorks, FAQ } from "@/components/landing";
+import { getPublicProductsCatalogServer } from "@/lib/server/get-public-product";
 import ProductsCatalog, { STANDEE_CATALOG } from "./ProductsCatalog";
 
 /**
  * Review Standee category hub:
  * Landing → grid (Google → Instagram → YouTube) → product detail
  */
-export default function GoogleReviewStandee() {
+export default async function GoogleReviewStandee() {
+  const initialCatalog = await getPublicProductsCatalogServer();
+
   return (
     <>
       <div className="border-b border-black/[0.06] bg-white/80">
@@ -40,6 +43,7 @@ export default function GoogleReviewStandee() {
         title="Pick your standee"
         // description="1. Google Standee · 2. Instagram Standee · 3. YouTube Standee — countertop displays that collect reviews and followers on autopilot."
         compact
+        initialCatalog={initialCatalog}
       />
       <HowItWorks />
       <FAQ />

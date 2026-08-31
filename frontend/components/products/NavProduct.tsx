@@ -1,8 +1,11 @@
 import { HowItWorks, FAQ } from "@/components/landing";
+import { getPublicProductsCatalogServer } from "@/lib/server/get-public-product";
 import ProductsCatalog from "./ProductsCatalog";
 
 /** Navbar → Products page: full catalog grid → each card opens detail page */
-export default function NavProduct() {
+export default async function NavProduct() {
+  const initialCatalog = await getPublicProductsCatalogServer();
+
   return (
     <>
       <div className="border-b border-black/[0.06] bg-white/80">
@@ -14,12 +17,11 @@ export default function NavProduct() {
             Our Products
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-sm text-[#5c5346] sm:text-base">
-            Instagram, YouTube, Google Reviews, NFC cards, stands, and keychains
-            — click any product to open its detail page.
+            Instagram, YouTube, Google Reviews, NFC cards, and stands — click any product to open its detail page.
           </p>
         </div>
       </div>
-      <ProductsCatalog />
+      <ProductsCatalog initialCatalog={initialCatalog} />
       <HowItWorks />
       <FAQ />
     </>
