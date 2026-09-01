@@ -1,7 +1,14 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { OrderCardDesignData } from "@/lib/order-card";
 import { isOrderCardHidden, type OrderRow } from "@/lib/server/order-types";
-import { slugifyCardName } from "@/lib/server/card-types";
+import {
+  allocateUniqueCardSlug,
+  fetchTakenCardSlugs,
+} from "@/lib/server/card-slug";
+import {
+  computeCardEndDateIso,
+  toIsoDateOnly,
+} from "@/lib/card-validity";
 
 const NON_CARD_PRODUCT_SLUGS = new Set([
   "google-standee",
@@ -26,7 +33,6 @@ const NON_CARD_TITLE_KEYWORDS = [
   "social media card",
   "keychain qr",
   "review stand",
-  "pvc card",
   "wooden card",
 ];
 
@@ -65,18 +71,15 @@ function isCardProductOrderRow(row: OrderRow): boolean {
   );
 }
 
-function buildSlugFromOrder(row: OrderRow): string {
+function buildSlugFromOrder(
+  row: OrderRow,
+  taken: Set<string>,
+): string {
   const existing = String(row.card_slug ?? "").trim().toLowerCase();
   if (existing) return existing;
 
   const name = String(row.name ?? "").trim() || "hexa-card";
-  const base = slugifyCardName(name) || "hexa-card";
-  const mobile = phoneTail(row.mobile_number || row.owner_phone);
-  const phonePart = mobile.slice(-2);
-  const orderTail = String(row.order_code ?? "")
-    .replace(/\D/g, "")
-    .slice(-2);
-  return `${base}${phonePart}${orderTail}`.toLowerCase();
+  return allocateUniqueCardSlug(name, taken);
 }
 
 async function resolveOrCreateUserId(
@@ -140,13 +143,15 @@ export async function syncCardsFromOrders(): Promise<{
   const rows = (orders as OrderRow[] | null) ?? [];
   let synced = 0;
   let linked = 0;
+  const taken = await fetchTakenCardSlugs(supabase);
 
   for (const order of rows) {
     if (isOrderCardHidden(order)) continue;
     if (!isCardProductOrderRow(order)) continue;
 
-    const slug = buildSlugFromOrder(order);
+    const slug = buildSlugFromOrder(order, taken);
     if (!slug) continue;
+    taken.add(slug);
 
     const { data: existingCard } = await supabase
       .from("cards")
@@ -173,6 +178,12 @@ export async function syncCardsFromOrders(): Promise<{
       | { name?: string; subtitle?: string; liveUrl?: string }
       | null;
 
+    const productSlug = String(order.product_slug ?? "").trim().toLowerCase();
+    const startDate = order.ord_date
+      ? toIsoDateOnly(order.ord_date)
+      : toIsoDateOnly(new Date());
+    const endDate = computeCardEndDateIso(startDate, productSlug);
+
     const insertPayload = {
       unic_card_name: slug,
       card_name: String(cardDesign?.name ?? order.name ?? "").trim() || "Card",
@@ -196,10 +207,8 @@ export async function syncCardsFromOrders(): Promise<{
       services: null,
       brochure: null,
       page_view: 0,
-      start_date: order.ord_date
-        ? new Date(order.ord_date).toISOString().slice(0, 10)
-        : null,
-      end_date: null,
+      start_date: startDate,
+      end_date: endDate,
       status: 1,
     };
 

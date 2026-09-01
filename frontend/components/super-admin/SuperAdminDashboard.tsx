@@ -1288,7 +1288,9 @@ export default function SuperAdminDashboard() {
 
           {active === "users" ? <UsersPanel /> : null}
 
-          {active === "cards" ? <CardsPanel /> : null}
+          <div className={active === "cards" ? "contents" : "hidden"}>
+            <CardsPanel />
+          </div>
         </main>
       </div>
 

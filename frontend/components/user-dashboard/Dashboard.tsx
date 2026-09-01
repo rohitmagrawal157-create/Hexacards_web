@@ -43,7 +43,7 @@ import {
 } from "@/lib/orders";
 import {
   getUserDashboardCardsFromOrders,
-  isCardProductOrder,
+  isEditableCardOrder,
   orderCardImage,
   type UserDashboardCard,
 } from "@/lib/user-cards";
@@ -586,11 +586,11 @@ function CardsPanel({
 
   useEffect(() => {
     orders
-      .filter(isCardProductOrder)
+      .filter(isEditableCardOrder)
       .filter((order) => !isOrderDashboardHidden(order))
       .forEach((order) => {
-      ensureOrderCardProfile(order);
-    });
+        ensureOrderCardProfile(order);
+      });
   }, [orders]);
 
   useEffect(() => {

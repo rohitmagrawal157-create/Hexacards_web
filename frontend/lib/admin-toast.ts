@@ -20,3 +20,28 @@ export function showAdminToast(
   };
   window.dispatchEvent(new CustomEvent(ADMIN_TOAST_EVENT, { detail }));
 }
+
+/** User-friendly copy for Super Admin user API errors. */
+export function formatAdminUserErrorMessage(error?: string): string {
+  const raw = String(error ?? "").trim().toLowerCase();
+
+  if (
+    raw.includes("mobile number already registered") ||
+    raw.includes("already registered")
+  ) {
+    return "This mobile number is already registered. Please use a different number.";
+  }
+  if (raw.includes("valid 10-digit mobile")) {
+    return "Please enter a valid 10-digit mobile number.";
+  }
+  if (raw.includes("first_name is required")) {
+    return "First name is required.";
+  }
+  if (raw.includes("user not found")) {
+    return "This user could not be found. Refresh the page and try again.";
+  }
+
+  const trimmed = String(error ?? "").trim();
+  if (trimmed) return trimmed;
+  return "Unable to save user. Please try again.";
+}

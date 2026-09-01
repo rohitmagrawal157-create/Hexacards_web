@@ -35,7 +35,16 @@ export type UserDashboardCard = {
 };
 
 
-const NON_CARD_PRODUCT_IDS = new Set([
+/** Products with an editable digital profile (NFC, PVC, Digital + QR). */
+export const DIGITAL_PROFILE_PRODUCT_IDS = new Set([
+  "nfc-business-card",
+  "pvc-card",
+  "digital-profile-qr",
+  "metal-card",
+]);
+
+/** Physical / link products shown on dashboard without a digital profile editor. */
+export const PHYSICAL_DASHBOARD_PRODUCT_IDS = new Set([
   "google-standee",
   "instagram-standee",
   "youtube-standee",
@@ -49,7 +58,7 @@ const NON_CARD_PRODUCT_IDS = new Set([
   "review-keychain-qr",
 ]);
 
-const NON_CARD_PRODUCT_TITLE_KEYWORDS = [
+const PHYSICAL_PRODUCT_TITLE_KEYWORDS = [
   "standee",
   "standy",
   "instagram card",
@@ -58,29 +67,64 @@ const NON_CARD_PRODUCT_TITLE_KEYWORDS = [
   "social media card",
   "keychain qr",
   "review stand",
-  "pvc card",
   "wooden card",
 ];
 
-export function isCardProductOrder(order: HexaOrder): boolean {
-  // Use productId as the primary source of truth when available
-  if (order.productId) {
-    return !NON_CARD_PRODUCT_IDS.has(order.productId);
+function titleMatchesPhysicalProduct(title: string): boolean {
+  const t = title.toLowerCase();
+  for (const kw of PHYSICAL_PRODUCT_TITLE_KEYWORDS) {
+    if (t.includes(kw)) return true;
   }
-  // Fall back to title matching for older orders
-  const title = order.productTitle.toLowerCase();
-  for (const kw of NON_CARD_PRODUCT_TITLE_KEYWORDS) {
-    if (title.includes(kw)) return false;
-  }
+  return false;
+}
+
+function titleMatchesDigitalProfileProduct(title: string): boolean {
+  const t = title.toLowerCase();
+  if (titleMatchesPhysicalProduct(t)) return false;
   return (
-    title.includes("nfc") ||
-    title.includes("business card") ||
-    title.includes("hexa card") ||
-    title.includes("metal card") ||
-    title.includes("hexa nfc") ||
-    title.includes("digital profile") ||
-    title.includes("digital qr")
+    t.includes("nfc") ||
+    t.includes("business card") ||
+    t.includes("hexa card") ||
+    t.includes("metal card") ||
+    t.includes("hexa nfc") ||
+    t.includes("digital profile") ||
+    t.includes("digital qr")
   );
+}
+
+function titleMatchesDashboardProduct(title: string): boolean {
+  return (
+    titleMatchesPhysicalProduct(title) ||
+    titleMatchesDigitalProfileProduct(title)
+  );
+}
+
+/** Orders that get an editable digital profile + public slug (NFC / Digital QR). */
+export function isEditableCardOrder(
+  order: Pick<HexaOrder, "productId" | "productTitle">,
+): boolean {
+  if (order.productId) {
+    return DIGITAL_PROFILE_PRODUCT_IDS.has(order.productId);
+  }
+  return titleMatchesDigitalProfileProduct(order.productTitle);
+}
+
+/** All purchasable products that should appear on the user dashboard My Cards tab. */
+export function isDashboardProductOrder(
+  order: Pick<HexaOrder, "productId" | "productTitle">,
+): boolean {
+  if (order.productId) {
+    return (
+      DIGITAL_PROFILE_PRODUCT_IDS.has(order.productId) ||
+      PHYSICAL_DASHBOARD_PRODUCT_IDS.has(order.productId)
+    );
+  }
+  return titleMatchesDashboardProduct(order.productTitle);
+}
+
+/** @deprecated alias — use isEditableCardOrder for profile/slug logic */
+export function isCardProductOrder(order: HexaOrder): boolean {
+  return isEditableCardOrder(order);
 }
 
 const STANDEE_IDS = new Set([
@@ -174,10 +218,11 @@ export function orderToDashboardCard(
   order: HexaOrder,
   isLatest: boolean,
 ): UserDashboardCard {
-  const editable = isCardProductOrder(order);
+  const editable = isEditableCardOrder(order);
   const savedProfile = editable ? getOrderCardProfile(order.id) : null;
   const name =
     savedProfile?.contact.cardName?.trim() ||
+    order.businessName?.trim() ||
     order.cardDesign?.name?.trim() ||
     order.customerName ||
     "Your Name";
@@ -185,8 +230,13 @@ export function orderToDashboardCard(
     savedProfile?.contact.title?.trim() ||
     order.cardDesign?.subtitle?.trim() ||
     order.jobTitle?.trim() ||
+    (order.reviewLink
+      ? order.reviewLink.replace(/^https?:\/\//, "").replace(/\/$/, "")
+      : "") ||
     order.productTitle;
-  const { slug, liveUrl: publicUrl } = resolveOrderLiveUrl(order);
+  const { slug, liveUrl: publicUrl } = editable
+    ? resolveOrderLiveUrl(order)
+    : { slug: order.id, liveUrl: "" };
 
   return {
     orderId: order.id,
@@ -196,7 +246,7 @@ export function orderToDashboardCard(
     subtitle,
     slug,
     publicUrl,
-    publicPath: `/${slug}`,
+    publicPath: editable ? `/${slug}` : "#",
     status: order.status,
     createdAt: order.createdAt,
     accentColor:
@@ -210,7 +260,7 @@ export function orderToDashboardCard(
 
 export function getUserDashboardCards(phone: string): UserDashboardCard[] {
   const orders = getOrdersForPhone(phone).filter(
-    (order) => !isOrderDashboardHidden(order) && isCardProductOrder(order),
+    (order) => !isOrderDashboardHidden(order) && isDashboardProductOrder(order),
   );
   return orders.map((order, index) => orderToDashboardCard(order, index === 0));
 }
@@ -220,7 +270,7 @@ export function getUserDashboardCardsFromOrders(
 ): UserDashboardCard[] {
   return orders
     .filter((order) => !isOrderDashboardHidden(order))
-    .filter(isCardProductOrder)
+    .filter(isDashboardProductOrder)
     .map((order, index) => orderToDashboardCard(order, index === 0));
 }
 

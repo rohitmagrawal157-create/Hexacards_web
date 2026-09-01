@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
+import { isCardPastEndDate } from "@/lib/card-validity";
 import { CARD_COLS, mapCard, type CardRow } from "@/lib/server/card-types";
 import {
   applyLinksToCard,
@@ -34,6 +35,10 @@ export async function GET(request: Request, context: RouteContext) {
     if (!data) return jsonError(404, "Card not found");
 
     const row = data as CardRow;
+    if (row.end_date && isCardPastEndDate(row.end_date)) {
+      return jsonError(410, "This profile has expired");
+    }
+
     let pageView = Number(row.page_view) || 0;
     if (countView) {
       pageView += 1;

@@ -6,8 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  CheckCircle2,
-  LayoutDashboard,
   Mail,
   Phone,
   User,
@@ -21,13 +19,18 @@ import {
 } from "@/lib/auth";
 import { usePublicProduct } from "@/lib/public-product-catalog";
 import {
-  formatOrderDate,
   saveOrder,
   updateOrder,
   type HexaOrder,
 } from "@/lib/orders";
+import {
+  buildPaymentFailedPath,
+  buildThankYouPath,
+  saveOrderThankYouSummary,
+} from "@/lib/order-thank-you";
 import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
-import { buildOrderCardSlug } from "@/lib/order-card";
+import { allocateOrderCardSlug } from "@/lib/order-card";
+import { startRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { INDIA_COUNTRY_ID } from "@/lib/location-api";
 import { syncUserProfileFromCheckout } from "@/lib/user-profile-sync";
 import { savedDesignToCardDesign } from "@/lib/user-cards";
@@ -88,7 +91,6 @@ export default function DigitalQrOrderForm() {
   const [form, setForm] = useState<ContactDraft>(emptyDraft);
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
-  const [placedOrder, setPlacedOrder] = useState<HexaOrder | null>(null);
 
   useEffect(() => {
     const draft = readDraft();
@@ -187,7 +189,7 @@ export default function DigitalQrOrderForm() {
       }
 
       const cardName = cardDesign?.name || customerName;
-      const finalSlug = buildOrderCardSlug(cardName, contactPhone, order.id);
+      const finalSlug = await allocateOrderCardSlug(cardName);
       const liveUrl = `https://hexacards.com/${finalSlug}`;
       const finalized =
         (await updateOrder(order.id, {
@@ -198,10 +200,32 @@ export default function DigitalQrOrderForm() {
             : undefined,
         })) ?? order;
 
-      await initOrderCardProfileAsync(finalized);
-      clearDraft();
-      setPlacedOrder(finalized);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await startRazorpayCheckout({
+        order: finalized,
+        amount: product.price,
+        customerId: auth.userId ?? null,
+        customerName,
+        email: draft.email.trim(),
+        contactPhone,
+        onPaid: async (paidOrder) => {
+          const synced = await updateOrder(paidOrder.id, {
+            paymentStatus: "paid",
+            orderId: paidOrder.orderId,
+          });
+          const paid = synced ?? paidOrder;
+          await initOrderCardProfileAsync(paid);
+          clearDraft();
+          saveOrderThankYouSummary(paid);
+          router.replace(buildThankYouPath(paid.id));
+        },
+        onFailed: async () => {
+          await updateOrder(finalized.id, { paymentStatus: "failed" });
+          clearDraft();
+          router.replace(
+            buildPaymentFailedPath(finalized.id, `/order/${PRODUCT_ID}`),
+          );
+        },
+      });
     } catch (err) {
       console.error("Failed to place Digital QR order", err);
       window.alert(
@@ -226,52 +250,6 @@ export default function DigitalQrOrderForm() {
     }
 
     await placeOrder(form);
-  }
-
-  if (placedOrder) {
-    return (
-      <div className="mx-auto max-w-xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-        <div className="rounded-2xl border border-black/[0.06] bg-white p-6 text-center shadow-sm sm:p-10">
-          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/12 text-emerald-600">
-            <CheckCircle2 className="h-9 w-9" />
-          </span>
-          <p className="mt-5 text-xs font-bold tracking-[0.14em] text-[#BC7C10] uppercase">
-            Order confirmed
-          </p>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[#141414]">
-            Thank you!
-          </h1>
-          <p className="mt-2 text-sm text-[#5c5346]">
-            Your Digital Profile + QR order is placed. Edit your profile anytime
-            from My Cards.
-          </p>
-
-          <div className="mt-6 rounded-xl border border-black/[0.06] bg-[#FFFCF7] p-4 text-left text-sm">
-            <p className="font-bold text-[#141414]">{placedOrder.productTitle}</p>
-            <p className="mt-1 text-[#5c5346]">
-              Order ID:{" "}
-              <span className="font-semibold text-[#141414]">
-                {placedOrder.id}
-              </span>
-            </p>
-            <p className="text-[#5c5346]">
-              Placed: {formatOrderDate(placedOrder.createdAt)}
-            </p>
-            <p className="pt-1 text-base font-bold text-[#141414]">
-              Total: {currency(placedOrder.total)}
-            </p>
-          </div>
-
-          <Link
-            href="/dashboard?tab=cards"
-            className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#BC7C10] px-4 py-3.5 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/25 transition-all hover:bg-[#9a650d]"
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            Go to Dashboard
-          </Link>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -408,11 +386,11 @@ export default function DigitalQrOrderForm() {
           disabled={submitting}
           className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#BC7C10] px-4 py-3.5 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/25 transition-all hover:bg-[#9a650d] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting ? "Placing order…" : "Place order"}
+          {submitting ? "Opening payment…" : `Pay ${currency(product.price)}`}
         </button>
 
         <p className="mt-3 text-center text-xs text-[#8a8174]">
-          You&apos;ll need to sign in with your phone to confirm the order.
+          You&apos;ll be redirected to Razorpay to complete payment securely.
         </p>
       </form>
     </div>

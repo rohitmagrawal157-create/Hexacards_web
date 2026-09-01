@@ -27,6 +27,7 @@ import CardLogsPanel, { sampleCardLogs } from "@/components/super-admin/Cardslog
 import { showAdminToast } from "@/lib/admin-toast";
 import {
   deleteAdminCard,
+  adminCardListKey,
   fetchAdminCards,
   syncAdminCardsFromOrders,
   toggleAdminCard,
@@ -425,6 +426,7 @@ export default function CardsPanel({
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<AdminCardRow | null>(null);
   const [detailCard, setDetailCard] = useState<AdminCardRow | null>(null);
+  const reloadDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -443,18 +445,28 @@ export default function CardsPanel({
       }
     }
 
-    void loadCards();
-
-    function onExternalChange() {
-      void loadCards();
+    function scheduleReload() {
+      if (reloadDebounce.current) clearTimeout(reloadDebounce.current);
+      reloadDebounce.current = setTimeout(() => {
+        reloadDebounce.current = null;
+        void loadCards();
+      }, 300);
     }
 
-    window.addEventListener("hexa-orders-change", onExternalChange);
-    window.addEventListener("hexa-admin-directory-change", onExternalChange);
+    void loadCards();
+
+    window.addEventListener("hexa-orders-change", scheduleReload);
+    window.addEventListener("hexa-admin-directory-change", scheduleReload);
+    window.addEventListener("hexa-admin-cards-change", scheduleReload);
     return () => {
       cancelled = true;
-      window.removeEventListener("hexa-orders-change", onExternalChange);
-      window.removeEventListener("hexa-admin-directory-change", onExternalChange);
+      if (reloadDebounce.current) clearTimeout(reloadDebounce.current);
+      window.removeEventListener("hexa-orders-change", scheduleReload);
+      window.removeEventListener(
+        "hexa-admin-directory-change",
+        scheduleReload,
+      );
+      window.removeEventListener("hexa-admin-cards-change", scheduleReload);
     };
   }, []);
 
@@ -548,13 +560,19 @@ export default function CardsPanel({
   }
 
   async function handleSyncFromOrders() {
-    if (syncing || loading) return;
+      if (syncing || loading) return;
     setSyncing(true);
     try {
-      await syncAdminCardsFromOrders();
+      const result = await syncAdminCardsFromOrders();
+      if (result?.synced) {
+        showAdminToast(
+          `Synced ${result.synced} card(s) from orders`,
+        );
+      }
       const seq = ++loadSeq.current;
       const next = await fetchAdminCards();
       if (seq === loadSeq.current) setRows(next);
+      window.dispatchEvent(new Event("hexa-admin-cards-change"));
     } finally {
       setSyncing(false);
       setLoading(false);
@@ -628,18 +646,18 @@ export default function CardsPanel({
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-black/[0.06] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
             <p className="text-[10px] font-bold tracking-[0.14em] text-[#BC7C10] uppercase">
-              Showing
+              Total cards
             </p>
             <p className="font-dashboard mt-1 text-2xl font-bold text-[#141414]">
-              {filtered.length}
+              {rows.length}
             </p>
           </div>
           <div className="rounded-xl border border-black/[0.06] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
             <p className="text-[10px] font-bold tracking-[0.14em] text-[#BC7C10] uppercase">
-              Active in list
+              In this view
             </p>
             <p className="font-dashboard mt-1 text-2xl font-bold text-[#141414]">
-              {filtered.filter(isCardActive).length}
+              {filtered.length}
             </p>
           </div>
           <div className="rounded-xl border border-black/[0.06] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
@@ -757,7 +775,7 @@ export default function CardsPanel({
                   const status = expiryStatus(card);
                   return (
                     <tr
-                      key={card.id}
+                      key={adminCardListKey(card)}
                       onClick={() => setDetailCard(card)}
                       className="cursor-pointer border-b border-black/[0.04] align-top last:border-0 hover:bg-[#FFFCF7] transition-colors"
                     >

@@ -7,6 +7,7 @@ import {
   type CardCreateBody,
   type CardRow,
 } from "@/lib/server/card-types";
+import { allocateCardSlugForName } from "@/lib/server/card-slug";
 import {
   applyLinksToCard,
   extractLinksFromBody,
@@ -190,6 +191,14 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as CardCreateBody;
     const supabase = getSupabaseAdmin();
+    const cardName = String(body.cardName ?? body.card_name ?? "").trim();
+    const explicitSlug = String(
+      body.unicCardName ?? body.unic_card_name ?? "",
+    ).trim();
+    if (!explicitSlug && cardName) {
+      body.unicCardName = await allocateCardSlugForName(supabase, cardName);
+    }
+
     const resolvedUserId = await resolveUserId(supabase, body);
     const built = buildCardPayload(body, true, resolvedUserId);
     if ("error" in built && built.error) return jsonError(400, built.error);

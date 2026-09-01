@@ -1,4 +1,8 @@
 import { apiFetch } from "@/lib/api-config";
+import {
+  computeCardEndDateIso,
+  toIsoDateOnly,
+} from "@/lib/card-validity";
 import { getAuthUser, normalizeIndianPhone } from "@/lib/auth";
 import {
   DEFAULT_CARD_AVATAR,
@@ -254,13 +258,21 @@ export async function upsertOrderCardInDb(
     (order.userId && order.userId > 0 ? order.userId : null) ||
     (auth?.userId && auth.userId > 0 ? auth.userId : null);
 
-  const body = profileToCardBody(profile, {
-    slug: order.cardSlug?.trim() || slug,
-    userId,
-    ownerPhone,
-    stateId: loc?.stateId ?? order.stateId ?? null,
-    cityId: loc?.cityId ?? order.cityId ?? null,
-  });
+  const body = {
+    ...profileToCardBody(profile, {
+      slug: order.cardSlug?.trim() || slug,
+      userId,
+      ownerPhone,
+      stateId: loc?.stateId ?? order.stateId ?? null,
+      cityId: loc?.cityId ?? order.cityId ?? null,
+    }),
+    ...((): { startDate?: string; endDate?: string } => {
+      if (order.cardId && order.cardId > 0) return {};
+      const startDate = toIsoDateOnly(order.createdAt);
+      const endDate = computeCardEndDateIso(startDate, order.productId);
+      return endDate ? { startDate, endDate } : {};
+    })(),
+  };
 
   let card: CardDto | null = null;
   let error: string | undefined;

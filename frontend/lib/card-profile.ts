@@ -427,14 +427,10 @@ export function compressImageFile(
   });
 }
 
-/** Public slug from card name + phone — e.g. faizan-shaikh77 */
+/** Public slug from card name — e.g. ramesh-tupe (stored slug preferred at call sites). */
 export function cardPublicSlug(profile: HexaCardProfile) {
   const name = profile.contact.cardName.trim() || "HexaCard";
-  const phone =
-    profile.contact.mobile.trim() ||
-    profile.contact.whatsapp.trim() ||
-    "";
-  return buildCardSlugFromName(name, phone);
+  return buildCardSlugFromName(name);
 }
 
 /** Public share URL shown to users — same style as hexacards.com/CardName45 */

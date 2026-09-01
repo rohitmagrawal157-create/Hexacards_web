@@ -15,14 +15,14 @@ import {
   CalendarDays,
 } from "lucide-react";
 import {
-  addAdminUser,
-  deleteAdminUser,
   fetchAdminUsers,
   getAdminUsers,
+  provisionAdminUserWithCard,
   toggleAdminUser,
   updateAdminUser,
+  deleteAdminUser,
 } from "@/lib/admin-directory";
-import { showAdminToast } from "@/lib/admin-toast";
+import { showAdminToast, formatAdminUserErrorMessage } from "@/lib/admin-toast";
 import { setAuthUser } from "@/lib/auth";
 
 export type AdminUserRow = {
@@ -212,6 +212,7 @@ export default function UsersPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<UserDraft>(emptyDraft());
   const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     function sync() {
@@ -288,7 +289,7 @@ export default function UsersPanel({
     setFormError("");
   }
 
-  function saveForm(e: React.FormEvent) {
+  async function saveForm(e: React.FormEvent) {
     e.preventDefault();
     const error = validateDraft(draft);
     if (error) {
@@ -301,38 +302,63 @@ export default function UsersPanel({
     const email = draft.email.trim().toLowerCase();
     const mobile = draft.mobile.trim();
 
-    if (editingId) {
-      const updated = rows.map((u) =>
-        u.id === editingId
-          ? { ...u, firstName, lastName, email, mobile }
-          : u,
+    const duplicateMobile = rows.some(
+      (u) => u.mobile === mobile && u.id !== editingId,
+    );
+    if (duplicateMobile) {
+      const message = formatAdminUserErrorMessage(
+        "mobile number already registered",
       );
-      const next = updated.find((u) => u.id === editingId);
-      setRows(updated);
-      if (next) {
-        updateAdminUser(next.id, next);
-        onUpdateUser?.(next);
+      setFormError(message);
+      showAdminToast(message, "error");
+      return;
+    }
+
+    setSaving(true);
+    setFormError("");
+
+    try {
+      if (editingId) {
+        const saveError = await updateAdminUser(editingId, {
+          firstName,
+          lastName,
+          email,
+          mobile,
+        });
+        if (saveError) {
+          setFormError(saveError);
+          return;
+        }
+
+        const refreshed = await fetchAdminUsers();
+        setRows(refreshed);
+        const updated = refreshed.find((u) => u.id === editingId);
+        if (updated) onUpdateUser?.(updated);
+        closeForm();
+        return;
       }
-    } else {
-      const nextSr =
-        rows.reduce((max, u) => Math.max(max, u.srNo), 0) + 1;
-      const created: AdminUserRow = {
-        id: `u-${Date.now().toString(36)}`,
-        srNo: nextSr,
+
+      const created = await provisionAdminUserWithCard({
         firstName,
         lastName,
         email,
         mobile,
-        regDate: formatRegDate(),
-        active: true,
-      };
-      setRows((prev) => [created, ...prev]);
-      addAdminUser(created);
-      onAddUser?.(created);
-      setPage(1);
-    }
+      });
 
-    closeForm();
+      if (typeof created === "string") {
+        setFormError(created);
+        return;
+      }
+
+      const refreshed = await fetchAdminUsers();
+      setRows(refreshed);
+      const newest = refreshed[0];
+      if (newest) onAddUser?.(newest);
+      setPage(1);
+      closeForm();
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleLogin(id: string) {
@@ -358,13 +384,16 @@ export default function UsersPanel({
   }
 
   async function handleDelete(id: string) {
-    setRows((prev) => prev.filter((u) => u.id !== id));
     setDeleteTarget(null);
     const ok = await deleteAdminUser(id);
     if (ok) {
+      const refreshed = await fetchAdminUsers();
+      setRows(refreshed);
+      setPage(1);
       showAdminToast("User deleted successfully");
     } else {
       showAdminToast("Failed to delete user", "error");
+      void fetchAdminUsers().then(setRows);
     }
     onDeleteUser?.(id);
   }
@@ -821,6 +850,14 @@ export default function UsersPanel({
                 />
               </div>
 
+              {!editingId ? (
+                <p className="rounded-xl bg-[#FFF8ED] px-3 py-2 text-xs leading-relaxed text-[#5c5346]">
+                  A <span className="font-semibold text-[#141414]">Digital Profile + QR</span>{" "}
+                  card will be created automatically using the user&apos;s name and contact
+                  details.
+                </p>
+              ) : null}
+
               {formError ? (
                 <p className="rounded-lg bg-[#E24C4C]/10 px-3 py-2 text-sm text-[#E24C4C]">
                   {formError}
@@ -831,15 +868,21 @@ export default function UsersPanel({
                 <button
                   type="button"
                   onClick={closeForm}
-                  className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#5c5346] hover:bg-black/[0.03]"
+                  disabled={saving}
+                  className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#5c5346] hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-[#BC7C10] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#9a650d]"
+                  disabled={saving}
+                  className="rounded-xl bg-[#BC7C10] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#9a650d] disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {editingId ? "Save changes" : "Add user"}
+                  {saving
+                    ? "Saving..."
+                    : editingId
+                      ? "Save changes"
+                      : "Add user"}
                 </button>
               </div>
             </form>

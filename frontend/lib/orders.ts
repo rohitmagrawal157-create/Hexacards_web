@@ -358,6 +358,14 @@ export function hideOrderCardOnDashboard(orderId: string) {
   applyHiddenOrdersToLocalCache([orderId]);
 }
 
+/** Add or refresh an order in localStorage (e.g. after admin provision). */
+export function prependOrderToLocalCache(order: HexaOrder) {
+  if (typeof window === "undefined") return;
+  const orders = readOrders().filter((o) => o.id !== order.id);
+  writeOrders([order, ...orders]);
+  window.dispatchEvent(new Event("hexa-orders-change"));
+}
+
 export function findOrderByCardSlug(slug: string): HexaOrder | null {
   const orders = getOrders();
   const found = findOrderByPublicSlug(slug, orders);

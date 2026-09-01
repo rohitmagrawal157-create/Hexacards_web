@@ -992,28 +992,30 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Card URL slug from name + phone — e.g. faizan-shaikh77 */
-export function buildCardSlugFromName(
-  name: string,
-  phone: string,
-  orderId?: string,
-) {
-  const base = slugify(name) || "hexa-card";
-  const phoneTail = phone.replace(/\D/g, "").slice(-2);
-  if (orderId) {
-    const orderTail = orderId.replace(/\D/g, "").slice(-2);
-    return `${base}${phoneTail}${orderTail}`;
-  }
-  return `${base}${phoneTail}`;
+/** Base slug from display name — e.g. ramesh-tupe (no phone suffix). */
+export function buildCardSlugFromName(name: string, _phone?: string, _orderId?: string) {
+  return slugify(name) || "hexa-card";
 }
 
-/** Unique public slug for an order — name + phone + order id tails */
-export function buildOrderCardSlug(
-  name: string,
-  phone: string,
-  orderId: string,
-) {
-  return buildCardSlugFromName(name, phone, orderId);
+/** @deprecated Prefer allocateOrderCardSlug() for unique DB-backed slugs. */
+export function buildOrderCardSlug(name: string, _phone?: string, _orderId?: string) {
+  return buildCardSlugFromName(name);
+}
+
+/** Allocate a unique public slug from the server (ramesh-tupe, ramesh-tupe2, …). */
+export async function allocateOrderCardSlug(name: string): Promise<string> {
+  const res = await fetch("/api/cards/allocate-slug", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+  const json = (await res.json().catch(() => null)) as
+    | { ok?: boolean; data?: { slug?: string }; error?: string }
+    | null;
+  if (!res.ok || !json?.ok || !json.data?.slug) {
+    throw new Error(json?.error || "Could not create profile link");
+  }
+  return json.data.slug;
 }
 
 function slugFromUrl(url?: string | null): string {

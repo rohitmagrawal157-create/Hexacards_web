@@ -28,9 +28,11 @@ const sharedCardHighlights = [
   "Free design mockup before you pay",
 ];
 
+import { CARD_VALIDITY_LABEL } from "@/lib/card-validity";
+
 const sharedCardIncluded = [
   "Physical NFC + QR Hexa Card",
-  "Lifetime digital profile",
+  `${CARD_VALIDITY_LABEL} validity`,
   "Free design assistance on WhatsApp",
   "Print after your approval only",
   "Packaging ready to gift or carry",
@@ -71,7 +73,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
     title: "NFC Business Card — Hexa Digital Card",
     shortTitle: "Hexa NFC Business Card",
     description:
-      "Share contacts, socials, and your brand with one tap or QR scan. Premium print finishes, lifetime digital profile, and free design help from HexaCards.",
+      "Share contacts, socials, and your brand with one tap or QR scan. Premium print finishes, 25-year digital profile, and free design help from HexaCards.",
     price: 799,
     compareAtPrice: 2199,
     media: nfcMedia,
@@ -261,7 +263,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
     ],
     included: [
       "Printed QR profile card",
-      "Lifetime digital profile link",
+      `${CARD_VALIDITY_LABEL} validity`,
       "Free design assistance on WhatsApp",
       "Ready-to-hand packaging",
     ],
