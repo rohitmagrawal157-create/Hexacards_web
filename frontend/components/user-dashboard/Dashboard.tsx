@@ -8,6 +8,8 @@ import {
   ArrowUpRight,
   Clock3,
   CreditCard,
+  Download,
+  ExternalLink,
   Eye,
   FolderOpen,
   Headphones,
@@ -48,7 +50,7 @@ import {
   type UserDashboardCard,
 } from "@/lib/user-cards";
 import { ensureOrderCardProfile } from "@/lib/order-card-profile";
-import { buildCardQrImageUrl } from "@/lib/order-card";
+import { buildCardQrImageUrl, downloadCardQrImage } from "@/lib/order-card";
 import {
   deleteCardMessage,
   fetchCardMessages,
@@ -582,6 +584,7 @@ function CardsPanel({
   const [qrCard, setQrCard] = useState<UserDashboardCard | null>(null);
   const [detailsOrder, setDetailsOrder] = useState<HexaOrder | null>(null);
   const [copied, setCopied] = useState(false);
+  const [qrDownloading, setQrDownloading] = useState(false);
   const [profileTick, setProfileTick] = useState(0);
 
   useEffect(() => {
@@ -617,6 +620,18 @@ function CardsPanel({
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
       setCopied(false);
+    }
+  }
+
+  async function handleDownloadQr(card: UserDashboardCard) {
+    if (qrDownloading) return;
+    setQrDownloading(true);
+    try {
+      await downloadCardQrImage(card.publicUrl, card.slug || card.name);
+    } catch {
+      window.alert("Could not download the QR code. Please try again.");
+    } finally {
+      setQrDownloading(false);
     }
   }
 
@@ -833,9 +848,21 @@ function CardsPanel({
               />
             </div>
 
-            <p className="mt-3 break-all text-center font-mono text-[11px] text-[#5c5346]">
-              {qrCard.publicUrl}
-            </p>
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-black/[0.06] bg-[#FAFAF8] px-3 py-2">
+              <p className="min-w-0 flex-1 break-all font-mono text-[11px] leading-snug text-[#5c5346]">
+                {qrCard.publicUrl}
+              </p>
+              <a
+                href={qrCard.publicUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#BC7C10] ring-1 ring-black/[0.06] transition-colors hover:bg-white"
+                aria-label="Open link in new tab"
+                title="Open in new tab"
+              >
+                <ExternalLink className="h-4 w-4" strokeWidth={2} />
+              </a>
+            </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
@@ -845,14 +872,15 @@ function CardsPanel({
               >
                 {copied ? "Copied" : "Copy link"}
               </button>
-              <a
-                href={qrCard.publicUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center rounded-lg bg-[#BC7C10] px-3 py-2.5 text-[13px] font-bold text-white hover:bg-[#9a650d]"
+              <button
+                type="button"
+                onClick={() => void handleDownloadQr(qrCard)}
+                disabled={qrDownloading}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#BC7C10] px-3 py-2.5 text-[13px] font-bold text-white hover:bg-[#9a650d] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Open link
-              </a>
+                <Download className="h-4 w-4" strokeWidth={2} />
+                {qrDownloading ? "Saving…" : "Download QR"}
+              </button>
             </div>
           </div>
         </div>

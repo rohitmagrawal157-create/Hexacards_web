@@ -1109,6 +1109,47 @@ export function buildCardQrImageUrl(
   });
 }
 
+/** Save the styled QR as a PNG file (dashboard download). */
+export async function downloadCardQrImage(
+  liveUrl: string,
+  filenameBase: string,
+): Promise<void> {
+  const svgDataUrl = buildCardQrImageUrl(liveUrl, 800);
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("QR image failed to load"));
+    img.src = svgDataUrl;
+  });
+
+  const size = 800;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, size, size);
+  ctx.drawImage(img, 0, 0, size, size);
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/png");
+  });
+  if (!blob) throw new Error("QR export failed");
+
+  const safeName =
+    filenameBase.replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "") || "card";
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = `${safeName}-qr.png`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 function hexLuminance(hex: string) {
   const raw = hex.replace("#", "").padEnd(6, "0").slice(0, 6);
   const r = parseInt(raw.slice(0, 2), 16);
