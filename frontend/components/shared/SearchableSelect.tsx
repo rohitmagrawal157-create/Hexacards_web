@@ -147,7 +147,8 @@ export default function SearchableSelect({
       <input
         id={fieldId}
         tabIndex={-1}
-        aria-hidden
+        aria-hidden={true}
+        readOnly
         required={required}
         value={value}
         onChange={() => {}}
@@ -161,7 +162,9 @@ export default function SearchableSelect({
           type="button"
           disabled={disabled || loading}
           aria-haspopup="listbox"
-          aria-expanded={open}
+          {...(open
+            ? { "aria-expanded": true as const }
+            : { "aria-expanded": false as const })}
           onClick={() => !disabled && !loading && setOpen((v) => !v)}
           onKeyDown={onTriggerKey}
           className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
@@ -254,7 +257,9 @@ export default function SearchableSelect({
                     type="button"
                     data-index={index}
                     role="option"
-                    aria-selected={isSelected}
+                    {...(isSelected
+                      ? { "aria-selected": true as const }
+                      : { "aria-selected": false as const })}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => select(opt.value)}
                     className={`flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm transition-colors ${

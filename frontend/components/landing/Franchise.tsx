@@ -10,7 +10,7 @@ export default function Franchise() {
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1c1a17] to-[#0f0e0c] p-8 shadow-[0_20px_50px_rgba(15,14,12,0.18)] sm:p-10">
           {/* Subtle gold glow so the dark panel doesn't feel flat */}
-          <div className="pointer-events-none absolute inset-0" aria-hidden>
+          <div className="pointer-events-none absolute inset-0" aria-hidden={true}>
             <div className="absolute -top-1/2 right-0 h-full w-1/2 bg-[radial-gradient(ellipse_at_center,rgba(188,124,16,0.15),transparent_70%)] blur-2xl" />
           </div>
 

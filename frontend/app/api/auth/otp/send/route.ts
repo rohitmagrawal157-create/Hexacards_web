@@ -1,12 +1,17 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
+import {
+  isNimbusSmsConfigured,
+  sendNimbusOtpSms,
+} from "@/lib/server/nimbus-sms";
 import type { OtpSendBody, UserRow } from "@/lib/server/user-types";
 import {
   generateOtp,
-  isDemoOtpMode,
+  isSmsOtpEnabled,
   isValidIndianMobile,
   mapUser,
   normalizeMobile,
+  OTP_VALID_MINUTES,
   otpExpiryIso,
   USER_SAFE_COLS,
 } from "@/lib/users-db";
@@ -15,27 +20,42 @@ import {
  * POST /api/auth/otp/send
  * Body: { firstName, lastName, mobile }
  *
- * Creates user row if first visit, then writes otp + otp_expiry.
- * In development, demoOtp is included in the response (always 123456).
+ * 1. Validate name + Indian mobile
+ * 2. Generate 6-digit OTP + expiry (10 min)
+ * 3. Create or update user row in Supabase
+ * 4. Send SMS via Nimbus (enabled when OTP_SMS_ENABLED=true or credentials are set)
  */
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as OtpSendBody;
 
     const firstName = String(body.firstName ?? body.first_name ?? "").trim();
-    const lastName  = String(body.lastName  ?? body.last_name  ?? "").trim();
-    const mobile    = normalizeMobile(String(body.mobile ?? ""));
+    const lastName = String(body.lastName ?? body.last_name ?? "").trim();
+    const mobile = normalizeMobile(String(body.mobile ?? ""));
 
     if (!firstName) return jsonError(400, "first_name is required");
     if (!isValidIndianMobile(mobile)) {
       return jsonError(400, "Valid 10-digit mobile number is required");
     }
 
-    const otp       = generateOtp();
-    const otpExpiry = otpExpiryIso(5);
-    const supabase  = getSupabaseAdmin();
+    if (!isSmsOtpEnabled()) {
+      return jsonError(
+        503,
+        "SMS OTP is not configured on the server. Set Nimbus credentials in environment variables.",
+      );
+    }
 
-    // Check if user already exists by mobile
+    if (!isNimbusSmsConfigured()) {
+      return jsonError(
+        503,
+        "SMS OTP is enabled but Nimbus credentials are missing on the server",
+      );
+    }
+
+    const otp = generateOtp();
+    const otpExpiry = otpExpiryIso(OTP_VALID_MINUTES);
+    const supabase = getSupabaseAdmin();
+
     const { data: existing, error: findErr } = await supabase
       .from("users")
       .select("user_id")
@@ -49,10 +69,14 @@ export async function POST(request: Request) {
     let row: UserRow;
 
     if (existing?.user_id) {
-      // Existing user — refresh name + OTP
       const { data, error } = await supabase
         .from("users")
-        .update({ first_name: firstName, last_name: lastName, otp, otp_expiry: otpExpiry })
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          otp,
+          otp_expiry: otpExpiry,
+        })
         .eq("user_id", existing.user_id)
         .select(USER_SAFE_COLS)
         .single();
@@ -60,12 +84,11 @@ export async function POST(request: Request) {
       if (error) return jsonError(500, "Failed to update OTP", error.message);
       row = data as UserRow;
     } else {
-      // New user — insert
       const { data, error } = await supabase
         .from("users")
         .insert({
           first_name: firstName,
-          last_name:  lastName,
+          last_name: lastName,
           mobile,
           otp,
           otp_expiry: otpExpiry,
@@ -82,13 +105,20 @@ export async function POST(request: Request) {
       row = data as UserRow;
     }
 
-    const isDev = process.env.NODE_ENV !== "production";
-    const showDemo = isDev || isDemoOtpMode();
+    const sms = await sendNimbusOtpSms(mobile, otp);
+    if (!sms.ok) {
+      console.error("Nimbus OTP SMS failed", sms.error, sms.providerResponse);
+      return jsonError(
+        502,
+        sms.error || "Could not send OTP SMS. Please try again in a moment.",
+      );
+    }
 
     return jsonOk({
-      user:         mapUser(row),
+      user: mapUser(row),
       otpExpiresAt: otpExpiry,
-      ...(showDemo ? { demoOtp: otp } : {}),
+      otpValidMinutes: OTP_VALID_MINUTES,
+      smsSent: true,
     });
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");

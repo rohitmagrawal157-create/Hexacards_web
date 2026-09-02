@@ -30,6 +30,7 @@ import {
 } from "@/lib/order-thank-you";
 import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
 import { allocateOrderCardSlug } from "@/lib/order-card";
+import { buildPublicCardUrl } from "@/lib/site-url";
 import { isEditableCardOrder } from "@/lib/user-cards";
 import { syncUserProfileFromCheckout } from "@/lib/user-profile-sync";
 import LocationSelects, {
@@ -359,7 +360,7 @@ export default function Checkout() {
       let withCardMeta = order;
       if (needsDigitalProfile) {
         const finalSlug = await allocateOrderCardSlug(cardName);
-        const liveUrl = `https://hexacards.com/${finalSlug}`;
+        const liveUrl = buildPublicCardUrl(finalSlug, "canonical");
         withCardMeta =
           (await updateOrder(order.id, {
             cardSlug: finalSlug,

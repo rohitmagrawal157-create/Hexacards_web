@@ -207,10 +207,12 @@ export function cardDtoToProfile(
         resolveCardImageSrc(card.logo, fallback.appearance.logoImage || DEFAULT_CARD_AVATAR),
       ),
       coverImage: normalizeCoverImage(
-        resolveCardImageSrc(
-          card.bgUrl || card.bgImg,
-          fallback.appearance.coverImage || DEFAULT_CARD_BANNER,
-        ),
+        card.bgUrl || card.bgImg
+          ? resolveCardImageSrc(
+              card.bgUrl || card.bgImg,
+              fallback.appearance.coverImage || DEFAULT_CARD_BANNER,
+            )
+          : fallback.appearance.coverImage || DEFAULT_CARD_BANNER,
       ),
       layout: layoutFromThemeId(card.themeId),
     },

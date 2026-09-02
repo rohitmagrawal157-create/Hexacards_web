@@ -40,6 +40,9 @@ import Compact from "@/components/Layouts/compact";
 import Social from "@/components/Layouts/social";
 import Minimalist from "@/components/Layouts/Minimalist";
 import CardLayoutBottom from "@/components/Layouts/CardLayoutBottom";
+import { cardShellClass } from "@/lib/public-card-shell";
+import { buildPublicCardUrl } from "@/lib/site-url";
+import { useCoverImageUrl } from "@/lib/use-cover-image";
 import CardShareModal from "@/components/Layouts/CardShareModal";
 
 type ProfileBannerProps = {
@@ -48,6 +51,8 @@ type ProfileBannerProps = {
   user?: { name: string };
   slug?: string;
   compact?: boolean;
+  /** When true, hide owner-only controls and edit hints (shared public link). */
+  publicView?: boolean;
   onUploadBackground?: (file: File) => void;
   onUploadProfile?: (file: File) => void;
 };
@@ -56,6 +61,8 @@ export default function ProfileBanner({
   profile,
   userName,
   user,
+  slug,
+  publicView = false,
   onUploadBackground,
   onUploadProfile,
 }: ProfileBannerProps) {
@@ -84,7 +91,13 @@ export default function ProfileBanner({
       : "");
   const services = profile.business.services.filter((s) => s.trim());
   const hasBrochure = Boolean(profile.contact.brochureName);
-  const shareUrl = cardPublicUrl(profile);
+  const shareUrl = slug
+    ? buildPublicCardUrl(slug, "canonical")
+    : cardPublicUrl(profile);
+  const coverUrl = useCoverImageUrl(
+    profile.appearance.coverImage,
+    profile.appearance.shareImage,
+  );
 
   const ctaClass =
     "flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-semibold text-white transition-opacity hover:opacity-90";
@@ -124,11 +137,6 @@ export default function ProfileBanner({
       "noopener,noreferrer",
     );
   }
-
-  const coverUrl =
-    profile.appearance.coverImage ||
-    profile.appearance.shareImage ||
-    DEFAULT_CARD_BANNER;
 
   const fullAddress = [
     profile.contact.address,
@@ -238,6 +246,7 @@ export default function ProfileBanner({
         />
         <Basic
           profile={profile}
+          publicView={publicView}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -280,6 +289,7 @@ export default function ProfileBanner({
         />
         <Modern
           profile={profile}
+          publicView={publicView}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -322,6 +332,7 @@ export default function ProfileBanner({
         />
         <Compact
           profile={profile}
+          publicView={publicView}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -364,6 +375,7 @@ export default function ProfileBanner({
         />
         <Social
           profile={profile}
+          publicView={publicView}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -406,6 +418,7 @@ export default function ProfileBanner({
         />
         <Minimalist
           profile={profile}
+          publicView={publicView}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -423,7 +436,7 @@ export default function ProfileBanner({
 
   return (
     <div
-      className="mx-auto max-w-[520px] overflow-hidden rounded-2xl border-2 bg-white shadow-[0_12px_40px_rgba(0,0,0,0.1)]"
+      className={cardShellClass(publicView)}
       style={{ borderColor: accent }}
     >
       <input
@@ -691,6 +704,10 @@ export default function ProfileBanner({
           Icon,
           href,
         }))}
+        publicView={publicView}
+        showBusiness={
+          publicView ? Boolean(about.trim() || services.length > 0) : true
+        }
       />
 
       <CardShareModal

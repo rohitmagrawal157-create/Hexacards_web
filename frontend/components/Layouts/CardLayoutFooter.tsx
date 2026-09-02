@@ -5,16 +5,24 @@ import { ChevronUp } from "lucide-react";
 
 type CardLayoutFooterProps = {
   accent: string;
+  publicView?: boolean;
 };
 
 /**
  * Shared Hexa footer used by every card layout (Classic / Basic / Modern / Compact).
  */
-export default function CardLayoutFooter({ accent }: CardLayoutFooterProps) {
+export default function CardLayoutFooter({
+  accent,
+  publicView = false,
+}: CardLayoutFooterProps) {
   return (
     <div
-      className="relative border-t-2 bg-[#f7f7f5] px-4 pt-6 pb-8 text-center"
-      style={{ borderColor: accent }}
+      className={`relative bg-[#f7f7f5] px-4 pt-6 pb-8 text-center ${
+        publicView
+          ? "border-t border-black/[0.06] pb-[max(2rem,env(safe-area-inset-bottom))]"
+          : "border-t-2"
+      }`}
+      style={publicView ? undefined : { borderColor: accent }}
     >
       <Image
         src="/Images/Hexacards.png"

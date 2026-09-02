@@ -39,9 +39,12 @@ import {
   resolveCardAccent,
   type HexaCardProfile,
 } from "@/lib/card-profile";
+import { cardShellClass } from "@/lib/public-card-shell";
+import { useCoverImageUrl } from "@/lib/use-cover-image";
 
 type ModernProps = {
   profile: HexaCardProfile;
+  publicView?: boolean;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -137,6 +140,7 @@ function QuickIcon({
  */
 export default function Modern({
   profile,
+  publicView = false,
   onChangeBackground,
   onChangeProfile,
 }: ModernProps) {
@@ -155,7 +159,7 @@ export default function Modern({
     .filter(Boolean)
     .join(" - ");
   const country = profile.contact.countryCode || "IN";
-  const coverUrl = profile.appearance.coverImage || DEFAULT_CARD_BANNER;
+  const coverUrl = useCoverImageUrl(profile.appearance.coverImage);
   const avatarUrl =
     profile.appearance.logoImage || DEFAULT_CARD_AVATAR;
   const mobile = profile.contact.mobile?.trim() || "";
@@ -227,10 +231,9 @@ export default function Modern({
 
   return (
     <div
-      className="mx-auto max-w-[520px] overflow-hidden rounded-2xl border-2 bg-[#F3F5FA] shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
+      className={cardShellClass(publicView)}
       style={{ borderColor: accent }}
     >
-      {/* WhatsApp share bar */}
       <div
         className="flex items-center justify-between gap-2 border-b bg-white px-4 py-2"
         style={{ borderColor: accentSoft }}
@@ -470,7 +473,9 @@ export default function Modern({
                 {about ||
                   (profile.contact.businessName
                     ? `${profile.contact.businessName} — connect instantly through this Hexa digital card.`
-                    : "Add company details in Edit card.")}
+                    : publicView
+                      ? ""
+                      : "Add company details in Edit card.")}
               </p>
               <h4 className="mt-4 text-sm font-semibold text-[#141414]">
                 Services / Products
@@ -519,7 +524,7 @@ export default function Modern({
         <CardContactForm accentColor={accent} />
       </div>
 
-      <CardLayoutFooter accent={accent} />
+      <CardLayoutFooter accent={accent} publicView={publicView} />
 
       <CardShareModal
         open={shareModalOpen}

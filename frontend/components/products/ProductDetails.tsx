@@ -29,7 +29,7 @@ const trustBadges = [
 
 function IndiaFlag({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 30 20" className={className} aria-hidden role="img">
+    <svg viewBox="0 0 30 20" className={className} aria-hidden={true} role="img">
       <rect width="30" height="20" fill="#FF9933" />
       <rect y="6.67" width="30" height="6.66" fill="#FFFFFF" />
       <rect y="13.33" width="30" height="6.67" fill="#138808" />
@@ -143,7 +143,7 @@ export default function ProductDetails({
                 type="button"
                 onClick={() => setActiveIndex(i)}
                 aria-label={`View media ${i + 1}`}
-                aria-current={i === activeIndex}
+                {...(i === activeIndex ? { "aria-current": true as const } : {})}
                 className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border-2 bg-white transition-colors sm:h-16 sm:w-16 ${
                   i === activeIndex
                     ? "border-[#BC7C10]"

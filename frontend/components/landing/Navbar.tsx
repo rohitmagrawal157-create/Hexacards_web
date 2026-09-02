@@ -7,6 +7,7 @@ import Image from "next/image";
 import { ChevronDown, LogOut, UserRound } from "lucide-react";
 import { navLinks } from "./data";
 import { clearAuthUser, getAuthUser, type HexaAuthUser } from "@/lib/auth";
+import { useHydrated } from "@/lib/use-hydrated";
 
 function linkIsActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
@@ -15,6 +16,7 @@ function linkIsActive(pathname: string, href: string) {
 
 export default function Navbar() {
   const pathname = usePathname();
+  const hydrated = useHydrated();
   const [open, setOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
@@ -23,6 +25,7 @@ export default function Navbar() {
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (!hydrated) return;
     const sync = () => setUser(getAuthUser());
     sync();
     window.addEventListener("hexa-auth-change", sync);
@@ -31,7 +34,7 @@ export default function Navbar() {
       window.removeEventListener("hexa-auth-change", sync);
       window.removeEventListener("storage", sync);
     };
-  }, [pathname]);
+  }, [pathname, hydrated]);
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -169,7 +172,9 @@ export default function Navbar() {
                   onClick={() => setUserMenuOpen((v) => !v)}
                   aria-label="User menu"
                   aria-haspopup="menu"
-                  aria-expanded={userMenuOpen}
+                  {...(userMenuOpen
+                    ? { "aria-expanded": true as const }
+                    : { "aria-expanded": false as const })}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#1a1a1a] transition-colors hover:bg-black/[0.04]"
                 >
                   <UserRound className="h-4 w-4" />
@@ -212,13 +217,15 @@ export default function Navbar() {
             <button
               type="button"
               className="flex h-9 w-9 items-center justify-center text-[#1a1a1a] lg:hidden"
-              aria-expanded={open}
+              {...(open
+                ? { "aria-expanded": true as const }
+                : { "aria-expanded": false as const })}
               aria-controls="mobile-nav"
               aria-label={open ? "Close menu" : "Open menu"}
               onClick={() => setOpen((v) => !v)}
             >
               <span className="sr-only">Menu</span>
-              <span className="flex w-5 flex-col gap-1.5" aria-hidden>
+              <span className="flex w-5 flex-col gap-1.5" aria-hidden={true}>
                 <span
                   className={`h-0.5 w-full bg-current transition-transform duration-300 ${open ? "translate-y-2 rotate-45" : ""}`}
                 />
@@ -242,7 +249,7 @@ export default function Navbar() {
               : "pointer-events-none mt-0 max-h-0 opacity-0"
           }`}
           aria-label="Mobile"
-          aria-hidden={!open}
+          {...(!open ? { "aria-hidden": true as const } : {})}
         >
           <ul className="rounded-3xl border border-[#e8e8e8] bg-white p-4 shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
             {navLinks.map((link) => {
@@ -254,7 +261,9 @@ export default function Navbar() {
                       <button
                         type="button"
                         className="flex w-full items-center justify-between rounded-xl px-3 py-3.5 text-left text-base font-semibold text-[#141414]"
-                        aria-expanded={mobileExpanded === link.label}
+                        {...(mobileExpanded === link.label
+                          ? { "aria-expanded": true as const }
+                          : { "aria-expanded": false as const })}
                         onClick={() =>
                           setMobileExpanded((current) =>
                             current === link.label ? null : link.label,

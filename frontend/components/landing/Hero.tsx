@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Playfair_Display } from "next/font/google";
 import { ArrowRight } from "lucide-react";
@@ -14,7 +14,7 @@ const playfair = Playfair_Display({
 });
 
 const SLIDE_BG = "bg-white";
-const HERO_VIDEO = "/Hero.mp4";
+const HERO_VIDEO = "/Hero1.mp4";
 
 const DEFAULT_STATS = [
   { value: "1M+", label: "Connections made" },
@@ -62,40 +62,26 @@ const slide: Slide = {
 
 function HeroVideo() {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-
-    const markReady = () => setReady(true);
-
-    video.addEventListener("canplay", markReady);
-    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-      markReady();
-    }
-
     void video.play().catch(() => {
-      // Autoplay may be blocked; still reveal once frames are available.
+      // Autoplay may be blocked in some browsers.
     });
-
-    return () => {
-      video.removeEventListener("canplay", markReady);
-    };
   }, []);
 
   return (
-    <div className="relative w-full max-w-[520px] overflow-hidden rounded-2xl bg-white">
+    <div className="relative w-full max-w-[700px] sm:max-w-[780px] lg:max-w-[880px] xl:max-w-[960px]">
       <video
         ref={videoRef}
+        suppressHydrationWarning
         autoPlay
         muted
         loop
         playsInline
-        preload="auto"
-        className={`pointer-events-none h-auto w-full object-contain transition-opacity duration-500 ${
-          ready ? "opacity-100" : "opacity-0"
-        }`}
+        preload="metadata"
+        className="pointer-events-none block h-auto w-full min-h-[360px] object-contain sm:min-h-[420px] lg:min-h-[500px]"
         aria-label="Hexa Cards NFC card and digital profile demonstration"
       >
         <source src={HERO_VIDEO} type="video/mp4" />
@@ -114,7 +100,7 @@ export default function Hero() {
       <div className={`relative overflow-visible ${SLIDE_BG} min-h-[780px]`}>
         <HeroHexBackground />
 
-        <div className="relative z-10 mx-auto grid h-full max-w-6xl grid-cols-1 items-center gap-12 px-6 pt-10 pb-20 sm:px-10 lg:grid-cols-2 lg:gap-16 lg:pt-12 lg:pb-24">
+        <div className="relative z-10 mx-auto grid h-full max-w-6xl grid-cols-1 items-center gap-12 px-6 pt-10 pb-20 sm:px-10 lg:grid-cols-2 lg:items-start lg:gap-12 lg:pt-8 lg:pb-24 xl:gap-16">
           <div className="hero-rise-stagger">
             <span
               className={`inline-flex items-center gap-2 rounded-full ${slide.badgeBg} px-5 py-2.5 text-sm font-semibold ${slide.badgeText}`}
@@ -170,7 +156,7 @@ export default function Hero() {
             </dl>
           </div>
 
-          <div className="hero-card-enter relative z-10 flex min-h-[440px] items-center justify-center lg:min-h-[500px]">
+          <div className="relative z-10 -mt-2 flex w-full justify-center sm:-mt-4 lg:-mt-8 lg:justify-end xl:-mt-12">
             <HeroVideo />
           </div>
         </div>

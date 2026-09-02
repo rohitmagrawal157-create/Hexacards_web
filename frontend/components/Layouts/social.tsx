@@ -21,9 +21,12 @@ import {
   resolveCardAccent,
   type HexaCardProfile,
 } from "@/lib/card-profile";
+import { cardShellClass } from "@/lib/public-card-shell";
+import { useCoverImageUrl } from "@/lib/use-cover-image";
 
 type SocialProps = {
   profile: HexaCardProfile;
+  publicView?: boolean;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -144,6 +147,7 @@ function GridIconTile({
  */
 export default function Social({
   profile,
+  publicView = false,
   onChangeBackground,
   onChangeProfile,
 }: SocialProps) {
@@ -163,7 +167,7 @@ export default function Social({
   const businessName = profile.contact.businessName.trim();
   const bio = profile.business.about?.trim() || "";
   const services = (profile.business.services ?? []).filter((s) => s.trim());
-  const coverUrl = profile.appearance.coverImage || DEFAULT_CARD_BANNER;
+  const coverUrl = useCoverImageUrl(profile.appearance.coverImage);
   const avatarUrl = profile.appearance.logoImage || DEFAULT_CARD_AVATAR;
   const country = profile.contact.countryCode || "IN";
   const mobile = profile.contact.mobile?.trim() || "";
@@ -326,10 +330,9 @@ export default function Social({
 
   return (
     <div
-      className="mx-auto max-w-[520px] overflow-hidden rounded-2xl border-2 bg-[#FAFAF8] shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
+      className={cardShellClass(publicView)}
       style={{ borderColor: accent }}
     >
-      {/* WhatsApp share bar */}
       <div
         className="flex items-center justify-between gap-2 border-b bg-white px-4 py-2"
         style={{ borderColor: accentTheme.soft }}
@@ -517,7 +520,7 @@ export default function Social({
               <GridIconTile key={item.label} {...item} />
             ))}
           </div>
-        ) : (
+        ) : publicView ? null : (
           <p className="mt-2 text-xs text-[#8a8a92]">
             Add phone, email, WhatsApp, address, or brochure in Edit card.
           </p>
@@ -536,7 +539,7 @@ export default function Social({
               <GridIconTile key={item.label} {...item} />
             ))}
           </div>
-        ) : (
+        ) : publicView ? null : (
           <p className="mt-2 text-xs text-[#8a8a92]">
             Add social links in Edit card.
           </p>
@@ -548,7 +551,7 @@ export default function Social({
       </div>
 
       <div className="mt-4">
-        <CardLayoutFooter accent={accent} />
+        <CardLayoutFooter accent={accent} publicView={publicView} />
       </div>
 
       <CardShareModal

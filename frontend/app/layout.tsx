@@ -28,6 +28,13 @@ export const metadata: Metadata = {
   title: "HexaCards — Interactive Identity Cards",
   description:
     "Tap-first profile cards for teams, events, and directories. Fast, accessible, and built for the web.",
+  icons: {
+    icon: [
+      { url: "/Hexacards_Icons.png", type: "image/png", sizes: "100x100" },
+    ],
+    apple: [{ url: "/Hexacards_Icons.png", type: "image/png", sizes: "100x100" }],
+    shortcut: "/Hexacards_Icons.png",
+  },
 };
 
 export default function RootLayout({
@@ -39,6 +46,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${syne.variable} ${plusJakarta.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}

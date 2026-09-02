@@ -273,7 +273,7 @@ function LayoutPhoneCarousel() {
             <div
               key={`${layout.src}-${i}`}
               className="relative h-full w-full shrink-0"
-              aria-hidden={i !== trackIndex}
+              {...(i !== trackIndex ? { "aria-hidden": true as const } : {})}
             >
               <Image
                 src={layout.src}
@@ -306,7 +306,7 @@ function LayoutPhoneCarousel() {
               key={layout.src}
               type="button"
               role="tab"
-              aria-selected={i === realIndex}
+              {...(i === realIndex ? { "aria-selected": true as const } : { "aria-selected": false })}
               aria-label={`Show ${layout.label} layout`}
               onClick={() => goToReal(i)}
               className={`h-1.5 rounded-full transition-all duration-300 ${

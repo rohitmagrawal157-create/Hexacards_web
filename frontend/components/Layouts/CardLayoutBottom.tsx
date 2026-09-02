@@ -20,6 +20,7 @@ type CardLayoutBottomProps = {
   showContactForm?: boolean;
   showBusiness?: boolean;
   showSocials?: boolean;
+  publicView?: boolean;
 };
 
 /**
@@ -35,6 +36,7 @@ export default function CardLayoutBottom({
   showContactForm = true,
   showBusiness = true,
   showSocials = true,
+  publicView = false,
 }: CardLayoutBottomProps) {
   return (
     <>
@@ -55,7 +57,9 @@ export default function CardLayoutBottom({
           </div>
           <p className="mt-2 max-w-full text-sm leading-relaxed break-words [overflow-wrap:anywhere] text-[#4a4a52]">
             {about ||
-              "Add company details in the Company tab — about your business and services will show here."}
+              (publicView
+                ? ""
+                : "Add company details in the Company tab — about your business and services will show here.")}
           </p>
 
           <h4 className="mt-4 text-sm font-bold text-[#0f0f12]">
@@ -77,7 +81,7 @@ export default function CardLayoutBottom({
                 </li>
               ))}
             </ul>
-          ) : (
+          ) : publicView ? null : (
             <p className="mt-2 text-xs text-[#8a8a92]">
               Add services or products from the Company tab.
             </p>
@@ -114,7 +118,7 @@ export default function CardLayoutBottom({
         </div>
       ) : null}
 
-      <CardLayoutFooter accent={accent} />
+      <CardLayoutFooter accent={accent} publicView={publicView} />
     </>
   );
 }

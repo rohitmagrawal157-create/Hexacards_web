@@ -7,6 +7,30 @@
 const UPLOADS_DIR = "/uploads/cards";
 const IMAGES_DIR = "/Images";
 
+/** Default Supabase Storage bucket — public, not a secret. */
+export const DEFAULT_CARD_IMAGES_BUCKET = "card-images";
+
+/** Public Supabase Storage URL for an uploaded card image file name. */
+export function getSupabaseCardImagePublicUrl(
+  filename: string,
+  bucket = DEFAULT_CARD_IMAGES_BUCKET,
+): string | null {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
+  if (!supabaseUrl) return null;
+
+  const safeName =
+    filename.split("/").filter(Boolean).pop()?.split("?")[0] || filename;
+  if (!safeName) return null;
+
+  return `${supabaseUrl}/storage/v1/object/public/${bucket}/${encodeURIComponent(safeName)}`;
+}
+
+function preferLocalUploadPath(): boolean {
+  if (process.env.VERCEL) return false;
+  if (process.env.NODE_ENV === "production") return false;
+  return true;
+}
+
 /** Extract bare file name from a path, URL, or name. */
 export function cardImageFileName(
   src: string | null | undefined,
@@ -45,6 +69,10 @@ export function resolveCardImageSrc(
 
   const name = cardImageFileName(raw) || raw;
   if (isUploadedCardFile(name)) {
+    if (!preferLocalUploadPath()) {
+      const remote = getSupabaseCardImagePublicUrl(name);
+      if (remote) return remote;
+    }
     return `${UPLOADS_DIR}/${name}`;
   }
   return `${IMAGES_DIR}/${name}`;

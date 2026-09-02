@@ -3,6 +3,7 @@ import { isDefaultLogoImage } from "@/lib/card-profile";
 import { blobUrlToDataUrl } from "@/lib/user-cards";
 import { getCachedOrderLogo, isOrderLogoRef, loadOrderLogo } from "@/lib/order-logo-store";
 import { styledQrDataUri } from "@/lib/styled-qr";
+import { buildPublicCardUrl } from "@/lib/site-url";
 
 export type CardBodyType = "black" | "white";
 export type CardMetalFinish = "gold" | "silver";
@@ -1092,7 +1093,7 @@ export function resolveOrderLiveUrl(order: HexaOrder): {
   const liveUrl =
     order.cardUrl?.trim() ||
     order.cardDesign?.liveUrl?.trim() ||
-    `https://hexacards.com/${slug}`;
+    buildPublicCardUrl(slug, "canonical");
   return { slug, liveUrl };
 }
 

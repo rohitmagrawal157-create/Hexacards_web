@@ -1,0 +1,149 @@
+The Nimbus SMS OTP flow is integrated into your HexaCards codebase. Here is how it works end to end, mapped from your PHP example to the current implementation.
+
+Your PHP code → our integration
+Your PHP snippet does this:
+
+PHP	Our code
+$EntityID, $TemplateID
+Env vars NIMBUS_SMS_ENTITY_ID, NIMBUS_SMS_TEMPLATE_ID
+$otp, $cust_mobile
+Generated server-side; mobile from login form
+urlencode($smsString)
+URLSearchParams (auto URL-encodes)
+file_get_contents("http://nimbusit.biz/...")
+fetch() in frontend/lib/server/nimbus-sms.ts
+$result['Status'] == "OK"
+nimbusStatusOk() checks Status === "OK"
+The SMS text matches your DLT template exactly:
+
+Your Hexa Cards mobile number verification OTP is {otp}. This OTP is valid for 10 minutes. Do not share this OTP with anyone. https://hexacards.com
+
+Step-by-step OTP flow
+alt [OTP_SMS_ENABLED=true]
+[Demo mode (SMS off)]
+Enter name + mobile → Send OTP
+{ firstName, lastName, mobile }
+Validate mobile (10-digit Indian)
+Generate 6-digit OTP + 10 min expiry
+Create/update user with otp + otp_expiry
+GET SendSingleApi (HEXACR template)
+SMS with OTP
+Returns demoOtp in response
+{ smsSent, otpValidMinutes }
+Enter OTP → Verify
+{ mobile, otp }
+Match OTP + check expiry
+Clear OTP, set is_mobile=1
+Create user_session
+user + session
+setAuthUser() → redirect to dashboard
+User
+Login.tsx
+POST /api/auth/otp/send
+Supabase users
+Nimbus SMS API
+POST /api/auth/otp/verify
+
+
+
+Step 1 — User enters details (Login.tsx)
+On /login, the user enters:
+
+First name (required)
+Last name (optional)
+10-digit Indian mobile number
+Clicking Send OTP calls POST /api/auth/otp/send.
+
+Step 2 — Send OTP API (app/api/auth/otp/send/route.ts)
+Validates first name and mobile (6–9 + 9 digits).
+If OTP_SMS_ENABLED=true, checks Nimbus credentials exist.
+Generates a 6-digit OTP (random when SMS is on; fixed 123456 in demo mode).
+Sets expiry to 10 minutes (OTP_VALID_MINUTES = 10).
+Upserts the user in Supabase:
+Existing mobile → updates name + OTP
+New mobile → creates user row
+If SMS enabled → calls Nimbus via sendNimbusOtpSms().
+Returns { smsSent, otpValidMinutes, user } (and demoOtp only when SMS is off).
+
+
+Step 3 — Nimbus SMS (lib/server/nimbus-sms.ts)
+Builds the same URL as your PHP example:
+
+https://nimbusit.biz/api/SmsApi/SendSingleApi
+  ?UserID=hexabiz
+  &Password=...
+  &SenderID=HEXACR
+  &Phno=9693946929
+  &Msg=Your+Hexa+Cards+mobile+number+verification+OTP+is+121233...
+  &EntityID=1701178799996228439
+  &TemplateID=1777178824647145094
+Uses HTTPS (your sample URL used HTTPS too).
+Password stays in env — not hardcoded in source.
+Parses JSON response; succeeds when Status === "OK".
+On failure → API returns 502 with an error message.
+
+
+Step 4 — User enters OTP (Login.tsx)
+Shows: "OTP sent via SMS to +91 … Valid for 10 minutes."
+60-second resend cooldown.
+In demo mode, auto-fills 123456 and shows a hint.
+
+
+Step 5 — Verify OTP API (app/api/auth/otp/verify/route.ts)
+Loads user by mobile from Supabase.
+Compares entered OTP with stored users.otp.
+Rejects if expired (otp_expiry passed).
+Clears OTP from DB (otp = null, otp_expiry = null).
+Sets is_mobile = 1 (verified).
+Creates a user_session row (session ID + token).
+Returns user + session to the client.
+
+
+Step 6 — Login complete (Login.tsx)
+Saves session via setAuthUser().
+Redirects to dashboard or checkout (?next= param).
+Enable real SMS (production)
+Add to frontend/.env.local:
+
+OTP_SMS_ENABLED=true
+NIMBUS_SMS_USER_ID=hexabiz
+NIMBUS_SMS_PASSWORD=K97%DSb*
+NIMBUS_SMS_SENDER_ID=HEXACR
+NIMBUS_SMS_ENTITY_ID=1701178799996228439
+NIMBUS_SMS_TEMPLATE_ID=1777178824647145094
+Restart the dev server after changing env vars.
+
+Local testing without SMS (default):
+
+OTP_SMS_ENABLED=false
+OTP_DEMO_CODE=123456
+OTP 123456 is returned in the API response and auto-filled in the UI.
+
+Key files
+File	Role
+frontend/lib/server/nimbus-sms.ts
+Nimbus API client
+frontend/app/api/auth/otp/send/route.ts
+Generate + save + send OTP
+frontend/app/api/auth/otp/verify/route.ts
+Validate OTP + create session
+frontend/lib/users-db.ts
+OTP generation, expiry, SMS flag
+frontend/components/products/Login.tsx
+Login UI (send / verify)
+frontend/.env.example
+Documented env vars
+Security notes
+Never commit NIMBUS_SMS_PASSWORD to git — use .env.local only
+OTP is stored in Supabase until verified, then cleared.
+OTP expires after 10 minutes (matches SMS template).
+demoOtp is only returned when OTP_SMS_ENABLED=false.
+How to test
+Demo mode: Go to /login, enter mobile, use OTP 123456.
+Live SMS: Set OTP_SMS_ENABLED=true + Nimbus credentials, restart server, use your real mobile, check SMS, enter the code.
+If SMS fails, check server logs for Nimbus OTP SMS failed — that includes the provider error response.
+
+Want me to add the credentials to your .env.local and run a live SMS test, or commit these changes?
+
+
+/var/folders/hc/__l_zpjn1t99c8f0z202y9300000gn/T/TemporaryItems/NSIRD_screencaptureui_DIrwKN/Screenshot 2026-09-02 at 4.28.11 PM.png.

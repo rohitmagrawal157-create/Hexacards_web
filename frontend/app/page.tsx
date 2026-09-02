@@ -16,7 +16,6 @@ import {
 export default function HomePage() {
   return (
     <div className="min-h-full bg-white text-[#141414]">
-      <link rel="preload" href="/Hero.mp4" as="video" type="video/mp4" />
       <div className="bg-white">
         <Navbar />
         <Hero />

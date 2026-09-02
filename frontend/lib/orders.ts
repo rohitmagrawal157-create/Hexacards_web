@@ -264,6 +264,20 @@ function orderToApiBody(order: Partial<HexaOrder> & { id?: string }) {
   };
 }
 
+function mergeOrdersIntoLocalCache(
+  incoming: HexaOrder[],
+  ownerPhone?: string,
+) {
+  const ownerKey = ownerPhone ? phoneKey(ownerPhone) : "";
+  const incomingIds = new Set(incoming.map((o) => o.id));
+  const existing = readOrders().filter((order) => {
+    if (incomingIds.has(order.id)) return false;
+    if (ownerKey && orderOwnerKey(order) === ownerKey) return false;
+    return true;
+  });
+  writeOrders([...incoming, ...existing]);
+}
+
 /** Sync local cache (dashboard offline fallback). Prefer fetchOrders() for admin. */
 export function getOrders(): HexaOrder[] {
   return readOrders().sort(
@@ -275,19 +289,29 @@ export function getOrders(): HexaOrder[] {
 export async function fetchOrders(opts?: {
   phone?: string;
   ownerPhone?: string;
+  cardSlug?: string;
 }): Promise<HexaOrder[]> {
   const params = new URLSearchParams();
   if (opts?.ownerPhone) params.set("ownerPhone", opts.ownerPhone);
   if (opts?.phone) params.set("phone", opts.phone);
+  if (opts?.cardSlug) params.set("cardSlug", opts.cardSlug);
   const qs = params.toString();
   const res = await apiFetch<HexaOrder[]>(
     `/api/orders${qs ? `?${qs}` : ""}`,
   );
   if (res.ok && Array.isArray(res.data)) {
     const mapped = res.data.map((d) => dtoToHexaOrder(d as HexaOrder & Record<string, unknown>));
-    if (!opts?.phone && !opts?.ownerPhone && typeof window !== "undefined") {
+    if (typeof window !== "undefined") {
       try {
-        writeOrders(mapped);
+        if (!opts?.phone && !opts?.ownerPhone && !opts?.cardSlug) {
+          writeOrders(mapped);
+        } else if (opts?.ownerPhone) {
+          mergeOrdersIntoLocalCache(mapped, opts.ownerPhone);
+        } else if (opts?.cardSlug) {
+          mergeOrdersIntoLocalCache(mapped);
+        } else if (opts?.phone) {
+          mergeOrdersIntoLocalCache(mapped);
+        }
       } catch {
         // ignore quota
       }
@@ -295,6 +319,19 @@ export async function fetchOrders(opts?: {
     return mapped.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }
+  if (opts?.ownerPhone) return getOrdersForPhone(opts.ownerPhone);
+  if (opts?.cardSlug) {
+    const slug = opts.cardSlug.trim().toLowerCase();
+    return getOrders().filter(
+      (o) => String(o.cardSlug ?? "").trim().toLowerCase() === slug,
+    );
+  }
+  if (opts?.phone) {
+    const digits = phoneKey(opts.phone);
+    return getOrders().filter(
+      (o) => orderOwnerKey(o) === digits || phoneKey(o.phone) === digits,
     );
   }
   return getOrders();
@@ -312,8 +349,22 @@ export async function fetchOrdersForPhone(phone: string): Promise<HexaOrder[]> {
   return fetchOrders({ ownerPhone: digits });
 }
 
+export async function fetchOrderByCardSlug(
+  slug: string,
+): Promise<HexaOrder | null> {
+  const normalized = slug.trim().toLowerCase();
+  if (!normalized) return null;
+  const orders = await fetchOrders({ cardSlug: normalized });
+  return orders[0] ?? null;
+}
+
 export function hasPlacedOrder(phone: string): boolean {
   return getOrdersForPhone(phone).length > 0;
+}
+
+export async function hasPlacedOrderAsync(phone: string): Promise<boolean> {
+  const orders = await fetchOrdersForPhone(phone);
+  return orders.length > 0;
 }
 
 export function getLatestOrder(): HexaOrder | null {

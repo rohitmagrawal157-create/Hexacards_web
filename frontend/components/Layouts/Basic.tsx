@@ -39,6 +39,8 @@ import {
   resolveCardAccent,
   type HexaCardProfile,
 } from "@/lib/card-profile";
+import { cardShellClass } from "@/lib/public-card-shell";
+import { useCoverImageUrl } from "@/lib/use-cover-image";
 
 export type BasicProfile = {
   contact: {
@@ -78,6 +80,7 @@ export type BasicProfile = {
 
 type BasicProps = {
   profile: BasicProfile | HexaCardProfile;
+  publicView?: boolean;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -130,6 +133,7 @@ function normalizeProfile(profile: BasicProfile | HexaCardProfile): BasicProfile
 
 export default function Basic({
   profile: rawProfile,
+  publicView = false,
   onChangeBackground,
   onChangeProfile,
 }: BasicProps) {
@@ -150,7 +154,7 @@ export default function Basic({
     profile.appearance.avatarImage ||
     profile.appearance.logoImage ||
     DEFAULT_CARD_AVATAR;
-  const coverUrl = profile.appearance.coverImage || DEFAULT_CARD_BANNER;
+  const coverUrl = useCoverImageUrl(profile.appearance.coverImage);
   const mobile = profile.contact.mobile?.trim() || "";
   const whatsapp = profile.contact.whatsapp?.trim() || mobile;
   const websiteRaw = profile.contact.website?.trim() || "";
@@ -283,7 +287,7 @@ export default function Basic({
 
   return (
     <div
-      className="mx-auto max-w-[520px] overflow-hidden rounded-2xl border-2 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
+      className={cardShellClass(publicView)}
       style={{ borderColor: accent }}
     >
       {/* WhatsApp share bar */}
@@ -448,7 +452,7 @@ export default function Basic({
               <p className="mt-2 max-w-full text-sm leading-relaxed break-words [overflow-wrap:anywhere] text-[#4a4a52]">
                 {profile.business?.about?.trim() ||
                   profile.business?.name ||
-                  "Add company details in Edit card."}
+                  (publicView ? "" : "Add company details in Edit card.")}
               </p>
 
               <h4 className="mt-5 text-base font-bold text-[#0f0f12]">
@@ -470,7 +474,7 @@ export default function Basic({
                     </li>
                   ))}
                 </ul>
-              ) : (
+              ) : publicView ? null : (
                 <p className="mt-2 text-xs text-[#8a8a92]">
                   Add services from the Business Info tab.
                 </p>
@@ -508,7 +512,7 @@ export default function Basic({
         <CardContactForm accentColor={accent} />
       </div>
 
-      <CardLayoutFooter accent={accent} />
+      <CardLayoutFooter accent={accent} publicView={publicView} />
 
       <CardShareModal
         open={shareModalOpen}

@@ -51,7 +51,9 @@ export default function FAQ() {
                 >
                   <button
                     type="button"
-                    aria-expanded={isOpen}
+                    {...(isOpen
+                      ? { "aria-expanded": true as const }
+                      : { "aria-expanded": false as const })}
                     onClick={() => setOpenIndex(isOpen ? null : index)}
                     className="flex w-full items-start justify-between gap-4 text-left"
                   >

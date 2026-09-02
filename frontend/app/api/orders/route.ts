@@ -45,13 +45,18 @@ export async function GET(request: Request) {
     const phone = searchParams.get("phone");
     const ownerPhone = searchParams.get("ownerPhone");
 
+    const cardSlug = searchParams.get("cardSlug");
+
     const supabase = getSupabaseAdmin();
     let query = supabase
       .from("orders")
       .select("*")
       .order("ord_date", { ascending: false });
 
-    if (ownerPhone) {
+    if (cardSlug) {
+      const slug = cardSlug.trim().toLowerCase();
+      if (slug) query = query.eq("card_slug", slug);
+    } else if (ownerPhone) {
       const digits = ownerPhone.replace(/\D/g, "").slice(-10);
       if (digits) query = query.eq("owner_phone", digits);
     } else if (phone) {

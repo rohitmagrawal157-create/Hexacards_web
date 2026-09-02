@@ -40,9 +40,12 @@ import {
   resolveCardAccent,
   type HexaCardProfile,
 } from "@/lib/card-profile";
+import { cardShellClass } from "@/lib/public-card-shell";
+import { useCoverImageUrl } from "@/lib/use-cover-image";
 
 type MinimalistProps = {
   profile: HexaCardProfile;
+  publicView?: boolean;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -167,6 +170,7 @@ function ActionBar({
  */
 export default function Minimalist({
   profile,
+  publicView = false,
   onChangeBackground,
   onChangeProfile,
 }: MinimalistProps) {
@@ -189,7 +193,7 @@ export default function Minimalist({
   const about = profile.business.about?.trim() || "";
   const services = (profile.business.services ?? []).filter((s) => s.trim());
   const avatarUrl = profile.appearance.logoImage || DEFAULT_CARD_AVATAR;
-  const coverUrl = profile.appearance.coverImage || DEFAULT_CARD_BANNER;
+  const coverUrl = useCoverImageUrl(profile.appearance.coverImage);
   const hasBrochure = Boolean(profile.contact.brochureName);
 
   const country = profile.contact.countryCode || "IN";
@@ -247,7 +251,7 @@ export default function Minimalist({
 
   return (
     <div
-      className="mx-auto max-w-[520px] overflow-hidden rounded-2xl border-2 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
+      className={cardShellClass(publicView)}
       style={{ borderColor: accent }}
     >
       {/* Banner — camera on cover; share outside below cover */}
@@ -470,7 +474,9 @@ export default function Minimalist({
                 {about ||
                   (businessName
                     ? `${businessName} — connect instantly through this Hexa digital card.`
-                    : "Add company details in Edit card.")}
+                    : publicView
+                      ? ""
+                      : "Add company details in Edit card.")}
               </p>
               <h3 className="mt-4 text-sm font-bold text-[#141414]">
                 Services / Products
@@ -529,7 +535,7 @@ export default function Minimalist({
       </div>
 
       <div className="overflow-hidden rounded-b-2xl">
-        <CardLayoutFooter accent={accent} />
+        <CardLayoutFooter accent={accent} publicView={publicView} />
       </div>
 
       <CardShareModal

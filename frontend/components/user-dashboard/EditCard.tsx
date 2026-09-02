@@ -32,7 +32,7 @@ import {
 import LocationSelects, {
   type LocationValue,
 } from "@/components/shared/LocationSelects";
-import { hasPlacedOrder, getOrdersForPhone, type HexaOrder } from "@/lib/orders";
+import { fetchOrdersForPhone, type HexaOrder } from "@/lib/orders";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
 import { uploadCardImage } from "@/lib/card-image-upload";
 import {
@@ -160,35 +160,72 @@ export default function EditCard() {
   const [editingOrder, setEditingOrder] = useState<HexaOrder | null>(null);
 
   useEffect(() => {
+    const editReturnPath = orderId
+      ? `/dashboard/edit-card?order=${encodeURIComponent(orderId)}`
+      : "/dashboard/edit-card";
+
     if (!isLoggedIn()) {
-      router.replace(loginPathWithNext("/dashboard/edit-card"));
+      router.replace(loginPathWithNext(editReturnPath));
       return;
     }
+
     const auth = getAuthUser();
-    if (!auth || !hasPlacedOrder(auth.phone)) {
-      router.replace("/dashboard");
+    if (!auth) {
+      router.replace(loginPathWithNext(editReturnPath));
       return;
     }
-    setUser(auth);
-    if (orderId) {
-      const order = getOrdersForPhone(auth.phone).find((o) => o.id === orderId);
-      if (order) {
-        setEditingOrder(order);
-        setProfile(loadOrderCardProfile(order, auth.name, auth.phone));
-        setLocIds({
-          countryId: order.countryId ?? null,
-          stateId: order.stateId ?? null,
-          cityId: order.cityId ?? null,
-        });
-      } else {
-        setEditingOrder(null);
-        setProfile(getCardProfile(auth.name, auth.phone));
+
+    let cancelled = false;
+
+    async function initEditor() {
+      const orders = await fetchOrdersForPhone(auth!.phone);
+      if (cancelled) return;
+
+      if (orders.length === 0) {
+        router.replace("/dashboard");
+        return;
       }
-    } else {
-      setEditingOrder(null);
-      setProfile(getCardProfile(auth.name, auth.phone));
+
+      setUser(auth);
+
+      if (orderId) {
+        const order = orders.find((o) => o.id === orderId) ?? null;
+        if (order) {
+          setEditingOrder(order);
+          setProfile(loadOrderCardProfile(order, auth!.name, auth!.phone));
+          setLocIds({
+            countryId: order.countryId ?? null,
+            stateId: order.stateId ?? null,
+            cityId: order.cityId ?? null,
+          });
+        } else {
+          setEditingOrder(null);
+          setProfile(getCardProfile(auth!.name, auth!.phone));
+        }
+      } else {
+        const latest = orders[0] ?? null;
+        if (latest) {
+          setEditingOrder(latest);
+          setProfile(loadOrderCardProfile(latest, auth!.name, auth!.phone));
+          setLocIds({
+            countryId: latest.countryId ?? null,
+            stateId: latest.stateId ?? null,
+            cityId: latest.cityId ?? null,
+          });
+        } else {
+          setEditingOrder(null);
+          setProfile(getCardProfile(auth!.name, auth!.phone));
+        }
+      }
+
+      setAuthReady(true);
     }
-    setAuthReady(true);
+
+    void initEditor();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router, orderId]);
 
   async function persistProfile(next: HexaCardProfile): Promise<HexaCardProfile> {

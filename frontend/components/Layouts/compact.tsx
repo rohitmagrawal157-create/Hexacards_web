@@ -40,9 +40,12 @@ import {
   resolveCardAccent,
   type HexaCardProfile,
 } from "@/lib/card-profile";
+import { cardShellClass } from "@/lib/public-card-shell";
+import { useCoverImageUrl } from "@/lib/use-cover-image";
 
 type CompactProps = {
   profile: HexaCardProfile;
+  publicView?: boolean;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -178,6 +181,7 @@ function TabSwitcher({
  */
 export default function Compact({
   profile,
+  publicView = false,
   onChangeBackground,
   onChangeProfile,
 }: CompactProps) {
@@ -197,7 +201,7 @@ export default function Compact({
     .filter(Boolean)
     .join(" - ");
   const country = profile.contact.countryCode || "IN";
-  const coverUrl = profile.appearance.coverImage || DEFAULT_CARD_BANNER;
+  const coverUrl = useCoverImageUrl(profile.appearance.coverImage);
   const avatarUrl = profile.appearance.logoImage || DEFAULT_CARD_AVATAR;
   const mobile = profile.contact.mobile?.trim() || "";
   const whatsapp = profile.contact.whatsapp?.trim() || mobile;
@@ -268,10 +272,9 @@ export default function Compact({
 
   return (
     <div
-      className="mx-auto max-w-[520px] overflow-hidden rounded-2xl border-2 bg-[#F3F5FA] shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
+      className={cardShellClass(publicView)}
       style={{ borderColor: accent }}
     >
-      {/* WhatsApp share bar */}
       <div
         className="flex items-center justify-between gap-2 border-b bg-white px-4 py-2"
         style={{ borderColor: accentSoft }}
@@ -478,9 +481,11 @@ export default function Compact({
                 />
               ) : null}
               {!mobile && !email && !websiteRaw && !whatsapp && !fullAddress ? (
+                publicView ? null : (
                 <p className="py-6 text-center text-sm text-[#8a8a92]">
                   Add contact details in Edit card.
                 </p>
+                )
               ) : null}
             </div>
           ) : null}
@@ -511,7 +516,7 @@ export default function Compact({
                     </a>
                   ))}
                 </div>
-              ) : (
+              ) : publicView ? null : (
                 <p className="py-6 text-center text-sm text-[#8a8a92]">
                   Add social links in Edit card.
                 </p>
@@ -563,7 +568,9 @@ export default function Compact({
                 {about ||
                   (profile.contact.businessName
                     ? `${profile.contact.businessName} — connect instantly through this Hexa digital card.`
-                    : "Add company details in Edit card.")}
+                    : publicView
+                      ? ""
+                      : "Add company details in Edit card.")}
               </p>
               <h4 className="mt-4 text-sm font-semibold text-[#141414]">
                 Services / Products
@@ -584,7 +591,7 @@ export default function Compact({
         ) : null}
       </div>
 
-      <CardLayoutFooter accent={accent} />
+      <CardLayoutFooter accent={accent} publicView={publicView} />
 
       <CardShareModal
         open={shareModalOpen}

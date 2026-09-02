@@ -61,7 +61,8 @@ export default function Login() {
       const res = await apiFetch<{
         user: { userId: number; firstName: string; lastName: string; mobile: string };
         otpExpiresAt: string;
-        demoOtp?: string;
+        otpValidMinutes?: number;
+        smsSent?: boolean;
       }>("/api/auth/otp/send", {
         method: "POST",
         body: JSON.stringify({
@@ -77,14 +78,11 @@ export default function Login() {
       }
 
       setStep("otp");
-      // Always prefer API demoOtp; fall back so Vercel works before SMS is wired
-      const demoCode = res.data.demoOtp || "123456";
-      setOtp(demoCode);
-      setResendIn(30);
+      setOtp("");
+      setResendIn(60);
+
       setInfo(
-        res.data.demoOtp
-          ? `Demo OTP for +91 ${phoneDigits}: ${demoCode} (SMS not connected yet).`
-          : `OTP ready for +91 ${phoneDigits}. If no SMS arrives, use ${demoCode}.`,
+        `OTP sent via SMS to +91 ${phoneDigits}. Valid for ${res.data.otpValidMinutes ?? 10} minutes.`,
       );
     } finally {
       setBusy(false);
@@ -187,8 +185,8 @@ export default function Login() {
               </h2>
               <p className="mt-1 text-sm text-[#5c5346]">
                 {step === "phone"
-                  ? "Your name and mobile number — we’ll send an OTP to verify before checkout."
-                  : `Hi ${firstName.trim()}, enter the 6-digit code sent to +91 ${phoneDigits}.`}
+                  ? "Your name and mobile number — we’ll send an OTP via SMS to verify your account."
+                  : `Hi ${firstName.trim()}, enter the 6-digit OTP sent to +91 ${phoneDigits}.`}
               </p>
             </div>
           </div>
@@ -382,8 +380,7 @@ export default function Login() {
         </div>
 
         <p className="mt-5 text-center text-xs text-[#5c5346]">
-          By continuing you agree to receive an OTP on WhatsApp / SMS for login
-          verification.
+          By continuing you agree to receive an OTP via SMS for login verification.
         </p>
       </div>
     </section>

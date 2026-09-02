@@ -2,6 +2,7 @@
 
 import { PhoneInput, type CountryIso2 } from "react-international-phone";
 import "react-international-phone/style.css";
+import { useHydrated } from "@/lib/use-hydrated";
 
 type PhoneNumberFieldProps = {
   label: string;
@@ -20,6 +21,7 @@ export default function PhoneNumberField({
   onCountryChange,
   placeholder = "Phone number",
 }: PhoneNumberFieldProps) {
+  const hydrated = useHydrated();
   const country = (defaultCountry || "IN").toLowerCase() as CountryIso2;
 
   return (
@@ -28,7 +30,13 @@ export default function PhoneNumberField({
         {label}
       </p>
       <div className="hexa-phone-field mt-1.5">
-        <PhoneInput
+        {!hydrated ? (
+          <div
+            aria-hidden={true}
+            className="h-[46px] rounded-xl border border-black/10 bg-[#FFFCF7]"
+          />
+        ) : (
+          <PhoneInput
           defaultCountry={country}
           value={value || ""}
           onChange={(phone, meta) => {
@@ -66,6 +74,7 @@ export default function PhoneNumberField({
             autoComplete: "tel",
           }}
         />
+        )}
       </div>
     </div>
   );

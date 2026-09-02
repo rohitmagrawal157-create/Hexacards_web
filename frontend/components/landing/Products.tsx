@@ -134,12 +134,10 @@ function CategorySkeleton() {
 }
 
 function ProductsGrid() {
-  const [hasAnimated, setHasAnimated] = useState(false);
   const [categories, setCategories] = useState<HomeCategoryCard[] | null>(
     null,
   );
   const [ready, setReady] = useState(false);
-  const sectionRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
@@ -169,22 +167,6 @@ function ProductsGrid() {
     };
   }, []);
 
-  useEffect(() => {
-    const el = sectionRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setHasAnimated(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.3 },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
   function scrollByCard(direction: "prev" | "next") {
     const el = scrollerRef.current;
     if (!el) return;
@@ -199,19 +181,13 @@ function ProductsGrid() {
   const count = categories?.length ?? 5;
 
   return (
-    <div ref={sectionRef} className="mx-auto max-w-7xl px-5 sm:px-8">
+    <div className="mx-auto max-w-7xl px-5 sm:px-8">
       <div className="mx-auto mb-8 max-w-2xl text-center lg:mb-10">
         <p className="mb-3 text-xs font-bold tracking-[0.15em] text-[#BC7C10] uppercase sm:text-sm">
           Products
         </p>
-        {hasAnimated ? (
-          <>
-            <RevealHeading count={count} />
-            <RevealSubtext />
-          </>
-        ) : (
-          <div className="min-h-[5.5rem] sm:min-h-[6rem]" aria-hidden />
-        )}
+        <RevealHeading count={count} />
+        <RevealSubtext />
       </div>
 
       <ul

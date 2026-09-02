@@ -16,7 +16,7 @@ type IconProps = { className?: string };
 
 function FacebookIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden={true}>
       <path d="M14 13.5h2.5l1-4H14v-2c0-1.03 0-2 2-2h1.5V2.14C17.174 2.09 16.04 2 14.84 2 12.22 2 10.5 3.66 10.5 6.7V9.5H8v4h2.5V22h3.5v-8.5z" />
     </svg>
   );
@@ -24,7 +24,7 @@ function FacebookIcon({ className }: IconProps) {
 
 function LinkedinIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden={true}>
       <path d="M6.94 6.5a1.94 1.94 0 1 1-3.88 0 1.94 1.94 0 0 1 3.88 0zM3.5 8.75h3v11.5h-3V8.75zM9.25 8.75h2.87v1.57h.04c.4-.76 1.38-1.56 2.84-1.56 3.04 0 3.6 2 3.6 4.6v6.89h-3v-6.11c0-1.46-.03-3.33-2.03-3.33-2.03 0-2.34 1.59-2.34 3.23v6.21h-3V8.75z" />
     </svg>
   );
@@ -32,7 +32,7 @@ function LinkedinIcon({ className }: IconProps) {
 
 function InstagramIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden={true}>
       <path d="M12 7.2A4.8 4.8 0 1 0 12 16.8 4.8 4.8 0 0 0 12 7.2zm0 7.9a3.1 3.1 0 1 1 0-6.2 3.1 3.1 0 0 1 0 6.2zM17.5 6.95a1.12 1.12 0 1 1-2.24 0 1.12 1.12 0 0 1 2.24 0z" />
       <path d="M12 3.5c-2.4 0-2.7.01-3.65.05a5.57 5.57 0 0 0-3.8 3.8C4.51 8.3 4.5 8.6 4.5 12s.01 3.7.05 4.65a5.57 5.57 0 0 0 3.8 3.8c.95.04 1.25.05 3.65.05s2.7-.01 3.65-.05a5.57 5.57 0 0 0 3.8-3.8c.04-.95.05-1.25.05-3.65s-.01-3.7-.05-4.65a5.57 5.57 0 0 0-3.8-3.8C14.7 3.51 14.4 3.5 12 3.5zm0 1.7c2.36 0 2.64.01 3.57.05 1.9.09 2.79.99 2.88 2.88.04.93.05 1.21.05 3.57s-.01 2.64-.05 3.57c-.09 1.9-.98 2.79-2.88 2.88-.93.04-1.21.05-3.57.05s-2.64-.01-3.57-.05c-1.9-.09-2.79-.98-2.88-2.88-.04-.93-.05-1.21-.05-3.57s.01-2.64.05-3.57c.09-1.89.98-2.79 2.88-2.88.93-.04 1.21-.05 3.57-.05z" />
     </svg>
@@ -41,7 +41,7 @@ function InstagramIcon({ className }: IconProps) {
 
 function XIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden={true}>
       <path d="M17.66 3H20.5l-6.54 7.48L21.5 21h-5.9l-4.62-6.04L5.7 21H2.85l7-8.01L2.5 3h6.05l4.17 5.52L17.66 3zm-1.04 16.2h1.63L7.45 4.7H5.7l10.92 14.5z" />
     </svg>
   );
@@ -49,7 +49,7 @@ function XIcon({ className }: IconProps) {
 
 function YoutubeIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden={true}>
       <path d="M23.5 7.2a3.02 3.02 0 0 0-2.12-2.14C19.5 4.6 12 4.6 12 4.6s-7.5 0-9.38.46A3.02 3.02 0 0 0 .5 7.2 31.6 31.6 0 0 0 0 12a31.6 31.6 0 0 0 .5 4.8 3.02 3.02 0 0 0 2.12 2.14C4.5 19.4 12 19.4 12 19.4s7.5 0 9.38-.46a3.02 3.02 0 0 0 2.12-2.14A31.6 31.6 0 0 0 24 12a31.6 31.6 0 0 0-.5-4.8zM9.75 15.02V8.98L15.5 12l-5.75 3.02z" />
     </svg>
   );

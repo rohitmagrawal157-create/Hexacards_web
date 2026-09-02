@@ -40,26 +40,35 @@ export function verifyPassword(password: string, stored: string | null): boolean
 
 // ── OTP helpers ─────────────────────────────────────────────────────────────
 
+/** OTP validity — matches DLT SMS template (10 minutes). */
+export const OTP_VALID_MINUTES = 10;
+
+function nimbusCredentialsPresent(): boolean {
+  return Boolean(
+    process.env.NIMBUS_SMS_USER_ID?.trim() &&
+      process.env.NIMBUS_SMS_PASSWORD?.trim() &&
+      process.env.NIMBUS_SMS_SENDER_ID?.trim() &&
+      process.env.NIMBUS_SMS_ENTITY_ID?.trim() &&
+      process.env.NIMBUS_SMS_TEMPLATE_ID?.trim(),
+  );
+}
+
+export function isSmsOtpEnabled(): boolean {
+  const flag = process.env.OTP_SMS_ENABLED?.trim().toLowerCase();
+  if (flag === "false" || flag === "0") return false;
+  if (flag === "true" || flag === "1") return true;
+  return nimbusCredentialsPresent();
+}
+
 export function generateOtp(): string {
-  // No SMS provider wired yet — always use a fixed demo OTP unless
-  // OTP_SMS_ENABLED=true (then generate a random 6-digit code).
-  const smsEnabled =
-    process.env.OTP_SMS_ENABLED === "1" ||
-    process.env.OTP_SMS_ENABLED === "true";
-  if (!smsEnabled) {
-    return process.env.OTP_DEMO_CODE?.trim() || "123456";
-  }
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 export function isDemoOtpMode(): boolean {
-  const smsEnabled =
-    process.env.OTP_SMS_ENABLED === "1" ||
-    process.env.OTP_SMS_ENABLED === "true";
-  return !smsEnabled;
+  return !isSmsOtpEnabled();
 }
 
-export function otpExpiryIso(minutes = 5): string {
+export function otpExpiryIso(minutes = OTP_VALID_MINUTES): string {
   return new Date(Date.now() + minutes * 60 * 1000).toISOString();
 }
 

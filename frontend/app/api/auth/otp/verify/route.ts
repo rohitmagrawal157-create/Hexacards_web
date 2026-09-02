@@ -3,7 +3,6 @@ import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import type { OtpVerifyBody, UserRow, UserSessionRow } from "@/lib/server/user-types";
 import {
   createSessionIds,
-  isDemoOtpMode,
   isOtpExpired,
   isValidIndianMobile,
   mapSession,
@@ -45,25 +44,18 @@ export async function POST(request: Request) {
     if (!data)  return jsonError(404, "User not found — please request OTP first");
 
     const row = data as UserRow;
-    const demoCode = process.env.OTP_DEMO_CODE?.trim() || "123456";
-    const demoAccepted = isDemoOtpMode() && otp === demoCode;
     const matchesStored = Boolean(row.otp) && row.otp === otp;
 
-    if (!demoAccepted && !matchesStored) {
+    if (!matchesStored) {
       if (!row.otp) {
         return jsonError(
           401,
           "No active OTP — tap Resend OTP, then enter the new code",
         );
       }
-      return jsonError(
-        401,
-        isDemoOtpMode()
-          ? `Invalid OTP — SMS is not connected yet. Use demo code ${demoCode}`
-          : "Invalid OTP",
-      );
+      return jsonError(401, "Invalid OTP");
     }
-    if (!demoAccepted && isOtpExpired(row.otp_expiry)) {
+    if (isOtpExpired(row.otp_expiry)) {
       return jsonError(401, "OTP expired — request a new one");
     }
 

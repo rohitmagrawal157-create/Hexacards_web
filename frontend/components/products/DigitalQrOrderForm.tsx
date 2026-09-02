@@ -30,6 +30,7 @@ import {
 } from "@/lib/order-thank-you";
 import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
 import { allocateOrderCardSlug } from "@/lib/order-card";
+import { buildPublicCardUrl } from "@/lib/site-url";
 import { startRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { INDIA_COUNTRY_ID } from "@/lib/location-api";
 import { syncUserProfileFromCheckout } from "@/lib/user-profile-sync";
@@ -190,7 +191,7 @@ export default function DigitalQrOrderForm() {
 
       const cardName = cardDesign?.name || customerName;
       const finalSlug = await allocateOrderCardSlug(cardName);
-      const liveUrl = `https://hexacards.com/${finalSlug}`;
+      const liveUrl = buildPublicCardUrl(finalSlug, "canonical");
       const finalized =
         (await updateOrder(order.id, {
           cardSlug: finalSlug,

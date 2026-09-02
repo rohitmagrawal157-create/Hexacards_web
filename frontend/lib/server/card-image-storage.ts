@@ -1,11 +1,23 @@
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseCardImagePublicUrl, DEFAULT_CARD_IMAGES_BUCKET } from "@/lib/card-images";
 
 export type CardImageKind = "profile" | "background";
 
 const BUCKET =
-  process.env.CARD_IMAGES_BUCKET?.trim() || "card-images";
+  process.env.CARD_IMAGES_BUCKET?.trim() || DEFAULT_CARD_IMAGES_BUCKET;
+
+const SETUP_HINT =
+  'Create a public Supabase Storage bucket named "card-images" (see frontend/sql/card-images-storage.sql) and set SUPABASE_SERVICE_ROLE_KEY on Vercel.';
+
+function isServerlessDeploy(): boolean {
+  return Boolean(process.env.VERCEL);
+}
+
+function allowLocalDiskFallback(): boolean {
+  return !isServerlessDeploy() && process.env.NODE_ENV !== "production";
+}
 
 /** Sanitize unic_card_name for safe filenames */
 export function sanitizeCardUsername(slug: string): string {
@@ -48,32 +60,34 @@ function dataUrlToBuffer(dataUrl: string): { buffer: Buffer; contentType: string
   };
 }
 
-async function trySupabaseUpload(
+async function uploadToSupabase(
   filename: string,
   buffer: Buffer,
   contentType: string,
-): Promise<string | null> {
-  try {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.storage.from(BUCKET).upload(filename, buffer, {
-      contentType,
-      upsert: true,
-      cacheControl: "3600",
-    });
-    if (error) {
-      // Bucket missing or storage not configured — fall through to disk
-      console.warn("[card-images] Supabase upload:", error.message);
-      return null;
-    }
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename);
-    return data?.publicUrl || null;
-  } catch (err) {
-    console.warn(
-      "[card-images] Supabase unavailable:",
-      err instanceof Error ? err.message : err,
+): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.storage.from(BUCKET).upload(filename, buffer, {
+    contentType,
+    upsert: true,
+    cacheControl: "3600",
+  });
+
+  if (error) {
+    throw new Error(
+      isServerlessDeploy()
+        ? `Supabase Storage upload failed: ${error.message}. ${SETUP_HINT}`
+        : `Supabase Storage upload failed: ${error.message}`,
     );
-    return null;
   }
+
+  const publicUrl = getSupabaseCardImagePublicUrl(filename, BUCKET);
+  if (!publicUrl) {
+    throw new Error(
+      `Supabase upload succeeded but public URL could not be built. ${SETUP_HINT}`,
+    );
+  }
+
+  return publicUrl;
 }
 
 async function saveToPublicUploads(
@@ -89,7 +103,8 @@ async function saveToPublicUploads(
 /**
  * Store profile or background image under a username-based filename.
  * Always overwrites the previous file for that username + kind.
- * Prefers Supabase Storage; falls back to public/uploads/cards.
+ * Production (Vercel): Supabase Storage only — no local disk writes.
+ * Local dev: Supabase first, optional public/uploads/cards fallback.
  */
 export async function saveCardImage(opts: {
   username: string;
@@ -120,15 +135,33 @@ export async function saveCardImage(opts: {
     throw new Error("Image is too large (max 2.5 MB)");
   }
 
-  const remote = await trySupabaseUpload(filename, buffer, contentType);
-  const storedPath = remote || (await saveToPublicUploads(filename, buffer));
-  const url = withCacheBust(storedPath);
+  try {
+    const publicUrl = await uploadToSupabase(filename, buffer, contentType);
+    const url = withCacheBust(publicUrl);
+    return {
+      filename,
+      path: publicUrl,
+      url,
+    };
+  } catch (err) {
+    if (!allowLocalDiskFallback()) {
+      throw err instanceof Error
+        ? err
+        : new Error(`Card image upload failed. ${SETUP_HINT}`);
+    }
 
-  return {
-    filename,
-    path: storedPath.split("?")[0],
-    url,
-  };
+    console.warn(
+      "[card-images] Supabase upload failed — using local disk fallback:",
+      err instanceof Error ? err.message : err,
+    );
+    const localPath = await saveToPublicUploads(filename, buffer);
+    const url = withCacheBust(localPath);
+    return {
+      filename,
+      path: localPath,
+      url,
+    };
+  }
 }
 
 /** Map upload kind → cards table columns (file name only, no path). */

@@ -3,6 +3,7 @@ import {
   type CountryCode,
 } from "libphonenumber-js";
 import { buildCardSlugFromName } from "@/lib/order-card";
+import { buildPublicCardPath, buildPublicCardUrl } from "@/lib/site-url";
 
 export type CardLayoutId =
   | "classic"
@@ -101,6 +102,15 @@ export function normalizeCoverImage(cover: string | null | undefined) {
   if (cover.startsWith("data:")) return cover;
   if (LEGACY_DEFAULT_COVERS.has(cover)) return DEFAULT_CARD_BANNER;
   return cover;
+}
+
+/** Banner src for card UI — always falls back to the default stock image. */
+export function resolveCoverImageForDisplay(
+  cover: string | null | undefined,
+  shareImage?: string | null,
+): string {
+  const candidate = cover?.trim() || shareImage?.trim() || "";
+  return normalizeCoverImage(candidate || undefined);
 }
 
 /** Keep custom uploads; missing avatar uses the default avatar image. */
@@ -427,20 +437,19 @@ export function compressImageFile(
   });
 }
 
-/** Public slug from card name — e.g. ramesh-tupe (stored slug preferred at call sites). */
 export function cardPublicSlug(profile: HexaCardProfile) {
   const name = profile.contact.cardName.trim() || "HexaCard";
   return buildCardSlugFromName(name);
 }
 
-/** Public share URL shown to users — same style as hexacards.com/CardName45 */
+/** Public share URL — canonical production link (hexacards.com). */
 export function cardPublicUrl(profile: HexaCardProfile) {
-  return `https://hexacards.com/${cardPublicSlug(profile)}`;
+  return buildPublicCardUrl(cardPublicSlug(profile), "canonical");
 }
 
-/** Local app path for opening the card page */
+/** Local app path — works on hexacards.com and *.vercel.app */
 export function cardPublicPath(profile: HexaCardProfile) {
-  return `/${cardPublicSlug(profile)}`;
+  return buildPublicCardPath(cardPublicSlug(profile));
 }
 
 function openBrochureDb(): Promise<IDBDatabase> {

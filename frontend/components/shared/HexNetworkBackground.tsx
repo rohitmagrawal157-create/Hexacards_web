@@ -17,7 +17,7 @@ export default function HexNetworkBackground({
   return (
     <div
       className="hero-hex-bg pointer-events-none absolute inset-0 overflow-hidden"
-      aria-hidden
+      aria-hidden={true}
     >
       <div className="absolute inset-0 bg-white" />
 
