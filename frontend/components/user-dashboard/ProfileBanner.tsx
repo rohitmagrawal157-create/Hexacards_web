@@ -25,8 +25,6 @@ import {
 import { SiTripadvisor } from "react-icons/si";
 import {
   cardPublicUrl,
-  DEFAULT_CARD_AVATAR,
-  DEFAULT_CARD_BANNER,
   formatDialNumber,
   normalizeCardLayout,
   openBrochureDownload,
@@ -42,8 +40,11 @@ import Minimalist from "@/components/Layouts/Minimalist";
 import CardLayoutBottom from "@/components/Layouts/CardLayoutBottom";
 import { cardShellClass } from "@/lib/public-card-shell";
 import { buildPublicCardUrl } from "@/lib/site-url";
-import { useCoverImageUrl } from "@/lib/use-cover-image";
+import { saveCardContactToDevice } from "@/lib/vcard";
+import { openWhatsAppCardShare } from "@/lib/card-share";
 import CardShareModal from "@/components/Layouts/CardShareModal";
+import CardCoverImage from "@/components/shared/CardCoverImage";
+import CardAvatarImage from "@/components/shared/CardAvatarImage";
 
 type ProfileBannerProps = {
   profile: HexaCardProfile;
@@ -94,10 +95,6 @@ export default function ProfileBanner({
   const shareUrl = slug
     ? buildPublicCardUrl(slug, "canonical")
     : cardPublicUrl(profile);
-  const coverUrl = useCoverImageUrl(
-    profile.appearance.coverImage,
-    profile.appearance.shareImage,
-  );
 
   const ctaClass =
     "flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-semibold text-white transition-opacity hover:opacity-90";
@@ -113,29 +110,11 @@ export default function ProfileBanner({
   }
 
   function handleWhatsAppShare(toNumber?: string) {
-    const text = `Hi, check out my HexaCards digital profile:\n${shareUrl}`;
-    const digits = (toNumber || "").replace(/\D/g, "");
-    if (digits) {
-      if (digits.length !== 10) {
-        window.alert("Enter a 10-digit WhatsApp number.");
-        return;
-      }
-      const countryDial = phoneDigitsForLink(
-        profile.contact.countryCode,
-        digits,
-      );
-      window.open(
-        `https://wa.me/${countryDial}?text=${encodeURIComponent(text)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-      return;
-    }
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(text)}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    openWhatsAppCardShare({
+      shareUrl,
+      toNumber,
+      countryCode: profile.contact.countryCode,
+    });
   }
 
   const fullAddress = [
@@ -494,12 +473,6 @@ export default function ProfileBanner({
           className={`relative h-52 w-full overflow-hidden bg-[#d8dde3] sm:h-60 ${
             onUploadBackground ? "cursor-pointer" : ""
           }`}
-          style={{
-            backgroundImage: `url("${coverUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`,
-            backgroundSize: "cover",
-            backgroundPosition: "center center",
-            backgroundRepeat: "no-repeat",
-          }}
           role={onUploadBackground ? "button" : undefined}
           tabIndex={onUploadBackground ? 0 : undefined}
           onClick={() => {
@@ -514,6 +487,11 @@ export default function ProfileBanner({
           }}
           aria-label={onUploadBackground ? "Change background image" : undefined}
         >
+          <CardCoverImage
+            src={profile.appearance.coverImage}
+            shareImage={profile.appearance.shareImage}
+            alt=""
+          />
           {onUploadBackground ? (
             <button
               type="button"
@@ -536,12 +514,7 @@ export default function ProfileBanner({
               className="flex h-[112px] w-[112px] items-center justify-center overflow-hidden rounded-full border-[5px] border-white bg-[#f5f5f4] shadow-[0_8px_24px_rgba(0,0,0,0.18)]"
               style={{ outline: `2px solid ${accent}` }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={profile.appearance.logoImage || DEFAULT_CARD_AVATAR}
-                alt=""
-                className="h-full w-full object-cover object-center"
-              />
+              <CardAvatarImage src={profile.appearance.logoImage} />
             </div>
             {onUploadProfile ? (
               <button
@@ -568,6 +541,12 @@ export default function ProfileBanner({
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
+            onClick={() =>
+              void saveCardContactToDevice(
+                profile,
+                slug ? buildPublicCardUrl(slug, "canonical") : undefined,
+              )
+            }
             className={ctaClass}
             style={{ backgroundColor: accent }}
           >
@@ -715,6 +694,7 @@ export default function ProfileBanner({
         onClose={() => setShareModalOpen(false)}
         accent={accent}
         cardName={name}
+        shareUrl={shareUrl}
       />
     </div>
   );

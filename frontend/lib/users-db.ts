@@ -43,13 +43,19 @@ export function verifyPassword(password: string, stored: string | null): boolean
 /** OTP validity — matches DLT SMS template (10 minutes). */
 export const OTP_VALID_MINUTES = 10;
 
+function envSecret(name: string): string {
+  return (process.env[name] ?? "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+}
+
 function nimbusCredentialsPresent(): boolean {
   return Boolean(
-    process.env.NIMBUS_SMS_USER_ID?.trim() &&
-      process.env.NIMBUS_SMS_PASSWORD?.trim() &&
-      process.env.NIMBUS_SMS_SENDER_ID?.trim() &&
-      process.env.NIMBUS_SMS_ENTITY_ID?.trim() &&
-      process.env.NIMBUS_SMS_TEMPLATE_ID?.trim(),
+    envSecret("NIMBUS_SMS_USER_ID") &&
+      envSecret("NIMBUS_SMS_PASSWORD") &&
+      envSecret("NIMBUS_SMS_SENDER_ID") &&
+      envSecret("NIMBUS_SMS_ENTITY_ID") &&
+      envSecret("NIMBUS_SMS_TEMPLATE_ID"),
   );
 }
 

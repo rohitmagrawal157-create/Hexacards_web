@@ -13,6 +13,7 @@ import {
   type HexaAuthUser,
 } from "@/lib/auth";
 import { apiFetch } from "@/lib/api-config";
+import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 
 type Step = "phone" | "otp";
 
@@ -301,8 +302,8 @@ export default function Login() {
                 disabled={busy}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#BC7C10] py-3.5 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/25 transition-all hover:bg-[#9a650d] active:scale-[0.99] disabled:opacity-70"
               >
-                {busy ? "Sending…" : "Send OTP"}
-                <ArrowRight className="h-4 w-4" />
+                {busy ? <HoneycombLoader /> : "Send OTP"}
+                {!busy ? <ArrowRight className="h-4 w-4" /> : null}
               </button>
             </form>
           ) : (
@@ -349,8 +350,8 @@ export default function Login() {
                 disabled={busy}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#BC7C10] py-3.5 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/25 transition-all hover:bg-[#9a650d] active:scale-[0.99] disabled:opacity-70"
               >
-                {busy ? "Verifying…" : "Verify & continue"}
-                <ArrowRight className="h-4 w-4" />
+                {busy ? <HoneycombLoader /> : "Verify & continue"}
+                {!busy ? <ArrowRight className="h-4 w-4" /> : null}
               </button>
 
               <div className="flex items-center justify-between gap-3 text-xs">

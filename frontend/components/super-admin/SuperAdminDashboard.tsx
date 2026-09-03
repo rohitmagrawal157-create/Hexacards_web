@@ -22,6 +22,7 @@ import {
   CreditCard,
   X,
 } from "lucide-react";
+import { HoneycombPageStatus } from "@/components/ui/honeycomb-loader";
 import {
   clearSuperAdminUser,
   getSuperAdminUser,
@@ -948,12 +949,7 @@ export default function SuperAdminDashboard() {
   if (!authReady || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAF8]">
-        <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#BC7C10]/25 border-t-[#BC7C10]" />
-          <p className="mt-3 text-sm font-medium text-[#5c5346]">
-            Loading admin panel…
-          </p>
-        </div>
+        <HoneycombPageStatus label="Loading admin panel…" />
       </div>
     );
   }

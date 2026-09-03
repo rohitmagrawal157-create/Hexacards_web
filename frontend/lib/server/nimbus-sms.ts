@@ -12,13 +12,20 @@ export function buildHexaCardsOtpMessage(otp: string): string {
   return `Your Hexa Cards mobile number verification OTP is ${otp}. This OTP is valid for 10 minutes. Do not share this OTP with anyone. https://hexacards.com`;
 }
 
+/** Strip wrapping quotes — common when pasting secrets into Vercel / .env. */
+function envSecret(name: string): string {
+  return (process.env[name] ?? "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+}
+
 export function isNimbusSmsConfigured(): boolean {
   return Boolean(
-    process.env.NIMBUS_SMS_USER_ID?.trim() &&
-      process.env.NIMBUS_SMS_PASSWORD?.trim() &&
-      process.env.NIMBUS_SMS_SENDER_ID?.trim() &&
-      process.env.NIMBUS_SMS_ENTITY_ID?.trim() &&
-      process.env.NIMBUS_SMS_TEMPLATE_ID?.trim(),
+    envSecret("NIMBUS_SMS_USER_ID") &&
+      envSecret("NIMBUS_SMS_PASSWORD") &&
+      envSecret("NIMBUS_SMS_SENDER_ID") &&
+      envSecret("NIMBUS_SMS_ENTITY_ID") &&
+      envSecret("NIMBUS_SMS_TEMPLATE_ID"),
   );
 }
 
@@ -56,24 +63,25 @@ export async function sendNimbusOtpSms(
     return { ok: false, error: "Invalid mobile number for SMS" };
   }
 
-  // Match PHP integration: only Msg is urlencoded; other params are concatenated as-is.
-  const userId = process.env.NIMBUS_SMS_USER_ID!.trim();
-  const password = process.env.NIMBUS_SMS_PASSWORD!.trim();
-  const senderId = process.env.NIMBUS_SMS_SENDER_ID!.trim();
-  const entityId = process.env.NIMBUS_SMS_ENTITY_ID!.trim();
-  const templateId = process.env.NIMBUS_SMS_TEMPLATE_ID!.trim();
+  const userId = envSecret("NIMBUS_SMS_USER_ID");
+  const password = envSecret("NIMBUS_SMS_PASSWORD");
+  const senderId = envSecret("NIMBUS_SMS_SENDER_ID");
+  const entityId = envSecret("NIMBUS_SMS_ENTITY_ID");
+  const templateId = envSecret("NIMBUS_SMS_TEMPLATE_ID");
   const message = buildHexaCardsOtpMessage(otp);
 
   const apiUrl =
-    process.env.NIMBUS_SMS_API_URL?.trim() || DEFAULT_API_URL;
-  const url =
-    `${apiUrl}?UserID=${userId}` +
-    `&Password=${password}` +
-    `&SenderID=${senderId}` +
-    `&Phno=${phone}` +
-    `&Msg=${encodeURIComponent(message)}` +
-    `&EntityID=${entityId}` +
-    `&TemplateID=${templateId}`;
+    envSecret("NIMBUS_SMS_API_URL") || DEFAULT_API_URL;
+  const params = new URLSearchParams({
+    UserID: userId,
+    Password: password,
+    SenderID: senderId,
+    Phno: phone,
+    Msg: message,
+    EntityID: entityId,
+    TemplateID: templateId,
+  });
+  const url = `${apiUrl}?${params.toString()}`;
 
   try {
     const res = await fetch(url, {

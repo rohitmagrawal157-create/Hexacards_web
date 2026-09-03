@@ -32,8 +32,6 @@ import CardContactForm from "@/components/user-dashboard/CardContactForm";
 import CardLayoutFooter from "./CardLayoutFooter";
 import CardShareModal from "./CardShareModal";
 import {
-  DEFAULT_CARD_AVATAR,
-  DEFAULT_CARD_BANNER,
   formatDialNumber,
   openBrochureDownload,
   phoneDigitsForLink,
@@ -41,7 +39,13 @@ import {
   type HexaCardProfile,
 } from "@/lib/card-profile";
 import { cardShellClass } from "@/lib/public-card-shell";
-import { useCoverImageUrl } from "@/lib/use-cover-image";
+import { saveCardContactToDevice } from "@/lib/vcard";
+import {
+  openWhatsAppCardShare,
+  resolveCardShareUrl,
+} from "@/lib/card-share";
+import CardCoverImage from "@/components/shared/CardCoverImage";
+import CardAvatarImage from "@/components/shared/CardAvatarImage";
 
 type CompactProps = {
   profile: HexaCardProfile;
@@ -201,8 +205,6 @@ export default function Compact({
     .filter(Boolean)
     .join(" - ");
   const country = profile.contact.countryCode || "IN";
-  const coverUrl = useCoverImageUrl(profile.appearance.coverImage);
-  const avatarUrl = profile.appearance.logoImage || DEFAULT_CARD_AVATAR;
   const mobile = profile.contact.mobile?.trim() || "";
   const whatsapp = profile.contact.whatsapp?.trim() || mobile;
   const email = profile.contact.email?.trim() || "";
@@ -227,26 +229,11 @@ export default function Compact({
   const waDigits = whatsapp ? phoneDigitsForLink(country, whatsapp) : "";
 
   function handleWhatsAppShare(toNumber?: string) {
-    const text = `Hi, check out my HexaCards digital profile`;
-    const digits = (toNumber || "").replace(/\D/g, "");
-    if (digits) {
-      if (digits.length !== 10) {
-        window.alert("Enter a 10-digit WhatsApp number.");
-        return;
-      }
-      const dial = phoneDigitsForLink(country, digits);
-      window.open(
-        `https://wa.me/${dial}?text=${encodeURIComponent(text)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-      return;
-    }
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(text)}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    openWhatsAppCardShare({
+      shareUrl: resolveCardShareUrl(profile),
+      toNumber,
+      countryCode: country,
+    });
   }
 
   async function handleBrochure() {
@@ -307,12 +294,6 @@ export default function Compact({
           className={`relative flex h-52 w-full items-center justify-center overflow-hidden bg-[#e8eaee] sm:h-60 ${
             onChangeBackground ? "cursor-pointer" : ""
           }`}
-          style={{
-            backgroundImage: `url("${coverUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`,
-            backgroundSize: "cover",
-            backgroundPosition: "center center",
-            backgroundRepeat: "no-repeat",
-          }}
           role={onChangeBackground ? "button" : undefined}
           tabIndex={onChangeBackground ? 0 : undefined}
           onClick={() => onChangeBackground?.()}
@@ -327,6 +308,7 @@ export default function Compact({
             onChangeBackground ? "Change background image" : undefined
           }
         >
+          <CardCoverImage src={profile.appearance.coverImage} alt="" />
           {onChangeBackground ? (
             <button
               type="button"
@@ -348,12 +330,7 @@ export default function Compact({
           >
             <div className="relative">
               <div className="flex h-[100px] w-[100px] items-center justify-center overflow-hidden rounded-full border-[5px] border-white bg-[#f5f5f4] shadow-[0_10px_28px_rgba(0,0,0,0.22)] sm:h-[112px] sm:w-[112px]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={avatarUrl}
-                  alt=""
-                  className="h-full w-full object-cover object-center"
-                />
+                <CardAvatarImage src={profile.appearance.logoImage} />
               </div>
               {onChangeProfile ? (
                 <button
@@ -416,7 +393,7 @@ export default function Compact({
           ) : null}
           <QuickIcon
             icon={UserPlus}
-            href="#save-contact"
+            onClick={() => void saveCardContactToDevice(profile)}
             label="Add to contacts"
             accent={accent}
           />
@@ -598,6 +575,7 @@ export default function Compact({
         onClose={() => setShareModalOpen(false)}
         accent={accent}
         cardName={name}
+        shareUrl={resolveCardShareUrl(profile)}
       />
     </div>
   );

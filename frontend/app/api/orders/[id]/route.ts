@@ -1,8 +1,11 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { saveCardImage, sanitizeCardUsername } from "@/lib/server/card-image-storage";
 import { jsonError, jsonOk, toNumber } from "@/lib/admin-catalog-db";
 import type { OrderCardDesignData } from "@/lib/order-card";
 import {
   mapOrder,
+  mergeCardDesignForDb,
+  orderLogoColumnValue,
   paymentToDb,
   sanitizeCardDesignForDb,
   statusToDb,
@@ -236,10 +239,30 @@ export async function PUT(request: Request, context: RouteContext) {
     }
     if (body.orderLogoSrc !== undefined || body.logo !== undefined) {
       const logo = body.logo ?? body.orderLogoSrc;
-      patch.logo = logo ? String(logo).trim().slice(0, 255) : null;
+      patch.logo = logo ? orderLogoColumnValue(String(logo)) : null;
     }
     if (body.cardDesign !== undefined) {
-      patch.card_design = sanitizeCardDesignForDb(body.cardDesign);
+      let incoming = body.cardDesign;
+      const logo = incoming?.logoSrc?.trim();
+      if (logo?.startsWith("data:image/")) {
+        try {
+          const saved = await saveCardImage({
+            username: sanitizeCardUsername(
+              String(existing.order_code || body.id || ""),
+            ),
+            kind: "order-logo",
+            dataUrl: logo,
+          });
+          incoming = { ...incoming, logoSrc: saved.path };
+          patch.logo = orderLogoColumnValue(saved.filename);
+        } catch (err) {
+          console.error("[orders] Logo upload on update failed:", err);
+        }
+      }
+      patch.card_design = mergeCardDesignForDb(
+        (existing.card_design as OrderCardDesignData | null) ?? null,
+        incoming,
+      );
     }
     if (body.status !== undefined) patch.status = statusToDb(body.status);
     if (body.paymentStatus !== undefined) {

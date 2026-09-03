@@ -23,6 +23,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { HoneycombLoader, HoneycombPageStatus } from "@/components/ui/honeycomb-loader";
 import {
   getAuthUser,
   isLoggedIn,
@@ -61,6 +62,8 @@ import {
 } from "@/lib/card-profile";
 import PhoneNumberField from "./PhoneNumberField";
 import ProfileBanner from "./ProfileBanner";
+import CardCoverImage from "@/components/shared/CardCoverImage";
+import CardAvatarImage from "@/components/shared/CardAvatarImage";
 import ImageCropModal, {
   readFileAsDataUrl,
   type CropKind,
@@ -488,13 +491,14 @@ export default function EditCard() {
     });
   }
 
-  async function handleSave() {
-    if (!profile) return;
+  async function handleSave(): Promise<boolean> {
+    if (!profile) return false;
     try {
       const next = await persistProfile(profile);
       setProfile(next);
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1800);
+      return true;
     } catch {
       // Last-resort: clear images and save contact/social data
       const stripped = {
@@ -506,32 +510,34 @@ export default function EditCard() {
           shareImage: null,
         },
       };
-      const next = await persistProfile(stripped);
-      setProfile(next);
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 1800);
-      window.alert(
-        "Images were too large for browser storage. Profile details were saved without images — please re-upload smaller photos.",
-      );
+      try {
+        const next = await persistProfile(stripped);
+        setProfile(next);
+        setSavedFlash(true);
+        window.setTimeout(() => setSavedFlash(false), 1800);
+        window.alert(
+          "Images were too large for browser storage. Profile details were saved without images — please re-upload smaller photos.",
+        );
+        return true;
+      } catch {
+        window.alert("Could not save this card. Please try again.");
+        return false;
+      }
     }
   }
 
-  function goNext() {
+  async function handleStepSave() {
+    const ok = await handleSave();
+    if (!ok) return;
     if (tab === "contact") setTab("social");
     else if (tab === "social") setTab("businessInfo");
     else if (tab === "businessInfo") setTab("appearance");
-    else handleSave();
   }
 
   if (!authReady || !user || !profile) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAF8]">
-        <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#BC7C10]/25 border-t-[#BC7C10]" />
-          <p className="mt-3 text-sm font-medium text-[#5c5346]">
-            Loading card editor…
-          </p>
-        </div>
+        <HoneycombPageStatus label="Loading card editor…" />
       </div>
     );
   }
@@ -586,7 +592,7 @@ export default function EditCard() {
               className="inline-flex items-center gap-1.5 rounded-lg bg-[#BC7C10] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#9a650d]"
             >
               {savedFlash ? <Check className="h-3.5 w-3.5" /> : null}
-              {savedFlash ? "Saved" : "Update"}
+              {savedFlash ? "Saved" : "Save"}
             </button>
           </div>
         </div>
@@ -1062,13 +1068,9 @@ export default function EditCard() {
                     <div className="flex flex-col items-center sm:items-start">
                       <p className={labelClass()}>Profile photo</p>
                       <div className="relative mt-3 h-[112px] w-[112px] overflow-hidden rounded-md shadow-[0_6px_20px_rgba(0,0,0,0.12)] ring-0.1 ring-[#141414] ring-offset-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={
-                            profile.appearance.logoImage || DEFAULT_CARD_AVATAR
-                          }
-                          alt=""
-                          className="h-full w-full object-cover object-center"
+                        <CardAvatarImage
+                          src={profile.appearance.logoImage}
+                          className="absolute inset-0"
                         />
                         <div className="absolute right-1.5 bottom-1.5 flex items-center gap-1">
                           <label
@@ -1113,14 +1115,7 @@ export default function EditCard() {
                     <div className="min-w-0">
                       <p className={labelClass()}>Card background</p>
                       <div className="relative mt-3 h-[112px] w-[212px] overflow-hidden rounded-md shadow-[0_8px_24px_rgba(0,0,0,0.1)] ring-0.1 ring-[#141414] ring-offset-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={
-                            profile.appearance.coverImage || DEFAULT_CARD_BANNER
-                          }
-                          alt=""
-                          className="h-full w-full object-cover object-center"
-                        />
+                        <CardCoverImage src={profile.appearance.coverImage} />
                         <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-3 pt-8 pb-2.5 text-left text-[11px] font-semibold tracking-wide text-white uppercase">
                           {isDefaultCoverImage(profile.appearance.coverImage)
                             ? "Using default"
@@ -1206,7 +1201,7 @@ export default function EditCard() {
                               profile.appearance.accentColor,
                             )
                               ? profile.appearance.accentColor
-                              : "#BC7C10"
+                              : "#141414"
                           }
                           onChange={(e) =>
                             updateAppearance("accentColor", e.target.value)
@@ -1225,22 +1220,26 @@ export default function EditCard() {
               ) : null}
 
               <div className="mt-8 flex flex-wrap gap-2 border-t border-black/[0.06] pt-5">
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#BC7C10] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#9a650d]"
-                >
-                  <Check className="h-4 w-4" />
-                  Update
-                </button>
-                <button
-                  type="button"
-                  onClick={goNext}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#141414] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#2a2a2a]"
-                >
-                  {tab === "appearance" ? "Save & finish" : "Next"}
-                  <ArrowRight className="h-4 w-4" />
-                </button>
+                {tab === "appearance" ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleSave()}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#BC7C10] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#9a650d]"
+                  >
+                    {savedFlash ? <Check className="h-4 w-4" /> : null}
+                    {savedFlash ? "Saved" : "Save and finish"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleStepSave()}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#BC7C10] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#9a650d]"
+                  >
+                    {savedFlash ? <Check className="h-4 w-4" /> : null}
+                    {savedFlash ? "Saved" : "Save"}
+                    {!savedFlash ? <ArrowRight className="h-4 w-4" /> : null}
+                  </button>
+                )}
               </div>
             </section>
 
@@ -1301,8 +1300,8 @@ export default function EditCard() {
           role="status"
           aria-live="polite"
         >
-          <div className="rounded-2xl bg-white px-6 py-5 text-center shadow-xl">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#BC7C10]/25 border-t-[#BC7C10]" />
+          <div className="flex min-w-[16rem] flex-col items-center rounded-2xl bg-white px-8 py-6 text-center shadow-xl">
+            <HoneycombLoader size="md" className="text-[#BC7C10]" />
             <p className="mt-3 text-sm font-semibold text-[#141414]">
               Saving image…
             </p>

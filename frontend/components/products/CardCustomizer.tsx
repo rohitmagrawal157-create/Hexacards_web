@@ -29,7 +29,12 @@ import {
 import { GOLD_GRADIENT, GOLD_SOLID, GOLD_STOPS } from "./goldCard";
 import { SILVER_GRADIENT } from "./silverCard";
 import { goToCheckout } from "@/lib/auth";
-import { logoForCardFinish } from "@/lib/order-card";
+import {
+  DEFAULT_LOGO_LAYOUT,
+  LOGO_SIZE_MAX,
+  LOGO_SIZE_MIN,
+  logoForCardFinish,
+} from "@/lib/order-card";
 import { buildStyledQrSvg } from "@/lib/styled-qr";
 
 type Side = "front" | "back";
@@ -68,10 +73,10 @@ const CARD_H = 154;
 const PREVIEW_MAX_W = 488; // 2× for comfortable editing
 
 const FRONT_LOGO_DEFAULT: LogoLayout = { size: 40, x: 6, y: 8 };
-const BACK_LOGO_DEFAULT: LogoLayout = { size: 200, x: 50, y: 50 };
+const BACK_LOGO_DEFAULT: LogoLayout = { ...DEFAULT_LOGO_LAYOUT };
 
-const SIZE_MIN = 48;
-const SIZE_MAX = 220;
+const SIZE_MIN = LOGO_SIZE_MIN;
+const SIZE_MAX = LOGO_SIZE_MAX;
 const SIZE_STEP = 4;
 const MOVE_STEP = 2;
 
@@ -245,12 +250,16 @@ function PlacedLogo({
   const isEmpty = !src;
   const [aspect, setAspect] = useState(1);
   const maxW = CARD_W - 16;
-  const maxH = CARD_H - 16;
+  const maxH = CARD_H - 20;
   let width = Math.min(layout.size, maxW);
-  let height = width / aspect;
+  let height = width / Math.max(aspect, 0.35);
   if (height > maxH) {
     height = maxH;
-    width = height * aspect;
+    width = height * Math.max(aspect, 0.35);
+  }
+  if (width > maxW) {
+    width = maxW;
+    height = width / Math.max(aspect, 0.35);
   }
 
   return (
@@ -466,19 +475,17 @@ export default function CardCustomizer() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     if (!logoUrl) {
       setDisplayLogo(null);
       return;
     }
-    let cancelled = false;
-    // No foil — show the uploaded file exactly as-is (full canvas, no processing).
     if (!logoFinish) {
       setDisplayLogo(logoUrl);
       return;
     }
-    setDisplayLogo(logoUrl);
-    void logoForCardFinish(logoUrl, logoFinish).then((next) => {
-      if (!cancelled && next) setDisplayLogo(next);
+    void logoForCardFinish(logoUrl, logoFinish).then((src) => {
+      if (!cancelled) setDisplayLogo(src || logoUrl);
     });
     return () => {
       cancelled = true;
@@ -518,8 +525,8 @@ export default function CardCustomizer() {
     // Front logo is disabled — always adjust back logo
     setBackLogo((prev) => ({
       size: clamp(patch.size ?? prev.size, SIZE_MIN, SIZE_MAX),
-      x: clamp(patch.x ?? prev.x, 0, 92),
-      y: clamp(patch.y ?? prev.y, 0, 88),
+      x: clamp(patch.x ?? prev.x, 18, 82),
+      y: clamp(patch.y ?? prev.y, 18, 82),
     }));
     setLogoConfirmed(false);
     setLogoEditing(true);

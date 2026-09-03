@@ -160,7 +160,7 @@ export function cardDtoToProfile(
       coverImage: DEFAULT_CARD_BANNER,
       logoImage: DEFAULT_CARD_AVATAR,
       shareImage: null,
-      accentColor: "#BC7C10",
+      accentColor: "#141414",
       layout: "classic" as CardLayoutId,
     },
     updatedAt: new Date().toISOString(),

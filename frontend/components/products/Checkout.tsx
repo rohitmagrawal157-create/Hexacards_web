@@ -12,6 +12,7 @@ import {
   Minus,
   Plus,
 } from "lucide-react";
+import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 import {
   getAuthUser,
   isLoggedIn,
@@ -25,10 +26,10 @@ import {
 } from "@/lib/orders";
 import {
   buildPaymentFailedPath,
-  buildThankYouPath,
-  saveOrderThankYouSummary,
+  goToPaidThankYou,
 } from "@/lib/order-thank-you";
 import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
+import { confirmRazorpayPayment } from "@/lib/razorpay-checkout";
 import { allocateOrderCardSlug } from "@/lib/order-card";
 import { buildPublicCardUrl } from "@/lib/site-url";
 import { isEditableCardOrder } from "@/lib/user-cards";
@@ -365,9 +366,10 @@ export default function Checkout() {
           (await updateOrder(order.id, {
             cardSlug: finalSlug,
             cardUrl: liveUrl,
-            cardDesign: cardDesign
-              ? { ...cardDesign, liveUrl }
-              : undefined,
+            cardDesign: {
+              ...(order.cardDesign ?? cardDesign),
+              liveUrl,
+            },
           })) ?? order;
       }
 
@@ -418,85 +420,52 @@ export default function Checkout() {
         order_id: createJson.data.orderId,
         name: "HexaCards",
         description: withCardMeta.productTitle,
-        handler: async (response: {
+        handler: (response: {
           razorpay_payment_id?: string;
           razorpay_order_id?: string;
           razorpay_signature?: string;
         }) => {
-          try {
-            if (
-              !response.razorpay_order_id ||
-              !response.razorpay_payment_id ||
-              !response.razorpay_signature
-            ) {
-              throw new Error("Incomplete payment response from Razorpay.");
-            }
+          if (
+            !response.razorpay_order_id ||
+            !response.razorpay_payment_id ||
+            !response.razorpay_signature
+          ) {
+            window.alert("Incomplete payment response from Razorpay.");
+            return;
+          }
 
-            const completeRes = await fetch("/api/razorpay/complete", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                orderCode: withCardMeta.id,
-                orderId: withCardMeta.orderId ?? null,
+          const paidOrder: HexaOrder = {
+            ...withCardMeta,
+            paymentStatus: "paid",
+          };
+
+          try {
+            sessionStorage.removeItem("hexaCardDesign");
+            sessionStorage.removeItem("hexaOrderDetails");
+          } catch {
+            // ignore
+          }
+
+          goToPaidThankYou(router, paidOrder);
+
+          void (async () => {
+            try {
+              const confirmed = await confirmRazorpayPayment({
+                razorpay_order_id: response.razorpay_order_id!,
+                razorpay_payment_id: response.razorpay_payment_id!,
+                razorpay_signature: response.razorpay_signature!,
+                order: withCardMeta,
                 clientTxnId,
                 amount: Number(withCardMeta.total || total),
                 customerId: auth.userId ?? null,
-              }),
-            });
-            const completeJson = (await completeRes.json().catch(() => null)) as
-              | {
-                  ok?: boolean;
-                  error?: string;
-                  data?: { order?: HexaOrder & Record<string, unknown> };
-                }
-              | null;
-
-            if (!completeRes.ok || !completeJson?.ok || !completeJson.data?.order) {
-              throw new Error(
-                completeJson?.error ||
-                  "Payment succeeded but order could not be updated. Contact support with your payment ID.",
-              );
+              });
+              if (needsDigitalProfile) {
+                await initOrderCardProfileAsync(confirmed);
+              }
+            } catch (handlerErr) {
+              console.error("Razorpay success handler failed", handlerErr);
             }
-
-            const apiOrder = completeJson.data.order;
-            const paidOrder: HexaOrder = {
-              ...withCardMeta,
-              orderId:
-                apiOrder.orderId != null && Number(apiOrder.orderId) > 0
-                  ? Number(apiOrder.orderId)
-                  : withCardMeta.orderId,
-              paymentStatus: "paid",
-            };
-
-            const synced = await updateOrder(paidOrder.id, {
-              paymentStatus: "paid",
-              orderId: paidOrder.orderId,
-            });
-            const finalized = synced ?? paidOrder;
-            if (needsDigitalProfile) {
-              await initOrderCardProfileAsync(finalized);
-            }
-
-            try {
-              sessionStorage.removeItem("hexaCardDesign");
-              sessionStorage.removeItem("hexaOrderDetails");
-            } catch {
-              // ignore
-            }
-
-            saveOrderThankYouSummary(finalized);
-            router.replace(buildThankYouPath(finalized.id));
-          } catch (handlerErr) {
-            console.error("Razorpay success handler failed", handlerErr);
-            window.alert(
-              handlerErr instanceof Error
-                ? handlerErr.message
-                : "Payment received but confirmation failed. Check your dashboard or contact support.",
-            );
-          }
+          })();
         },
         prefill: {
           name: customerName,
@@ -1048,9 +1017,7 @@ export default function Checkout() {
                 disabled={!agreedToTerms || isSubmitting}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#BC7C10] py-3.5 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/25 transition-all hover:bg-[#9a650d] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSubmitting ? (
-                  "Processing…"
-                ) : (
+                {isSubmitting ? <HoneycombLoader /> : (
                   <>
                     <CheckCircle2 className="h-4 w-4" />
                     Place Order · {currency(total)}

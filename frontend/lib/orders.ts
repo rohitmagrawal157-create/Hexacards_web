@@ -2,9 +2,9 @@ import { getAuthUser, normalizeIndianPhone } from "@/lib/auth";
 import { apiFetch } from "@/lib/api-config";
 import type { OrderCardDesignData } from "@/lib/order-card";
 import { findOrderByPublicSlug, resolveOrderLiveUrl } from "@/lib/order-card";
+import { uploadOrderDesignLogo } from "@/lib/card-image-upload";
 import {
   persistOrderLogo,
-  orderLogoRef,
   stripLogoForLocalStorage,
 } from "@/lib/order-logo-store";
 
@@ -438,6 +438,22 @@ export function findOrderByCardSlug(slug: string): HexaOrder | null {
   return found;
 }
 
+async function persistCardDesignLogo(
+  orderId: string,
+  design: OrderCardDesignData,
+): Promise<OrderCardDesignData> {
+  if (!design.logoSrc?.startsWith("data:image/")) return design;
+  const dataUrl = design.logoSrc;
+  await persistOrderLogo(orderId, dataUrl);
+  try {
+    const uploaded = await uploadOrderDesignLogo({ orderId, dataUrl });
+    return { ...design, logoSrc: uploaded.url };
+  } catch (err) {
+    console.error("[orders] Order logo upload failed:", err);
+    return design;
+  }
+}
+
 export async function saveOrder(
   order: Omit<HexaOrder, "id" | "createdAt" | "status" | "ownerPhone"> & {
     status?: HexaOrderStatus;
@@ -476,11 +492,11 @@ export async function saveOrder(
   };
 
   if (next.cardDesign?.logoSrc?.startsWith("data:image/")) {
-    await persistOrderLogo(next.id, next.cardDesign.logoSrc);
-    next.cardDesign = {
-      ...next.cardDesign,
-      logoSrc: orderLogoRef(next.id),
-    };
+    next.cardDesign = await persistCardDesignLogo(next.id, next.cardDesign);
+    if (next.cardDesign.logoSrc && !next.cardDesign.logoSrc.startsWith("data:")) {
+      next.orderLogoSrc =
+        next.orderLogoSrc || next.cardDesign.logoSrc;
+    }
   }
 
   const apiRes = await apiFetch<HexaOrder>("/api/orders", {
@@ -518,11 +534,23 @@ export async function updateOrder(
   id: string,
   patch: Partial<HexaOrder>,
 ): Promise<HexaOrder | null> {
+  const nextPatch = { ...patch };
+  if (nextPatch.cardDesign?.logoSrc?.startsWith("data:image/")) {
+    nextPatch.cardDesign = await persistCardDesignLogo(id, nextPatch.cardDesign);
+    if (
+      nextPatch.cardDesign.logoSrc &&
+      !nextPatch.cardDesign.logoSrc.startsWith("data:") &&
+      nextPatch.orderLogoSrc === undefined
+    ) {
+      nextPatch.orderLogoSrc = nextPatch.cardDesign.logoSrc;
+    }
+  }
+
   const all = readOrders();
   const idx = all.findIndex((o) => o.id === id);
   let local: HexaOrder | null = null;
   if (idx >= 0) {
-    all[idx] = compactOrderForStorage({ ...all[idx], ...patch });
+    all[idx] = compactOrderForStorage({ ...all[idx], ...nextPatch });
     writeOrders(all);
     local = all[idx];
     window.dispatchEvent(new Event("hexa-orders-change"));
@@ -532,7 +560,7 @@ export async function updateOrder(
     `/api/orders/${encodeURIComponent(id)}`,
     {
       method: "PUT",
-      body: JSON.stringify(orderToApiBody({ id, ...patch })),
+      body: JSON.stringify(orderToApiBody({ id, ...nextPatch })),
     },
   );
 
@@ -543,7 +571,7 @@ export async function updateOrder(
     if (idx >= 0) {
       all[idx] = compactOrderForStorage({
         ...mapped,
-        cardDesign: patch.cardDesign ?? mapped.cardDesign ?? all[idx].cardDesign,
+        cardDesign: nextPatch.cardDesign ?? mapped.cardDesign ?? all[idx].cardDesign,
       });
       writeOrders(all);
       window.dispatchEvent(new Event("hexa-orders-change"));

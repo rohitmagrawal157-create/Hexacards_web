@@ -14,15 +14,19 @@ import CardContactForm from "@/components/user-dashboard/CardContactForm";
 import CardLayoutFooter from "./CardLayoutFooter";
 import CardShareModal from "./CardShareModal";
 import {
-  DEFAULT_CARD_AVATAR,
-  DEFAULT_CARD_BANNER,
   openBrochureDownload,
   phoneDigitsForLink,
   resolveCardAccent,
   type HexaCardProfile,
 } from "@/lib/card-profile";
 import { cardShellClass } from "@/lib/public-card-shell";
-import { useCoverImageUrl } from "@/lib/use-cover-image";
+import { saveCardContactToDevice } from "@/lib/vcard";
+import {
+  openWhatsAppCardShare,
+  resolveCardShareUrl,
+} from "@/lib/card-share";
+import CardCoverImage from "@/components/shared/CardCoverImage";
+import CardAvatarImage from "@/components/shared/CardAvatarImage";
 
 type SocialProps = {
   profile: HexaCardProfile;
@@ -167,8 +171,6 @@ export default function Social({
   const businessName = profile.contact.businessName.trim();
   const bio = profile.business.about?.trim() || "";
   const services = (profile.business.services ?? []).filter((s) => s.trim());
-  const coverUrl = useCoverImageUrl(profile.appearance.coverImage);
-  const avatarUrl = profile.appearance.logoImage || DEFAULT_CARD_AVATAR;
   const country = profile.contact.countryCode || "IN";
   const mobile = profile.contact.mobile?.trim() || "";
   const whatsapp = profile.contact.whatsapp?.trim() || mobile;
@@ -192,26 +194,11 @@ export default function Social({
   const hasBrochure = Boolean(profile.contact.brochureName);
 
   function handleWhatsAppShare(toNumber?: string) {
-    const text = "Hi, check out my HexaCards digital profile";
-    const digits = (toNumber || "").replace(/\D/g, "");
-    if (digits) {
-      if (digits.length !== 10) {
-        window.alert("Enter a 10-digit WhatsApp number.");
-        return;
-      }
-      const dial = phoneDigitsForLink(country, digits);
-      window.open(
-        `https://wa.me/${dial}?text=${encodeURIComponent(text)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-      return;
-    }
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(text)}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    openWhatsAppCardShare({
+      shareUrl: resolveCardShareUrl(profile),
+      toNumber,
+      countryCode: country,
+    });
   }
 
   async function handleBrochure() {
@@ -360,12 +347,9 @@ export default function Social({
       </div>
 
       {/* Branded cover — a bit taller so more image shows */}
-      <div
-        className="relative min-h-52 bg-cover bg-center sm:min-h-60"
-        style={{
-          backgroundImage: `url("${coverUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`,
-        }}
-      >
+      <div className="relative min-h-52 overflow-hidden sm:min-h-60">
+        <CardCoverImage src={profile.appearance.coverImage} alt="" />
+        <div className="relative z-10">
         <div className="relative flex items-center justify-end gap-2 px-4 pt-4">
           {onChangeBackground ? (
             <button
@@ -381,16 +365,11 @@ export default function Social({
 
         <div className="relative mt-10 flex justify-center pb-2 sm:mt-12">
           <div className="relative z-10">
-            <div
-              className="h-28 w-28 overflow-hidden rounded-full border-4 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.28)]"
-              style={{ borderColor: accent }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={avatarUrl}
-                alt=""
-                className="h-full w-full object-cover object-center"
-              />
+              <div
+                className="h-28 w-28 overflow-hidden rounded-full border-4 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.28)]"
+                style={{ borderColor: accent }}
+              >
+                <CardAvatarImage src={profile.appearance.logoImage} />
             </div>
             {onChangeProfile ? (
               <button
@@ -403,6 +382,7 @@ export default function Social({
               </button>
             ) : null}
           </div>
+        </div>
         </div>
       </div>
 
@@ -481,19 +461,14 @@ export default function Social({
         </div>
 
         <div className="mt-5 flex items-center gap-2">
-          <a
-            href={
-              mobileDigits
-                ? `tel:+${mobileDigits}`
-                : email
-                  ? `mailto:${email}`
-                  : "#save-contact"
-            }
+          <button
+            type="button"
+            onClick={() => void saveCardContactToDevice(profile)}
             className="flex-1 rounded-full py-3 text-center text-sm font-bold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: accent }}
           >
             Save Contact
-          </a>
+          </button>
           <button
             type="button"
             onClick={() => setShareModalOpen(true)}
@@ -559,6 +534,7 @@ export default function Social({
         onClose={() => setShareModalOpen(false)}
         accent={accent}
         cardName={name}
+        shareUrl={resolveCardShareUrl(profile)}
       />
     </div>
   );

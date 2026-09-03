@@ -64,6 +64,15 @@ export function buildThankYouPath(orderId: string): string {
   return `/thank-you?order=${encodeURIComponent(orderId)}`;
 }
 
+/** Persist summary and go to thank-you immediately (do not wait on payment APIs). */
+export function goToPaidThankYou(
+  router: { replace: (href: string) => void },
+  order: HexaOrder,
+) {
+  saveOrderThankYouSummary({ ...order, paymentStatus: "paid" });
+  router.replace(buildThankYouPath(order.id));
+}
+
 export function buildPaymentFailedPath(
   orderId: string,
   retryPath?: string,

@@ -49,6 +49,12 @@ In Vercel → Project → **Settings → Environment Variables**, add:
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only; for admin CRUD |
 | `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | Prod forms | reCAPTCHA site key |
 | `RECAPTCHA_SECRET_KEY` | Prod forms | reCAPTCHA secret |
+| `OTP_SMS_ENABLED` | Login OTP | `true` for live SMS |
+| `NIMBUS_SMS_USER_ID` | Login OTP | Nimbus IT user id |
+| `NIMBUS_SMS_PASSWORD` | Login OTP | Nimbus password (server-only) |
+| `NIMBUS_SMS_SENDER_ID` | Login OTP | DLT sender id (e.g. `HEXACR`) |
+| `NIMBUS_SMS_ENTITY_ID` | Login OTP | DLT entity id |
+| `NIMBUS_SMS_TEMPLATE_ID` | Login OTP | DLT OTP template id |
 
 **Do not set** `NEXT_PUBLIC_API_URL` on Vercel — leave it empty so the app calls same-origin `/api/*`.
 

@@ -33,15 +33,20 @@ import CardContactForm from "@/components/user-dashboard/CardContactForm";
 import CardLayoutFooter from "./CardLayoutFooter";
 import CardShareModal from "./CardShareModal";
 import {
-  DEFAULT_CARD_AVATAR,
-  DEFAULT_CARD_BANNER,
+  cardPublicUrl,
   openBrochureDownload,
   phoneDigitsForLink,
   resolveCardAccent,
   type HexaCardProfile,
 } from "@/lib/card-profile";
 import { cardShellClass } from "@/lib/public-card-shell";
-import { useCoverImageUrl } from "@/lib/use-cover-image";
+import { saveCardContactToDevice } from "@/lib/vcard";
+import {
+  openWhatsAppCardShare,
+  resolveCardShareUrl,
+} from "@/lib/card-share";
+import CardCoverImage from "@/components/shared/CardCoverImage";
+import CardAvatarImage from "@/components/shared/CardAvatarImage";
 
 type MinimalistProps = {
   profile: HexaCardProfile;
@@ -177,9 +182,11 @@ export default function Minimalist({
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [contactFormOpen, setContactFormOpen] = useState(false);
+  const [waShareNumber, setWaShareNumber] = useState("");
 
   const accentTheme = resolveCardAccent(profile.appearance.accentColor);
   const accent = accentTheme.solid;
+  const accentSoft = accentTheme.soft;
   const accentMuted = accentTheme.muted;
 
   const name =
@@ -192,9 +199,8 @@ export default function Minimalist({
     .join(" | ");
   const about = profile.business.about?.trim() || "";
   const services = (profile.business.services ?? []).filter((s) => s.trim());
-  const avatarUrl = profile.appearance.logoImage || DEFAULT_CARD_AVATAR;
-  const coverUrl = useCoverImageUrl(profile.appearance.coverImage);
   const hasBrochure = Boolean(profile.contact.brochureName);
+  const shareUrl = cardPublicUrl(profile);
 
   const country = profile.contact.countryCode || "IN";
   const mobile = profile.contact.mobile?.trim() || "";
@@ -249,22 +255,51 @@ export default function Minimalist({
     }
   }
 
+  function handleWhatsAppShare(toNumber?: string) {
+    openWhatsAppCardShare({
+      shareUrl,
+      toNumber,
+      countryCode: country,
+    });
+  }
+
   return (
     <div
       className={cardShellClass(publicView)}
       style={{ borderColor: accent }}
     >
+      <div
+        className="flex items-center justify-between gap-2 border-b bg-white px-4 py-2"
+        style={{ borderColor: accentSoft }}
+      >
+        <input
+          type="tel"
+          inputMode="numeric"
+          maxLength={10}
+          placeholder="Enter WhatsApp Number"
+          value={waShareNumber}
+          onChange={(e) =>
+            setWaShareNumber(e.target.value.replace(/\D/g, "").slice(0, 10))
+          }
+          className="min-w-0 flex-1 bg-transparent text-sm text-[#141414] outline-none placeholder:text-[#a0a0a8]"
+        />
+        <button
+          type="button"
+          onClick={() => handleWhatsAppShare(waShareNumber)}
+          className="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90"
+          style={{ backgroundColor: accent }}
+        >
+          <FaWhatsapp className="h-4 w-4" />
+          Share
+        </button>
+      </div>
+
       {/* Banner — camera on cover; share outside below cover */}
       <div className="relative">
         <div
           className={`relative h-52 w-full overflow-hidden bg-gradient-to-br from-[#1e5fa8] via-[#2f74c2] to-[#5aa0e0] sm:h-60 ${
             onChangeBackground ? "cursor-pointer" : ""
           }`}
-          style={{
-            backgroundImage: `url("${coverUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-          }}
           onClick={() => onChangeBackground?.()}
           onKeyDown={(e) => {
             if (!onChangeBackground) return;
@@ -277,6 +312,7 @@ export default function Minimalist({
           tabIndex={onChangeBackground ? 0 : undefined}
           aria-label={onChangeBackground ? "Change background image" : undefined}
         >
+          <CardCoverImage src={profile.appearance.coverImage} alt="" />
           {onChangeBackground ? (
             <button
               type="button"
@@ -324,12 +360,7 @@ export default function Minimalist({
             }}
             aria-label={onChangeProfile ? "Change profile picture" : undefined}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={avatarUrl}
-              alt=""
-              className="h-full w-full object-cover object-center"
-            />
+            <CardAvatarImage src={profile.appearance.logoImage} />
           </div>
           {onChangeProfile ? (
             <button
@@ -409,19 +440,14 @@ export default function Minimalist({
 
       {/* Save Contact · Brochure */}
       <div className="mt-4 flex items-center justify-center gap-2.5 px-6">
-        <a
-          href={
-            mobileDigits
-              ? `tel:+${mobileDigits}`
-              : email
-                ? `mailto:${email}`
-                : "#save-contact"
-          }
+        <button
+          type="button"
+          onClick={() => void saveCardContactToDevice(profile)}
           className="min-w-0 flex-1 rounded-full py-2.5 text-center text-[11px] font-bold tracking-wide text-white uppercase shadow-sm transition-transform hover:scale-[1.02]"
           style={{ backgroundColor: accent }}
         >
           Save Contact
-        </a>
+        </button>
         {hasBrochure ? (
           <button
             type="button"
@@ -543,6 +569,7 @@ export default function Minimalist({
         onClose={() => setShareModalOpen(false)}
         accent={accent}
         cardName={name}
+        shareUrl={shareUrl}
       />
     </div>
   );

@@ -11,6 +11,7 @@ import {
   verifyRecaptchaOnServer,
 } from "@/lib/recaptcha";
 import { resolveCardAccent } from "@/lib/card-profile";
+import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 
 type CardContactFormProps = {
   accentColor: string;
@@ -233,10 +234,10 @@ export default function CardContactForm({
           <button
             type="submit"
             disabled={contactSubmitting}
-            className="w-full rounded-xl px-4 py-3 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
             style={{ backgroundColor: accent }}
           >
-            {contactSubmitting ? "Verifying…" : "Send Message"}
+            {contactSubmitting ? <HoneycombLoader /> : "Send Message"}
           </button>
           {captchaEnabled ? (
             <p className="text-[10px] leading-relaxed text-[#9a9a9a]">

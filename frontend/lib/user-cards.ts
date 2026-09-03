@@ -1,5 +1,5 @@
 import type { OrderCardDesignData } from "@/lib/order-card";
-import { resolveOrderLiveUrl } from "@/lib/order-card";
+import { clampLogoLayout, resolveOrderLiveUrl } from "@/lib/order-card";
 import { compressCardLogoDataUrl } from "@/lib/order-logo-store";
 import { getOrderCardProfile } from "@/lib/order-card-profile";
 import { getOrdersForPhone, isOrderDashboardHidden, type HexaOrder } from "@/lib/orders";
@@ -184,7 +184,7 @@ export function orderCardImage(
 export function savedDesignToCardDesign(
   design: SavedCardDesign | null,
   customerName: string,
-  phone: string,
+  _phone: string,
   logoSrc?: string,
 ): OrderCardDesignData | undefined {
   if (!design && !logoSrc) return undefined;
@@ -208,9 +208,9 @@ export function savedDesignToCardDesign(
     lockedAccentColor: accent,
     name: design?.title?.trim() || customerName,
     subtitle: design?.subTitle?.trim() || "",
-    extraLine: design?.moreDetails?.trim() || phone || undefined,
+    extraLine: design?.moreDetails?.trim() || undefined,
     logoSrc: logoSrc || design?.logoUrl || undefined,
-    logoLayout: design?.backLogo ?? { size: 86, x: 50, y: 48 },
+    logoLayout: clampLogoLayout(design?.backLogo),
   };
 }
 

@@ -3,7 +3,7 @@ import path from "path";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getSupabaseCardImagePublicUrl, DEFAULT_CARD_IMAGES_BUCKET } from "@/lib/card-images";
 
-export type CardImageKind = "profile" | "background";
+export type CardImageKind = "profile" | "background" | "order-logo";
 
 const BUCKET =
   process.env.CARD_IMAGES_BUCKET?.trim() || DEFAULT_CARD_IMAGES_BUCKET;
@@ -34,11 +34,23 @@ export function sanitizeCardUsername(slug: string): string {
  * Fixed filenames per card username — always overwrite the same file.
  * e.g. faizan-shaikh77-profile.jpg
  */
+function extensionForContentType(contentType?: string): string {
+  const t = (contentType || "").toLowerCase();
+  if (t.includes("png")) return "png";
+  if (t.includes("webp")) return "webp";
+  if (t.includes("gif")) return "gif";
+  return "jpg";
+}
+
 export function cardImageFilename(
   username: string,
   kind: CardImageKind,
+  contentType?: string,
 ): string {
   const base = sanitizeCardUsername(username);
+  if (kind === "order-logo") {
+    return `${base}-order-logo.${extensionForContentType(contentType)}`;
+  }
   return kind === "profile"
     ? `${base}-profile.jpg`
     : `${base}-background.jpg`;
@@ -113,8 +125,6 @@ export async function saveCardImage(opts: {
   buffer?: Buffer;
   contentType?: string;
 }): Promise<{ path: string; url: string; filename: string }> {
-  const filename = cardImageFilename(opts.username, opts.kind);
-
   let buffer = opts.buffer;
   let contentType = opts.contentType || "image/jpeg";
 
@@ -125,6 +135,8 @@ export async function saveCardImage(opts: {
       ? parsed.contentType
       : "image/jpeg";
   }
+
+  const filename = cardImageFilename(opts.username, opts.kind, contentType);
 
   if (!buffer?.length) {
     throw new Error("No image data provided");
@@ -172,6 +184,9 @@ export function cardImageDbFields(
   const name = filename.split("/").pop()?.split("?")[0]?.slice(0, 255) || filename;
   if (kind === "profile") {
     return { logo: name };
+  }
+  if (kind === "order-logo") {
+    return {};
   }
   return { bg_img: name, bg_url: name };
 }

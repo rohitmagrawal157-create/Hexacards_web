@@ -21,10 +21,7 @@ import {
   FaGoogle,
   FaWhatsapp,
 } from "react-icons/fa";
-import {
-  DEFAULT_CARD_AVATAR,
-  DEFAULT_CARD_BANNER,
-} from "@/lib/card-profile";
+import { useCoverImageUrl, useLogoImageUrl } from "@/lib/use-cover-image";
 
 type LayoutPhonePreviewProps = {
   layoutId: "classic" | "basic" | "modern" | "compact" | "social" | "minimalist" | string;
@@ -54,8 +51,8 @@ export default function LayoutPhonePreview({
   mobile,
   email,
 }: LayoutPhonePreviewProps) {
-  const cover = coverUrl || DEFAULT_CARD_BANNER;
-  const avatar = avatarUrl || DEFAULT_CARD_AVATAR;
+  const cover = useCoverImageUrl(coverUrl);
+  const avatar = useLogoImageUrl(avatarUrl);
   const borderSoft = `${accent}33`;
   const mobileLabel = mobile?.trim() || "+91 ·····";
   const emailLabel = email?.trim() || "you@email.com";

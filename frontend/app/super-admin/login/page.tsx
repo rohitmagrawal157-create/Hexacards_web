@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { SuperAdminLogin } from "@/components/super-admin";
+import { HoneycombPageStatus } from "@/components/ui/honeycomb-loader";
 
 export const metadata = {
   title: "Super Admin Sign In — HexaCards",
@@ -11,10 +12,7 @@ export default function SuperAdminLoginPage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center bg-[#F7F8FA]">
-          <div className="text-center">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#BC7C10]/25 border-t-[#BC7C10]" />
-            <p className="mt-3 text-sm font-medium text-[#5c5346]">Loading…</p>
-          </div>
+          <HoneycombPageStatus label="Loading…" />
         </div>
       }
     >

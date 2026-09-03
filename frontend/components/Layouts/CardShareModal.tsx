@@ -8,6 +8,12 @@ import {
   FaTwitter,
   FaLinkedinIn,
 } from "react-icons/fa";
+import {
+  buildCardShareEmailSubject,
+  buildCardShareText,
+  buildCardShareTweet,
+  openWhatsAppCardShare,
+} from "@/lib/card-share";
 
 type CardShareModalProps = {
   open: boolean;
@@ -15,20 +21,9 @@ type CardShareModalProps = {
   accent: string;
   /** Used as email subject / share name */
   cardName?: string;
+  /** Canonical public card URL (https://hexacards.com/slug) */
+  shareUrl?: string;
 };
-
-function cardUrl() {
-  return typeof window !== "undefined" ? window.location.href : "";
-}
-
-function shareWhatsApp() {
-  const text = "Hi, check out my HexaCards digital profile";
-  window.open(
-    `https://wa.me/?text=${encodeURIComponent(text)}`,
-    "_blank",
-    "noopener,noreferrer",
-  );
-}
 
 const BRAND = {
   WhatsApp: "#25D366",
@@ -40,24 +35,30 @@ const BRAND = {
 
 /**
  * Shared “Share this card” modal — WhatsApp, Facebook, Twitter, LinkedIn, Email.
- * Used by Classic, Basic, Modern, Compact, and Social layouts.
  */
 export default function CardShareModal({
   open,
   onClose,
   accent: _accent,
   cardName = "HexaCards",
+  shareUrl = "",
 }: CardShareModalProps) {
   if (!open || typeof document === "undefined") return null;
 
-  const url = cardUrl();
+  const url =
+    shareUrl.trim() ||
+    (typeof window !== "undefined" ? window.location.href : "");
+  const message = buildCardShareText(url);
+  const tweet = buildCardShareTweet(url);
+  const emailSubject = buildCardShareEmailSubject(cardName);
+
   const shareLinks = [
     {
       label: "WhatsApp" as const,
       Icon: FaWhatsapp,
       color: BRAND.WhatsApp,
       onClick: () => {
-        shareWhatsApp();
+        openWhatsAppCardShare({ shareUrl: url });
         onClose();
       },
     },
@@ -71,7 +72,7 @@ export default function CardShareModal({
       label: "Twitter" as const,
       Icon: FaTwitter,
       color: BRAND.Twitter,
-      href: `https://twitter.com/intent/tweet?text=${encodeURIComponent("Check out my HexaCards digital profile")}&url=${encodeURIComponent(url)}`,
+      href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweet)}`,
     },
     {
       label: "LinkedIn" as const,
@@ -83,7 +84,7 @@ export default function CardShareModal({
       label: "Email" as const,
       Icon: Mail,
       color: BRAND.Email,
-      href: `mailto:?subject=${encodeURIComponent(cardName)}&body=${encodeURIComponent(`Check out my digital business card\n${url}`)}`,
+      href: `mailto:?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(message)}`,
     },
   ];
 
@@ -110,6 +111,9 @@ export default function CardShareModal({
             <X className="h-5 w-5" />
           </button>
         </div>
+        <p className="mb-4 rounded-xl bg-[#FFFCF7] px-3 py-2.5 text-left text-[13px] leading-relaxed text-[#5c5346] whitespace-pre-wrap">
+          {message}
+        </p>
         <div className="flex flex-wrap gap-3">
           {shareLinks.map(({ label, Icon, color, href, onClick }) => {
             const hoverHandlers = {

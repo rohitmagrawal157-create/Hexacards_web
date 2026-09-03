@@ -10,6 +10,7 @@ import {
   Package,
   Headphones,
 } from "lucide-react";
+import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 import LocationSelects, {
   type LocationValue,
 } from "@/components/shared/LocationSelects";
@@ -355,7 +356,7 @@ export default function FranchiseEnquiry() {
                 disabled={status === "submitting"}
                 className="inline-flex w-full items-center justify-center rounded-xl bg-[#BC7C10] px-5 py-3.5 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/20 transition hover:bg-[#9a650d] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting" ? "Sending…" : "Send Enquiry"}
+                {status === "submitting" ? <HoneycombLoader /> : "Send Enquiry"}
               </button>
             </form>
           </div>

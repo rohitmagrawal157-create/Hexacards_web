@@ -18,15 +18,14 @@ import {
   normalizeIndianPhone,
 } from "@/lib/auth";
 import { usePublicProduct } from "@/lib/public-product-catalog";
+import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 import {
   saveOrder,
   updateOrder,
-  type HexaOrder,
 } from "@/lib/orders";
 import {
   buildPaymentFailedPath,
-  buildThankYouPath,
-  saveOrderThankYouSummary,
+  goToPaidThankYou,
 } from "@/lib/order-thank-you";
 import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
 import { allocateOrderCardSlug } from "@/lib/order-card";
@@ -208,16 +207,12 @@ export default function DigitalQrOrderForm() {
         customerName,
         email: draft.email.trim(),
         contactPhone,
-        onPaid: async (paidOrder) => {
-          const synced = await updateOrder(paidOrder.id, {
-            paymentStatus: "paid",
-            orderId: paidOrder.orderId,
-          });
-          const paid = synced ?? paidOrder;
-          await initOrderCardProfileAsync(paid);
+        onPaid: (paidOrder) => {
           clearDraft();
-          saveOrderThankYouSummary(paid);
-          router.replace(buildThankYouPath(paid.id));
+          goToPaidThankYou(router, paidOrder);
+          void initOrderCardProfileAsync(paidOrder).catch((err) => {
+            console.error("Card profile setup after payment failed", err);
+          });
         },
         onFailed: async () => {
           await updateOrder(finalized.id, { paymentStatus: "failed" });
@@ -387,7 +382,7 @@ export default function DigitalQrOrderForm() {
           disabled={submitting}
           className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#BC7C10] px-4 py-3.5 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/25 transition-all hover:bg-[#9a650d] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting ? "Opening payment…" : `Pay ${currency(product.price)}`}
+          {submitting ? <HoneycombLoader /> : `Pay ${currency(product.price)}`}
         </button>
 
         <p className="mt-3 text-center text-xs text-[#8a8174]">

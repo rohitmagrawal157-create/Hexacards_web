@@ -38,17 +38,10 @@ export async function POST(request: Request) {
       return jsonError(400, "Valid 10-digit mobile number is required");
     }
 
-    if (!isSmsOtpEnabled()) {
+    if (!isSmsOtpEnabled() || !isNimbusSmsConfigured()) {
       return jsonError(
         503,
-        "SMS OTP is not configured on the server. Set Nimbus credentials in environment variables.",
-      );
-    }
-
-    if (!isNimbusSmsConfigured()) {
-      return jsonError(
-        503,
-        "SMS OTP is enabled but Nimbus credentials are missing on the server",
+        "SMS OTP is not configured on the server. Set OTP_SMS_ENABLED=true and NIMBUS_SMS_* in Vercel → Settings → Environment Variables (Production), then Redeploy. Local: add them to frontend/.env.local and restart npm run dev.",
       );
     }
 

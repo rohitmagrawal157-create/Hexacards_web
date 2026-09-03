@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   buildOrderCardDesign,
   buildOrderCardDesignAsync,
   logoForCardFinish,
   prepareCardLogoDataUrl,
   printFinishLabel,
+  toBlackLogoDataUrl,
   CARD_CORNER_RADIUS_IN,
   CARD_PRINT_HEIGHT_IN,
   CARD_PRINT_SIZE_LABEL,
   CARD_PRINT_WIDTH_IN,
+  STUDIO_CARD_WIDTH,
+  clampLogoLayout,
+  type OrderCardLogoLayout,
   type ResolvedOrderCardDesign,
 } from "@/lib/order-card";
 import { buildStyledQrSvg } from "@/lib/styled-qr";
@@ -202,11 +206,29 @@ function FramedQr({
 const BLACK_LOGO_FILTER =
   "grayscale(1) contrast(1.35) brightness(0)";
 
+function logoLayoutBox(layout?: OrderCardLogoLayout): {
+  left: string;
+  top: string;
+  width: string;
+  maxHeight: string;
+} {
+  const next = clampLogoLayout(layout);
+  const widthPct = (next.size / STUDIO_CARD_WIDTH) * 100;
+  return {
+    left: `${next.x}%`,
+    top: `${next.y}%`,
+    width: `${widthPct}%`,
+    maxHeight: "82%",
+  };
+}
+
 function BackLogo({
   src,
+  layout,
   foil,
 }: {
   src?: string;
+  layout?: OrderCardLogoLayout;
   foil?: "gold" | "silver" | null;
 }) {
   const [failed, setFailed] = useState(false);
@@ -219,25 +241,33 @@ function BackLogo({
       setCleanSrc(undefined);
       return;
     }
-    // No foil — render the uploaded logo unchanged.
-    if (!foil) {
-      setCleanSrc(src);
-      return;
-    }
-    setCleanSrc(src);
-    void logoForCardFinish(src, foil).then((next) => {
-      if (!cancelled && next) setCleanSrc(next);
+    const run = foil
+      ? logoForCardFinish(src, foil)
+      : prepareCardLogoDataUrl(src);
+    void run.then((next) => {
+      if (!cancelled) setCleanSrc(next || src);
     });
     return () => {
       cancelled = true;
     };
   }, [src, foil]);
 
+  const box = logoLayoutBox(layout);
   const showLogo = Boolean(cleanSrc) && !failed;
   if (!showLogo) return null;
 
   return (
-    <div className="flex h-full w-full items-center justify-center p-[6%]">
+    <div
+      className="absolute z-10 flex items-center justify-center overflow-hidden"
+      style={{
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        maxHeight: box.maxHeight,
+        maxWidth: "82%",
+        transform: "translate(-50%, -50%)",
+      }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={cleanSrc}
@@ -297,6 +327,14 @@ function CardFace({
             >
               {design.subtitle}
             </p>
+            {design.extraLine?.trim() ? (
+              <p
+                className="mt-[0.2em] truncate text-[clamp(8px,2.7cqw,11px)] font-medium leading-snug whitespace-nowrap opacity-80"
+                style={textStyle}
+              >
+                {design.extraLine}
+              </p>
+            ) : null}
           </div>
           <div className="absolute right-[4.5%] bottom-[8%] z-10 w-[26%] aspect-square">
             <FramedQr
@@ -310,7 +348,7 @@ function CardFace({
           </div>
         </>
       ) : (
-        <BackLogo src={design.logoSrc} foil={foil} />
+        <BackLogo src={design.logoSrc} layout={design.logoLayout} foil={foil} />
       )}
     </div>
   );
@@ -356,6 +394,7 @@ function pdfFrontPageHtml(
 ) {
   const name = escapeHtml(design.name);
   const subtitle = escapeHtml(design.subtitle);
+  const extraLine = escapeHtml(design.extraLine?.trim() || "");
   const qrSize = "0.96in";
   const qrSvg = buildStyledQrSvg(design.liveUrl, {
     color: ink,
@@ -372,6 +411,11 @@ function pdfFrontPageHtml(
   );
   const subStyle = pdfFoilTextStyle(
     "margin-top:0.06in;font-size:10pt;font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;",
+    ink,
+    foil,
+  );
+  const extraStyle = pdfFoilTextStyle(
+    "margin-top:0.04in;font-size:8pt;font-weight:500;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0.85;",
     ink,
     foil,
   );
@@ -392,6 +436,7 @@ function pdfFrontPageHtml(
         <div style="min-width:0;flex:1;padding-right:0.06in;">
           <div style="${nameStyle}">${name}</div>
           <div style="${subStyle}">${subtitle}</div>
+          ${extraLine ? `<div style="${extraStyle}">${extraLine}</div>` : ""}
         </div>
         <div style="
           flex-shrink:0;
@@ -435,24 +480,36 @@ function pdfLogoImg(src?: string, black = false) {
   const filter = black
     ? `filter:${BLACK_LOGO_FILTER};-webkit-filter:${BLACK_LOGO_FILTER};`
     : "";
-  return `<img src='${escapeAttr(src)}' alt="" style="width:100%;height:100%;object-fit:contain;object-position:center;display:block;${filter}" />`;
+  return `<img src='${escapeAttr(src)}' alt="" style="max-width:100%;max-height:${CARD_PRINT_HEIGHT_IN * 0.82}in;width:auto;height:auto;object-fit:contain;object-position:center;display:block;${filter}" />`;
+}
+
+function pdfBackLogoHtml(design: ResolvedOrderCardDesign, black = false) {
+  const box = logoLayoutBox(design.logoLayout);
+  if (!design.logoSrc) return "";
+  return `
+    <div style="
+      position:absolute;
+      left:${box.left};
+      top:${box.top};
+      width:${box.width};
+      max-width:102%;
+      max-height:${box.maxHeight};
+      transform:translate(-50%, -50%);
+      z-index:10;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+    ">
+      ${pdfLogoImg(design.logoSrc, black)}
+    </div>
+  `;
 }
 
 function pdf2BackPageHtml(design: ResolvedOrderCardDesign) {
   return pdfCardShell(
     nfcIconSvg(PRINT_CARD_INK, 28, { id: "nfc-pdf2-back" }),
-    `
-      <div style="
-        position:absolute;
-        inset:0.14in;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        overflow:hidden;
-      ">
-        ${pdfLogoImg(design.logoSrc, true)}
-      </div>
-    `,
+    pdfBackLogoHtml(design, false),
   );
 }
 
@@ -463,18 +520,7 @@ function pdf3BackPageHtml(design: ResolvedOrderCardDesign) {
 
   return pdfCardShell(
     nfcIconSvg(ink, 28, { gold, silver, id: "nfc-pdf3-back" }),
-    `
-      <div style="
-        position:absolute;
-        inset:0.14in;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        overflow:hidden;
-      ">
-        ${pdfLogoImg(design.logoSrc)}
-      </div>
-    `,
+    pdfBackLogoHtml(design, false),
     cardFaceBg(design),
   );
 }
@@ -485,6 +531,27 @@ export {
   CARD_PRINT_SIZE_LABEL,
   CARD_PRINT_WIDTH_IN,
 } from "@/lib/order-card";
+
+function PreviewDetail({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="grid items-start gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[7.5rem_minmax(0,1fr)]"
+    >
+      <dt className="pt-0.5 text-[11px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
+        {label}
+      </dt>
+      <dd className="min-w-0 text-[15px] leading-snug font-semibold text-[#141414] break-words">
+        {children}
+      </dd>
+    </div>
+  );
+}
 
 export function OrderCardPreview({
   order,
@@ -517,45 +584,67 @@ export function OrderCardPreview({
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <p className="mb-2 text-center text-[10px] font-bold tracking-[0.14em] text-[#8a8174] uppercase">
+            <p className="mb-2 text-center text-[11px] font-bold tracking-[0.14em] text-[#8a8174] uppercase">
               Front side · {CARD_PRINT_SIZE_LABEL}
             </p>
             <CardFace design={design} side="front" />
           </div>
           <div>
-            <p className="mb-2 text-center text-[10px] font-bold tracking-[0.14em] text-[#8a8174] uppercase">
+            <p className="mb-2 text-center text-[11px] font-bold tracking-[0.14em] text-[#8a8174] uppercase">
               Back side · {CARD_PRINT_SIZE_LABEL}
             </p>
             <CardFace design={design} side="back" />
           </div>
         </div>
-        <div className="rounded-xl border border-black/[0.06] bg-[#FFFCF7] p-3 text-xs text-[#5c5346]">
-          <p>
-            <span className="font-semibold text-[#141414]">Card type:</span>{" "}
-            {design.cardBody === "black" ? "Black card" : "White card"}
+        <div className="overflow-hidden rounded-xl border border-black/[0.08] bg-white">
+          <p className="border-b border-black/[0.06] bg-[#FFFCF7] px-4 py-2.5 text-[11px] font-bold tracking-[0.14em] text-[#BC7C10] uppercase">
+            Card details
           </p>
-          <p className="mt-1">
-            <span className="font-semibold text-[#141414]">
-              {design.cardBody === "white" ? "Color:" : "Finish:"}
-            </span>{" "}
-            {printFinishLabel(design)}
-          </p>
-          <p className="mt-1">
-            <span className="font-semibold text-[#141414]">Name:</span>{" "}
-            {design.name}
-          </p>
-          <p className="mt-1">
-            <span className="font-semibold text-[#141414]">Title:</span>{" "}
-            {design.subtitle}
-          </p>
-          <p className="mt-1">
-            <span className="font-semibold text-[#141414]">Logo:</span>{" "}
-            {design.logoSrc ? "Uploaded" : "Not uploaded"}
-          </p>
-          <p className="mt-1">
-            <span className="font-semibold text-[#141414]">QR links to:</span>{" "}
-            <span className="break-all font-mono text-[11px]">{design.liveUrl}</span>
-          </p>
+          <dl className="divide-y divide-black/[0.06]">
+            <PreviewDetail label="Card type">
+              {design.cardBody === "black" ? "Black card" : "White card"}
+            </PreviewDetail>
+            <PreviewDetail label={design.cardBody === "white" ? "Color" : "Finish"}>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-black/10"
+                  style={{ backgroundColor: design.accentColor }}
+                  aria-hidden
+                />
+                {printFinishLabel(design)}
+              </span>
+            </PreviewDetail>
+            <PreviewDetail label="Name">{design.name}</PreviewDetail>
+            <PreviewDetail label="Title">{design.subtitle || "—"}</PreviewDetail>
+            {design.extraLine?.trim() ? (
+              <PreviewDetail label="Details">{design.extraLine}</PreviewDetail>
+            ) : null}
+            <PreviewDetail label="Logo">
+              {design.logoSrc ? (
+                <span className="inline-flex items-center gap-2.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={design.logoSrc}
+                    alt=""
+                    className="h-8 w-8 rounded-md border border-black/[0.08] bg-[#FFFCF7] object-contain p-0.5"
+                  />
+                  Uploaded
+                </span>
+              ) : (
+                "Not uploaded"
+              )}
+            </PreviewDetail>
+            <PreviewDetail label="QR link">
+              <a
+                href={design.liveUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-[13px] font-medium text-[#BC7C10] underline-offset-2 hover:underline"
+              >
+                {design.liveUrl}
+              </a>
+            </PreviewDetail>
+          </dl>
         </div>
       </div>
     );
@@ -683,8 +772,33 @@ export function printHtmlDocument(html: string, title: string) {
   win.document.write(html);
   win.document.close();
   win.document.title = title;
-  win.focus();
-  win.print();
+
+  const printWhenReady = () => {
+    win.focus();
+    win.print();
+  };
+
+  const images = Array.from(win.document.images);
+  if (images.length === 0) {
+    printWhenReady();
+    return;
+  }
+
+  Promise.all(
+    images.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          if (img.complete) {
+            resolve();
+            return;
+          }
+          img.addEventListener("load", () => resolve(), { once: true });
+          img.addEventListener("error", () => resolve(), { once: true });
+        }),
+    ),
+  ).then(() => {
+    window.setTimeout(printWhenReady, 50);
+  });
 }
 
 export function printOrderLogoPdf(order: HexaOrder) {
@@ -702,9 +816,12 @@ export function printOrderLogoPdf(order: HexaOrder) {
 export function printOrderCompleteCardPdf(order: HexaOrder) {
   void (async () => {
     const design = await buildOrderCardDesignAsync(order);
-    const logoSrc = design.logoSrc
+    let logoSrc = design.logoSrc
       ? (await prepareCardLogoDataUrl(design.logoSrc)) || design.logoSrc
       : undefined;
+    if (logoSrc) {
+      logoSrc = (await toBlackLogoDataUrl(logoSrc)) || logoSrc;
+    }
     printHtmlDocument(
       orderCompleteCardPrintHtml({ ...design, logoSrc }),
       `Complete Card — ${design.name}`,

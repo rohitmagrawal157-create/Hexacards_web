@@ -1,10 +1,8 @@
 "use client";
 
 import { Camera } from "lucide-react";
-import {
-  DEFAULT_CARD_AVATAR,
-  DEFAULT_CARD_BANNER,
-} from "@/lib/card-profile";
+import CardCoverImage from "@/components/shared/CardCoverImage";
+import CardAvatarImage from "@/components/shared/CardAvatarImage";
 
 export type BasicHeaderProps = {
   name: string;
@@ -31,8 +29,6 @@ export default function BasicLayout({
   onChangeBackground,
   onChangeProfile,
 }: BasicHeaderProps) {
-  const cover = coverUrl || DEFAULT_CARD_BANNER;
-  const avatar = avatarUrl || DEFAULT_CARD_AVATAR;
   const coverH = preview ? "h-24" : "h-52 sm:h-60";
   const avatarSize = preview ? "h-14 w-14" : "h-[112px] w-[112px]";
   const overlap = preview ? "-mt-7" : "-mt-14";
@@ -44,12 +40,6 @@ export default function BasicLayout({
           className={`relative w-full overflow-hidden bg-[#d8dde3] ${coverH} ${
             onChangeBackground ? "cursor-pointer" : ""
           }`}
-          style={{
-            backgroundImage: `url("${cover.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`,
-            backgroundSize: "cover",
-            backgroundPosition: "center center",
-            backgroundRepeat: "no-repeat",
-          }}
           role={onChangeBackground ? "button" : undefined}
           tabIndex={onChangeBackground ? 0 : undefined}
           onClick={() => onChangeBackground?.()}
@@ -62,6 +52,7 @@ export default function BasicLayout({
           }}
           aria-label={onChangeBackground ? "Change background image" : undefined}
         >
+          <CardCoverImage src={coverUrl} alt="" />
           {onChangeBackground ? (
             <button
               type="button"
@@ -87,12 +78,7 @@ export default function BasicLayout({
               }`}
               style={{ outline: `2px solid ${accent}` }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={avatar}
-                alt=""
-                className="h-full w-full object-cover object-center"
-              />
+              <CardAvatarImage src={avatarUrl} />
             </div>
             {onChangeProfile ? (
               <button

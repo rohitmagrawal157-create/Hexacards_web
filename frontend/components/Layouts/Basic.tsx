@@ -32,15 +32,19 @@ import CardContactForm from "@/components/user-dashboard/CardContactForm";
 import CardLayoutFooter from "./CardLayoutFooter";
 import CardShareModal from "./CardShareModal";
 import {
-  DEFAULT_CARD_AVATAR,
-  DEFAULT_CARD_BANNER,
+  defaultCardProfile,
   formatDialNumber,
   phoneDigitsForLink,
   resolveCardAccent,
   type HexaCardProfile,
 } from "@/lib/card-profile";
+import { useLogoImageUrl } from "@/lib/use-cover-image";
+import { saveCardContactToDevice } from "@/lib/vcard";
 import { cardShellClass } from "@/lib/public-card-shell";
-import { useCoverImageUrl } from "@/lib/use-cover-image";
+import {
+  openWhatsAppCardShare,
+  resolveCardShareUrl,
+} from "@/lib/card-share";
 
 export type BasicProfile = {
   contact: {
@@ -150,11 +154,9 @@ export default function Basic({
     : [];
   const name = profile.contact.cardName || "";
   const country = profile.contact.countryCode || "IN";
-  const avatarUrl =
-    profile.appearance.avatarImage ||
-    profile.appearance.logoImage ||
-    DEFAULT_CARD_AVATAR;
-  const coverUrl = useCoverImageUrl(profile.appearance.coverImage);
+  const avatarUrl = useLogoImageUrl(
+    profile.appearance.avatarImage || profile.appearance.logoImage,
+  );
   const mobile = profile.contact.mobile?.trim() || "";
   const whatsapp = profile.contact.whatsapp?.trim() || mobile;
   const websiteRaw = profile.contact.website?.trim() || "";
@@ -172,26 +174,34 @@ export default function Basic({
     : "";
 
   function handleWhatsAppShare(toNumber?: string) {
-    const text = `Hi, check out my HexaCards digital profile`;
-    const digits = (toNumber || "").replace(/\D/g, "");
-    if (digits) {
-      if (digits.length !== 10) {
-        window.alert("Enter a 10-digit WhatsApp number.");
-        return;
-      }
-      const dial = phoneDigitsForLink(country, digits);
-      window.open(
-        `https://wa.me/${dial}?text=${encodeURIComponent(text)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-      return;
-    }
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(text)}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    openWhatsAppCardShare({
+      shareUrl: resolveCardShareUrl(),
+      toNumber,
+      countryCode: country,
+    });
+  }
+
+  function handleSaveContact() {
+    const base = defaultCardProfile(name, mobile);
+    void saveCardContactToDevice({
+      ...base,
+      contact: {
+        ...base.contact,
+        cardName: name,
+        title: profile.contact.title || "",
+        businessName: profile.business?.name || "",
+        countryCode: country,
+        mobile,
+        whatsapp,
+        email: profile.contact.email || "",
+        website: websiteRaw,
+        address: profile.contact.address || "",
+      },
+      appearance: {
+        ...base.appearance,
+        logoImage: avatarUrl,
+      },
+    });
   }
 
   const actionIcons = [
@@ -211,7 +221,7 @@ export default function Basic({
       Icon: Globe,
       href: websiteHref || undefined,
     },
-    { label: "Add to contacts", Icon: UserPlus, href: "#save-contact" },
+    { label: "Add to contacts", Icon: UserPlus, onClick: handleSaveContact },
     {
       label: "Share",
       Icon: Share2,
@@ -320,7 +330,7 @@ export default function Basic({
       <BasicLayout
         name={name}
         titleLine={profile.contact.title}
-        coverUrl={coverUrl}
+        coverUrl={profile.appearance.coverImage}
         avatarUrl={avatarUrl}
         accent={accent}
         onChangeBackground={onChangeBackground}
@@ -519,6 +529,7 @@ export default function Basic({
         onClose={() => setShareModalOpen(false)}
         accent={accent}
         cardName={name || "HexaCards"}
+        shareUrl={resolveCardShareUrl()}
       />
     </div>
   );

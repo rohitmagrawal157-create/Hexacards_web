@@ -16,6 +16,24 @@
   --font-mono: var(--font-geist-mono);
   --font-display: var(--font-syne);
   --font-dashboard: var(--font-jakarta);
+  --animate-honeycomb: honeycomb 2.1s infinite backwards;
+}
+
+/* Uiverse.io by boryanakrasteva */
+@keyframes honeycomb {
+  0%,
+  20%,
+  80%,
+  100% {
+    opacity: 0;
+    transform: scale(0);
+  }
+
+  30%,
+  70% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 html {

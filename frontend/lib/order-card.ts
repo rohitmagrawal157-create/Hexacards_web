@@ -1,5 +1,6 @@
 import { getOrderById, updateOrder, type HexaOrder } from "@/lib/orders";
 import { isDefaultLogoImage } from "@/lib/card-profile";
+import { resolveCardImageSrc } from "@/lib/card-images";
 import { blobUrlToDataUrl } from "@/lib/user-cards";
 import { getCachedOrderLogo, isOrderLogoRef, loadOrderLogo } from "@/lib/order-logo-store";
 import { styledQrDataUri } from "@/lib/styled-qr";
@@ -51,7 +52,31 @@ export const CARD_PRINT_HEIGHT_IN = 2.12;
 export const CARD_CORNER_RADIUS_IN = 0.12;
 export const CARD_PRINT_SIZE_LABEL = `${CARD_PRINT_WIDTH_IN} × ${CARD_PRINT_HEIGHT_IN} in`;
 
-function isUsableLogoSrc(src?: string | null): src is string {
+/** Studio canvas size used for logo layout (px). Print PDFs scale this to inches. */
+export const STUDIO_CARD_WIDTH = 244;
+export const STUDIO_CARD_HEIGHT = 154;
+/** Keep logos inside the card with margin for the NFC icon. */
+export const LOGO_SIZE_MIN = 48;
+export const LOGO_SIZE_MAX = 176;
+export const DEFAULT_LOGO_LAYOUT: OrderCardLogoLayout = {
+  size: 148,
+  x: 50,
+  y: 50,
+};
+
+export function clampLogoLayout(
+  layout?: OrderCardLogoLayout | null,
+): OrderCardLogoLayout {
+  const size = Math.min(
+    LOGO_SIZE_MAX,
+    Math.max(LOGO_SIZE_MIN, layout?.size ?? DEFAULT_LOGO_LAYOUT.size),
+  );
+  const x = Math.min(82, Math.max(18, layout?.x ?? DEFAULT_LOGO_LAYOUT.x));
+  const y = Math.min(82, Math.max(18, layout?.y ?? DEFAULT_LOGO_LAYOUT.y));
+  return { size, x, y };
+}
+
+function isUsableLogoSrc(src?: string | null): boolean {
   if (!src?.trim()) return false;
   if (src.startsWith("blob:")) return false;
   if (isOrderLogoRef(src)) return false;
@@ -65,11 +90,24 @@ function isUsableLogoSrc(src?: string | null): src is string {
   );
 }
 
+function resolveDurableLogoSrc(src?: string | null): string | undefined {
+  if (!src?.trim()) return undefined;
+  const raw = src.trim();
+  if (raw.startsWith("blob:") || raw.startsWith("data:") || isOrderLogoRef(raw)) {
+    if (isUsableLogoSrc(raw)) return raw;
+    return undefined;
+  }
+  if (isUsableLogoSrc(raw)) return raw;
+  const resolved = resolveCardImageSrc(raw, "");
+  return isUsableLogoSrc(resolved) ? resolved : undefined;
+}
+
 function pickStaticLogoSrc(
   ...candidates: (string | undefined | null)[]
 ): string | undefined {
   for (const candidate of candidates) {
-    if (isUsableLogoSrc(candidate)) return candidate;
+    const resolved = resolveDurableLogoSrc(candidate);
+    if (resolved) return resolved;
   }
   return undefined;
 }
@@ -86,7 +124,8 @@ export async function resolveOrderLogoSrc(
   if (staticSrc) return staticSrc;
 
   // Standee / social-media orders store the logo in orderLogoSrc
-  if (order.orderLogoSrc) return order.orderLogoSrc;
+  const fromColumn = resolveDurableLogoSrc(order.orderLogoSrc);
+  if (fromColumn) return fromColumn;
 
   const blobCandidates = [order.cardDesign?.logoSrc].filter(
     (src): src is string => Boolean(src?.startsWith("blob:")),
@@ -778,7 +817,7 @@ export async function prepareCardLogoDataUrl(
       ctx.putImageData(image, 0, 0);
       resolve(canvas.toDataURL("image/png"));
     };
-    img.onerror = () => resolve(undefined);
+    img.onerror = () => resolve(src);
     img.src = src;
   });
 }
@@ -927,6 +966,9 @@ export async function toBlackLogoDataUrl(
   if (typeof window === "undefined") return src;
   return new Promise((resolve) => {
     const img = new Image();
+    if (src.startsWith("http://") || src.startsWith("https://")) {
+      img.crossOrigin = "anonymous";
+    }
     img.onload = () => {
       const width = img.naturalWidth || img.width;
       const height = img.naturalHeight || img.height;
@@ -964,7 +1006,7 @@ export async function toBlackLogoDataUrl(
       ctx.putImageData(image, 0, 0);
       resolve(canvas.toDataURL("image/png"));
     };
-    img.onerror = () => resolve(undefined);
+    img.onerror = () => resolve(src);
     img.src = src;
   });
 }
@@ -1244,16 +1286,12 @@ export function buildOrderCardDesign(order: HexaOrder): ResolvedOrderCardDesign 
       order.cardDesign?.subtitle?.trim() ||
       order.jobTitle?.trim() ||
       "Title or company",
-    extraLine:
-      order.cardDesign?.extraLine?.trim() ||
-      order.phone ||
-      undefined,
+    extraLine: order.cardDesign?.extraLine?.trim() || undefined,
     logoSrc:
       getCachedOrderLogo(order.id) ||
-      pickStaticLogoSrc(order.cardDesign?.logoSrc) ||
-      order.orderLogoSrc ||
+      pickStaticLogoSrc(order.cardDesign?.logoSrc, order.orderLogoSrc) ||
       undefined,
-    logoLayout: order.cardDesign?.logoLayout ?? { size: 120, x: 0, y: 0 },
+    logoLayout: clampLogoLayout(order.cardDesign?.logoLayout),
     slug,
     liveUrl,
     qrUrl,

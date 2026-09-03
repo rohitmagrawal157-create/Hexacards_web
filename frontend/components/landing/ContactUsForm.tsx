@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Headphones,
 } from "lucide-react";
+import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 
 type FormState = {
   name: string;
@@ -316,7 +317,7 @@ export default function ContactUsForm() {
                   disabled={status === "submitting"}
                   className="inline-flex flex-1 items-center justify-center rounded-xl bg-[#BC7C10] px-5 py-3.5 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/20 transition hover:bg-[#9a650d] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {status === "submitting" ? "Sending…" : "Send Message"}
+                  {status === "submitting" ? <HoneycombLoader /> : "Send Message"}
                 </button>
                 <a
                   href={`https://wa.me/919226286898?text=${encodeURIComponent(

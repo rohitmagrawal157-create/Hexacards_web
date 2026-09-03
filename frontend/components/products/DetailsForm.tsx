@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { usePublicProduct } from "@/lib/public-product-catalog";
 import { goToCheckout } from "@/lib/auth";
+import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 
 export type OrderPlatform = "instagram" | "youtube" | "google";
 
@@ -407,8 +408,14 @@ export default function DetailsForm({ productId }: { productId: string }) {
             disabled={submitting}
             className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-[#BC7C10] py-3.5 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/25 transition-all hover:bg-[#9a650d] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {submitting ? "Saving…" : "Continue to checkout"}
-            <ArrowRight className="h-4 w-4" />
+            {submitting ? (
+              <HoneycombLoader />
+            ) : (
+              <>
+                Continue to checkout
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
           </button>
 
           {!canSubmit ? (

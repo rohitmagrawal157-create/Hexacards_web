@@ -4,6 +4,7 @@ import {
 } from "libphonenumber-js";
 import { buildCardSlugFromName } from "@/lib/order-card";
 import { buildPublicCardPath, buildPublicCardUrl } from "@/lib/site-url";
+import { resolveCardImageSrc } from "@/lib/card-images";
 
 export type CardLayoutId =
   | "classic"
@@ -98,10 +99,11 @@ const LEGACY_DEFAULT_COVERS = new Set([
 
 /** Keep custom uploads; map missing/legacy stock banners to the fixed default. */
 export function normalizeCoverImage(cover: string | null | undefined) {
-  if (!cover) return DEFAULT_CARD_BANNER;
-  if (cover.startsWith("data:")) return cover;
-  if (LEGACY_DEFAULT_COVERS.has(cover)) return DEFAULT_CARD_BANNER;
-  return cover;
+  const trimmed = cover?.trim();
+  if (!trimmed) return DEFAULT_CARD_BANNER;
+  if (trimmed.startsWith("data:")) return trimmed;
+  if (LEGACY_DEFAULT_COVERS.has(trimmed)) return DEFAULT_CARD_BANNER;
+  return resolveCardImageSrc(trimmed, DEFAULT_CARD_BANNER);
 }
 
 /** Banner src for card UI — always falls back to the default stock image. */
@@ -115,9 +117,9 @@ export function resolveCoverImageForDisplay(
 
 /** Keep custom uploads; missing avatar uses the default avatar image. */
 export function normalizeLogoImage(logo: string | null | undefined) {
-  if (!logo) return DEFAULT_CARD_AVATAR;
+  if (!logo?.trim()) return DEFAULT_CARD_AVATAR;
   if (logo.startsWith("data:")) return logo;
-  return logo;
+  return resolveCardImageSrc(logo, DEFAULT_CARD_AVATAR);
 }
 
 export function isDefaultCoverImage(cover: string | null | undefined) {
@@ -131,8 +133,8 @@ export function isDefaultLogoImage(logo: string | null | undefined) {
 }
 
 export const CARD_ACCENT_COLORS = [
-  "#BC7C10",
   "#141414",
+  "#BC7C10",
   "#1565C0",
   "#0D9488",
   "#00B813",
@@ -163,7 +165,7 @@ export function isMulticolorAccent(color: string | null | undefined) {
 
 /** Resolved accent tokens for card UI — solid colors only */
 export function resolveCardAccent(color: string | null | undefined) {
-  const raw = (color || "#BC7C10").trim();
+  const raw = (color || "#141414").trim();
   const solid = isMulticolorAccent(raw) ? "#E91E63" : raw;
   return {
     solid,
@@ -255,7 +257,7 @@ export function defaultCardProfile(name = "User", phone = ""): HexaCardProfile {
       coverImage: DEFAULT_CARD_BANNER,
       logoImage: DEFAULT_CARD_AVATAR,
       shareImage: null,
-      accentColor: "#BC7C10",
+      accentColor: "#141414",
       layout: "classic",
     },
     updatedAt: new Date().toISOString(),

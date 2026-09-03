@@ -60,6 +60,56 @@ function loadRazorpayScript(): Promise<void> {
   return scriptPromise;
 }
 
+type CompleteJson = {
+  ok?: boolean;
+  error?: string;
+  data?: { order?: HexaOrder & Record<string, unknown> };
+};
+
+export async function confirmRazorpayPayment(input: {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+  order: HexaOrder;
+  clientTxnId: string;
+  amount: number;
+  customerId?: number | null;
+}): Promise<HexaOrder> {
+  const completeRes = await fetch("/api/razorpay/complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      razorpay_order_id: input.razorpay_order_id,
+      razorpay_payment_id: input.razorpay_payment_id,
+      razorpay_signature: input.razorpay_signature,
+      orderCode: input.order.id,
+      orderId: input.order.orderId ?? null,
+      clientTxnId: input.clientTxnId,
+      amount: Number(input.amount),
+      customerId: input.customerId ?? null,
+    }),
+  });
+
+  const completeJson = (await completeRes.json().catch(() => null)) as CompleteJson | null;
+
+  if (!completeRes.ok || !completeJson?.ok || !completeJson.data?.order) {
+    throw new Error(
+      completeJson?.error ||
+        "Payment succeeded but order could not be updated. Contact support with your payment ID.",
+    );
+  }
+
+  const apiOrder = completeJson.data.order;
+  return {
+    ...input.order,
+    orderId:
+      apiOrder.orderId != null && Number(apiOrder.orderId) > 0
+        ? Number(apiOrder.orderId)
+        : input.order.orderId,
+    paymentStatus: "paid",
+  };
+}
+
 export type RazorpayCheckoutInput = {
   order: HexaOrder;
   amount: number;
@@ -162,65 +212,35 @@ export async function startRazorpayCheckout(
     order_id: createJson.data.orderId,
     name: "HexaCards",
     description: order.productTitle,
-    handler: async (response: RazorpayHandlerResponse) => {
+    handler: (response: RazorpayHandlerResponse) => {
       if (settled) return;
-      try {
-        if (
-          !response.razorpay_order_id ||
-          !response.razorpay_payment_id ||
-          !response.razorpay_signature
-        ) {
-          throw new Error("Incomplete payment response from Razorpay.");
-        }
-
-        const completeRes = await fetch("/api/razorpay/complete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature,
-            orderCode: order.id,
-            orderId: order.orderId ?? null,
-            clientTxnId,
-            amount: Number(amount),
-            customerId: customerId ?? null,
-          }),
-        });
-
-        const completeJson = (await completeRes.json().catch(() => null)) as
-          | {
-              ok?: boolean;
-              error?: string;
-              data?: { order?: HexaOrder & Record<string, unknown> };
-            }
-          | null;
-
-        if (!completeRes.ok || !completeJson?.ok || !completeJson.data?.order) {
-          throw new Error(
-            completeJson?.error ||
-              "Payment succeeded but order could not be updated. Contact support with your payment ID.",
-          );
-        }
-
-        const apiOrder = completeJson.data.order;
-        const paidOrder: HexaOrder = {
-          ...order,
-          orderId:
-            apiOrder.orderId != null && Number(apiOrder.orderId) > 0
-              ? Number(apiOrder.orderId)
-              : order.orderId,
-          paymentStatus: "paid",
-        };
-
-        settled = true;
-        await input.onPaid(paidOrder);
-      } catch (err) {
-        console.error("Razorpay success handler failed", err);
-        await finishFailed(
-          err instanceof Error ? err.message : "Payment confirmation failed",
-        );
+      if (
+        !response.razorpay_order_id ||
+        !response.razorpay_payment_id ||
+        !response.razorpay_signature
+      ) {
+        void finishFailed("Incomplete payment response from Razorpay.");
+        return;
       }
+
+      const paidOrder: HexaOrder = {
+        ...order,
+        paymentStatus: "paid",
+      };
+      settled = true;
+      void Promise.resolve(input.onPaid(paidOrder));
+
+      void confirmRazorpayPayment({
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature,
+        order,
+        clientTxnId,
+        amount: Number(amount),
+        customerId: customerId ?? null,
+      }).catch((err) => {
+        console.error("Razorpay success handler failed", err);
+      });
     },
     prefill: {
       name: customerName,

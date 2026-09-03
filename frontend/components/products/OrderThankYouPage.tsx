@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
@@ -16,28 +16,10 @@ export default function OrderThankYouPage() {
   const orderId = searchParams.get("order")?.trim() ?? "";
   const status = searchParams.get("status")?.trim().toLowerCase() ?? "";
   const retryHref = searchParams.get("retry")?.trim() || undefined;
-  const [order, setOrder] = useState<OrderThankYouSummary | null>(null);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    if (!orderId) {
-      setReady(true);
-      return;
-    }
-
-    if (status !== "failed") {
-      setOrder(readOrderThankYouSummary(orderId));
-    }
-    setReady(true);
-  }, [orderId, status]);
-
-  if (!ready) {
-    return (
-      <div className="mx-auto max-w-xl px-4 py-16 text-center text-sm text-[#5c5346]">
-        Loading your order…
-      </div>
-    );
-  }
+  const [order] = useState<OrderThankYouSummary | null>(() => {
+    if (!orderId || status === "failed") return null;
+    return readOrderThankYouSummary(orderId);
+  });
 
   if (status === "failed") {
     return (
@@ -63,7 +45,7 @@ export default function OrderThankYouPage() {
         </h1>
         <p className="mt-2 text-sm text-[#5c5346]">
           {orderId
-            ? "We could not load this order summary. Check your dashboard for order details."
+            ? "Your payment was successful. Open your dashboard to view your order."
             : "Your order may already be complete. Open your dashboard to view your cards."}
         </p>
         <Link

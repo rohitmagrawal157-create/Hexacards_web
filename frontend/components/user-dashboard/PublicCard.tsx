@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { HoneycombPageStatus } from "@/components/ui/honeycomb-loader";
 import {
   cardPublicSlug,
   cardPublicUrl,
@@ -195,12 +196,7 @@ export default function PublicCard() {
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F4F5F7]">
-        <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#BC7C10]/25 border-t-[#BC7C10]" />
-          <p className="mt-3 text-sm font-medium text-[#5c5346]">
-            Loading card…
-          </p>
-        </div>
+        <HoneycombPageStatus label="Loading card…" />
       </div>
     );
   }

@@ -25,12 +25,6 @@ export function getSupabaseCardImagePublicUrl(
   return `${supabaseUrl}/storage/v1/object/public/${bucket}/${encodeURIComponent(safeName)}`;
 }
 
-function preferLocalUploadPath(): boolean {
-  if (process.env.VERCEL) return false;
-  if (process.env.NODE_ENV === "production") return false;
-  return true;
-}
-
 /** Extract bare file name from a path, URL, or name. */
 export function cardImageFileName(
   src: string | null | undefined,
@@ -49,11 +43,19 @@ export function cardImageFileName(
 }
 
 function isUploadedCardFile(name: string): boolean {
-  return /-(profile|background)\.(jpe?g|png|webp|gif)$/i.test(name);
+  return /-(profile|background|order-logo)\.(jpe?g|png|webp|gif)$/i.test(name);
+}
+
+function uploadedFileSrc(name: string): string {
+  const remote = getSupabaseCardImagePublicUrl(name);
+  if (remote) return remote;
+  return `${UPLOADS_DIR}/${name}`;
 }
 
 /**
  * Turn a DB file name (or legacy full path) into a browser-usable src.
+ * Uploaded profile/background files live in Supabase Storage — never use a bare
+ * filename or a local /uploads path that 404s on Vercel.
  */
 export function resolveCardImageSrc(
   stored: string | null | undefined,
@@ -62,20 +64,27 @@ export function resolveCardImageSrc(
   if (!stored?.trim()) return fallback;
   const raw = stored.trim();
   if (raw.startsWith("data:") || raw.startsWith("idb:")) return raw;
-  if (/^https?:\/\//i.test(raw)) return raw;
 
-  // Legacy full app path already usable
-  if (raw.startsWith("/")) return raw;
+  const name = cardImageFileName(raw);
 
-  const name = cardImageFileName(raw) || raw;
-  if (isUploadedCardFile(name)) {
-    if (!preferLocalUploadPath()) {
-      const remote = getSupabaseCardImagePublicUrl(name);
-      if (remote) return remote;
+  if (name && isUploadedCardFile(name)) {
+    const remote = getSupabaseCardImagePublicUrl(name);
+    if (remote) {
+      if (/^https?:\/\//i.test(raw) && raw.includes("?")) {
+        const qs = raw.split("?")[1];
+        return qs ? `${remote}?${qs}` : remote;
+      }
+      return remote;
     }
+    if (raw.startsWith("/uploads/")) return raw.split("?")[0];
     return `${UPLOADS_DIR}/${name}`;
   }
-  return `${IMAGES_DIR}/${name}`;
+
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/")) return raw.split("?")[0];
+
+  if (name) return `${IMAGES_DIR}/${name}`;
+  return fallback;
 }
 
 /** Value written to cards.logo / bg_img / bg_url — file name only. */

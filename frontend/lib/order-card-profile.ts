@@ -2,6 +2,7 @@ import {
   DEFAULT_CARD_AVATAR,
   DEFAULT_CARD_BANNER,
   defaultCardProfile,
+  normalizeCoverImage,
   normalizeLogoImage,
   type HexaCardProfile,
 } from "@/lib/card-profile";
@@ -126,7 +127,15 @@ export function getOrderCardProfile(
   if (!orderId) return null;
   const all = readAll();
   const profile = all[orderId];
-  return profile && typeof profile === "object" ? profile : null;
+  if (!profile || typeof profile !== "object") return null;
+  return {
+    ...profile,
+    appearance: {
+      ...profile.appearance,
+      coverImage: normalizeCoverImage(profile.appearance?.coverImage),
+      logoImage: normalizeLogoImage(profile.appearance?.logoImage),
+    },
+  };
 }
 
 /** Remove cached profile when Super Admin deletes the card. */

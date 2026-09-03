@@ -1,4 +1,5 @@
 import type { OrderCardDesignData } from "@/lib/order-card";
+import { cardImageFileName, resolveCardImageSrc } from "@/lib/card-images";
 
 /** DB status: 0=placed, 1=shipped, 2=delivered */
 export const ORDER_STATUS = {
@@ -291,22 +292,68 @@ export function mapOrder(row: OrderRow): OrderDto {
     jobTitle: row.designation ?? "",
     businessName: row.business_name ?? "",
     reviewLink: row.review_link,
-    orderLogoSrc: row.logo,
+    orderLogoSrc: resolveOrderLogoColumn(row.logo),
     cardDesign: row.card_design ?? null,
     cardHidden: isOrderCardHidden(row),
   };
 }
 
-/** Drop huge data-URL logos before writing to Postgres */
+function isDurableLogoSrc(src?: string | null): src is string {
+  const t = src?.trim() ?? "";
+  if (!t) return false;
+  if (
+    t.startsWith("data:") ||
+    t.startsWith("idb:") ||
+    t.startsWith("blob:")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function resolveOrderLogoColumn(stored?: string | null): string | null {
+  if (!stored?.trim()) return null;
+  const raw = stored.trim();
+  if (!isDurableLogoSrc(raw)) return null;
+  if (/^https?:\/\//i.test(raw) || raw.startsWith("/")) return raw;
+  const resolved = resolveCardImageSrc(raw, "");
+  return resolved || raw;
+}
+
+export function orderLogoColumnValue(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const t = raw.trim();
+  if (!isDurableLogoSrc(t)) return null;
+  return (cardImageFileName(t) || t).slice(0, 255);
+}
+
+/** Drop browser-only logos before writing to Postgres */
 export function sanitizeCardDesignForDb(
   design: OrderCardDesignData | null | undefined,
 ): OrderCardDesignData | null {
   if (!design) return null;
-  const logo = design.logoSrc;
-  if (logo && logo.startsWith("data:") && logo.length > 4000) {
+  const logo = design.logoSrc?.trim();
+  if (logo && !isDurableLogoSrc(logo)) {
     return { ...design, logoSrc: undefined };
   }
   return design;
+}
+
+/** Keep a previously saved public logo when an update sends a data-URL / idb ref. */
+export function mergeCardDesignForDb(
+  existing: OrderCardDesignData | null | undefined,
+  incoming: OrderCardDesignData | null | undefined,
+): OrderCardDesignData | null {
+  const current = sanitizeCardDesignForDb(existing);
+  const next = sanitizeCardDesignForDb(incoming);
+  if (!next) return current;
+  return {
+    ...current,
+    ...next,
+    logoSrc: next.logoSrc || current?.logoSrc,
+    logoLayout: next.logoLayout ?? current?.logoLayout,
+    extraLine: next.extraLine ?? current?.extraLine,
+  };
 }
 
 export function buildOrderInsertPayload(
@@ -342,8 +389,7 @@ export function buildOrderInsertPayload(
   const resolvedLandmark = landmark;
   const resolvedAddress = fullAddress || [resolvedBungalow, resolvedStreet, resolvedLandmark].filter(Boolean).join(", ");
 
-  const logoRaw = body.logo ?? body.orderLogoSrc ?? null;
-  const logo = logoRaw ? String(logoRaw).trim().slice(0, 255) : null;
+  const logo = orderLogoColumnValue(body.logo ?? body.orderLogoSrc ?? null);
   const productSlug =
     String(body.productSlug ?? body.productId ?? "").trim() || null;
   const now = new Date();

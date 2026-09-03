@@ -16,6 +16,7 @@ import {
 } from "@/lib/super-admin-auth";
 import { apiFetch } from "@/lib/api-config";
 import HexNetworkBackground from "@/components/shared/HexNetworkBackground";
+import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 
 function LoginShell({ children }: { children: React.ReactNode }) {
   return (
@@ -239,7 +240,7 @@ export default function SuperAdminLogin() {
               disabled={busy}
               className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#BC7C10] py-3 text-sm font-bold text-white shadow-md shadow-[#BC7C10]/20 transition-all hover:bg-[#9a650d] hover:shadow-lg hover:shadow-[#BC7C10]/25 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {busy ? "Signing in…" : "Sign in"}
+              {busy ? <HoneycombLoader /> : "Sign in"}
               {!busy ? (
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               ) : null}
