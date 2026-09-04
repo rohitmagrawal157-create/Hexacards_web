@@ -44,12 +44,14 @@ import {
   openWhatsAppCardShare,
   resolveCardShareUrl,
 } from "@/lib/card-share";
+import { useMessageOwner } from "@/lib/message-owner-context";
 import CardCoverImage from "@/components/shared/CardCoverImage";
 import CardAvatarImage from "@/components/shared/CardAvatarImage";
 
 type MinimalistProps = {
   profile: HexaCardProfile;
   publicView?: boolean;
+  cardSlug?: string;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -175,9 +177,12 @@ function ActionBar({
 export default function Minimalist({
   profile,
   publicView = false,
+  cardSlug,
   onChangeBackground,
   onChangeProfile,
 }: MinimalistProps) {
+  const ownerCtx = useMessageOwner();
+  const resolvedSlug = (cardSlug || ownerCtx.cardSlug || "").trim();
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [contactFormOpen, setContactFormOpen] = useState(false);
@@ -452,6 +457,7 @@ export default function Minimalist({
             void saveCardContactToDevice(
               profile,
               resolveCardShareUrl(profile),
+              resolvedSlug || undefined,
             )
           }
           className="min-w-0 flex-1 rounded-full py-2.5 text-center text-[11px] font-bold tracking-wide text-white uppercase shadow-sm transition-transform hover:scale-[1.02]"

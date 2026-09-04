@@ -154,12 +154,12 @@ export function orderCardImage(
       return { src: "/Images/banner.png", alt: "Digital Profile + QR" };
     }
     if (STANDEE_IDS.has(productId)) {
-      return { src: "/Images/Products/reviewStandy.jpg", alt: "Standee" };
+      return { src: "/Images/Products/reviewStandy.jpeg", alt: "Standee" };
     }
     if (SOCIAL_CARD_IDS.has(productId)) {
-      return { src: "/Images/Products/googleReview.jpg", alt: "Social Media Card" };
+      return { src: "/Images/Products/googleReview.jpeg", alt: "Social Media Card" };
     }
-    return { src: "/Images/Products/digitalCard.jpg", alt: "Hexa NFC card" };
+    return { src: "/Images/Products/digitalCard.jpeg", alt: "Hexa NFC card" };
   }
   // Fallback for older orders without productId
   const title = productTitle.toLowerCase();
@@ -167,7 +167,7 @@ export function orderCardImage(
     return { src: "/Images/banner.png", alt: "Digital Profile + QR" };
   }
   if (title.includes("standee") || title.includes("standy") || title.includes("review stand")) {
-    return { src: "/Images/Products/reviewStandy.jpg", alt: "Standee" };
+    return { src: "/Images/Products/reviewStandy.jpeg", alt: "Standee" };
   }
   if (
     title.includes("instagram card") ||
@@ -176,9 +176,9 @@ export function orderCardImage(
     title.includes("social media card") ||
     title.includes("keychain qr")
   ) {
-    return { src: "/Images/Products/googleReview.jpg", alt: "Social Media Card" };
+    return { src: "/Images/Products/googleReview.jpeg", alt: "Social Media Card" };
   }
-  return { src: "/Images/Products/digitalCard.jpg", alt: "Hexa NFC card" };
+  return { src: "/Images/Products/digitalCard.jpeg", alt: "Hexa NFC card" };
 }
 
 export function savedDesignToCardDesign(

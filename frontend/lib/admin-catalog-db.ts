@@ -44,7 +44,7 @@ export function asMedia(
     return value as ProductMedia[];
   }
   const src =
-    String(fallbackImage || "").trim() || "/Images/Products/digitalCard.jpg";
+    String(fallbackImage || "").trim() || "/Images/Products/digitalCard.jpeg";
   return [{ type: "image", src, alt }];
 }
 
@@ -52,6 +52,31 @@ export function asMedia(
 export const CATALOG_IMG_DIR = "/Images/Products/";
 /** @deprecated use CATALOG_IMG_DIR */
 export const CATEGORY_IMG_DIR = CATALOG_IMG_DIR;
+
+/** Landing / catalog hero images refreshed Sep 2026. */
+const PRODUCT_HERO_IMAGE_ALIASES: Record<string, string> = {
+  "digitalcard.jpg": "digitalCard.jpeg",
+  "digitalcard.png": "digitalCard.jpeg",
+  "digitalcard.jpeg": "digitalCard.jpeg",
+  "digitalqr.jpg": "DigitalprofileQr.jpeg",
+  "digitalqr.png": "DigitalprofileQr.jpeg",
+  "digitalqr.jpeg": "DigitalprofileQr.jpeg",
+  "qr.png": "DigitalprofileQr.jpeg",
+  "digitalprofileqr.jpeg": "DigitalprofileQr.jpeg",
+  "digitalprofileqr.jpg": "DigitalprofileQr.jpeg",
+  "googlereview.jpg": "googleReview.jpeg",
+  "googlereview.png": "googleReview.jpeg",
+  "googlereview.jpeg": "googleReview.jpeg",
+  "reviewstandy.jpg": "reviewStandy.jpeg",
+  "reviewstandy.png": "reviewStandy.jpeg",
+  "reviewstandy.jpeg": "reviewStandy.jpeg",
+};
+
+function resolveProductHeroFilename(filename: string): string {
+  const base = filename.split("?")[0]?.trim() || filename;
+  const aliased = PRODUCT_HERO_IMAGE_ALIASES[base.toLowerCase()];
+  return aliased || base;
+}
 
 /** Persist only the file name (strip folders / query). */
 export function toCatalogImgFilename(
@@ -82,14 +107,17 @@ export function catalogImgPublicUrl(
 ): string | null {
   const raw = String(stored ?? "").trim();
   if (!raw) return null;
-  if (
-    raw.startsWith("data:") ||
-    /^https?:\/\//i.test(raw) ||
-    raw.startsWith("/")
-  ) {
+  if (raw.startsWith("data:") || /^https?:\/\//i.test(raw)) {
     return raw;
   }
-  return `${CATALOG_IMG_DIR}${raw}`;
+  if (raw.startsWith("/")) {
+    const base = raw.split("/").filter(Boolean).pop() || "";
+    if (base && PRODUCT_HERO_IMAGE_ALIASES[base.toLowerCase()]) {
+      return `${CATALOG_IMG_DIR}${resolveProductHeroFilename(base)}`;
+    }
+    return raw;
+  }
+  return `${CATALOG_IMG_DIR}${resolveProductHeroFilename(raw)}`;
 }
 
 /** @deprecated use catalogImgPublicUrl */

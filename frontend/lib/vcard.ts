@@ -8,6 +8,10 @@ import { resolveCardImageSrc } from "@/lib/card-images";
 import { buildShareCardUrl } from "@/lib/site-url";
 import { isReservedRootSegment } from "@/lib/reserved-routes";
 
+function safeText(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 function vcardEscape(value: string): string {
   return value
     .replace(/\\/g, "\\\\")
@@ -73,20 +77,66 @@ function slugFromPath(): string {
   return seg.toLowerCase();
 }
 
+function slugFromShareUrl(url?: string): string {
+  const raw = safeText(url);
+  if (!raw) return "";
+  try {
+    const u = new URL(
+      raw,
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://hexacards-web.vercel.app",
+    );
+    const seg =
+      u.pathname.replace(/\/+$/, "").split("/").filter(Boolean)[0] || "";
+    if (seg && !isReservedRootSegment(seg)) return seg.toLowerCase();
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+/** Resolve the public card slug used for /api/cards/vcard/[slug]. */
+export function resolveCardVcardSlug(
+  profile: HexaCardProfile,
+  cardUrl?: string,
+  explicitSlug?: string,
+): string {
+  const fromExplicit = safeText(explicitSlug).toLowerCase();
+  if (fromExplicit && !isReservedRootSegment(fromExplicit)) return fromExplicit;
+
+  return (
+    slugFromPath() ||
+    slugFromShareUrl(cardUrl) ||
+    slugFromShareUrl(resolveVCardPageUrl(profile, cardUrl))
+  );
+}
+
+/** Same-origin href for the server .vcf download (best for phones). */
+export function cardVcardHref(slug: string): string {
+  const clean = safeText(slug).toLowerCase();
+  if (!clean || isReservedRootSegment(clean)) return "";
+  return `/api/cards/vcard/${encodeURIComponent(clean)}`;
+}
+
 /** Public profile URL for the vCard (never localhost). */
 export function resolveVCardPageUrl(
   profile: HexaCardProfile,
   explicitUrl?: string,
 ): string {
-  const given = explicitUrl?.trim();
-  if (given && /^https?:\/\//i.test(given) && !/localhost|127\.0\.0\.1/i.test(given)) {
+  const given = safeText(explicitUrl);
+  if (
+    given &&
+    /^https?:\/\//i.test(given) &&
+    !/localhost|127\.0\.0\.1/i.test(given)
+  ) {
     return given;
   }
 
-  const slug = slugFromPath();
+  const slug = slugFromPath() || slugFromShareUrl(given);
   if (slug) return buildShareCardUrl(slug);
 
-  const fromName = profile.contact.cardName.trim();
+  const fromName = safeText(profile.contact?.cardName);
   if (fromName) {
     const inferred = fromName
       .toLowerCase()
@@ -99,7 +149,7 @@ export function resolveVCardPageUrl(
 }
 
 function resolvePhotoUri(profile: HexaCardProfile): string {
-  const raw = profile.appearance.logoImage?.trim() || "";
+  const raw = safeText(profile.appearance?.logoImage);
   if (!raw || isDefaultLogoImage(raw) || raw === DEFAULT_CARD_AVATAR) {
     return "";
   }
@@ -121,35 +171,35 @@ function resolvePhotoUri(profile: HexaCardProfile): string {
 }
 
 /**
- * Build a vCard 3.0 matching the PHP Card exportCard() fields:
- * name, company, title, mobile, email, address, URL, timezone.
+ * Build a vCard 3.0 matching the PHP Card exportCard() fields.
  */
 export function buildVCard(profile: HexaCardProfile, cardUrl?: string): string {
-  const contact = profile.contact;
+  const contact = profile.contact || ({} as HexaCardProfile["contact"]);
   const nameRaw =
-    contact.cardName.trim() || contact.businessName.trim() || "HexaCards Contact";
+    safeText(contact.cardName) ||
+    safeText(contact.businessName) ||
+    "HexaCards Contact";
   const { given, family, display } = splitCardName(
     nameRaw,
-    contact.businessName,
+    safeText(contact.businessName),
   );
-  const country = contact.countryCode || "IN";
-  const mobile = phoneDigitsForLink(country, contact.mobile);
-  const whatsapp = phoneDigitsForLink(country, contact.whatsapp);
-  const email = contact.email.trim();
-  const website = contact.website.trim();
+  const country = safeText(contact.countryCode) || "IN";
+  const mobile = phoneDigitsForLink(country, safeText(contact.mobile));
+  const whatsapp = phoneDigitsForLink(country, safeText(contact.whatsapp));
+  const email = safeText(contact.email);
+  const website = safeText(contact.website);
   const websiteHref = website
     ? /^https?:\/\//i.test(website)
       ? website
       : `https://${website}`
     : "";
-  // PHP: url = website if set, else digital card page URL
   const pageUrl = resolveVCardPageUrl(profile, cardUrl);
   const primaryUrl = websiteHref || pageUrl;
-  const org = contact.businessName.trim();
-  const title = contact.title.trim();
-  const street = contact.address.trim();
-  const city = contact.city.trim();
-  const region = contact.state.trim();
+  const org = safeText(contact.businessName);
+  const title = safeText(contact.title);
+  const street = safeText(contact.address);
+  const city = safeText(contact.city);
+  const region = safeText(contact.state);
   const photoUri = resolvePhotoUri(profile);
 
   const lines = [
@@ -161,13 +211,16 @@ export function buildVCard(profile: HexaCardProfile, cardUrl?: string): string {
 
   if (org) lines.push(`ORG:${vcardEscape(org)}`);
   if (title) lines.push(`TITLE:${vcardEscape(title)}`);
-  if (mobile) lines.push(`TEL;TYPE=CELL,VOICE:+${mobile}`);
+  if (mobile) {
+    const tel = mobile.startsWith("91") && mobile.length > 10 ? mobile : mobile;
+    lines.push(`TEL;TYPE=CELL,VOICE:+${tel.length === 10 ? `91${tel}` : tel}`);
+  }
   if (whatsapp && whatsapp !== mobile) {
-    lines.push(`TEL;TYPE=CELL:+${whatsapp}`);
+    const tel = whatsapp.length === 10 ? `91${whatsapp}` : whatsapp;
+    lines.push(`TEL;TYPE=CELL:+${tel}`);
   }
   if (email) lines.push(`EMAIL;TYPE=INTERNET:${vcardEscape(email)}`);
   if (primaryUrl) lines.push(`URL:${vcardEscape(primaryUrl)}`);
-  // Keep digital card URL as note/url when website already took the primary slot
   if (websiteHref && pageUrl && pageUrl !== websiteHref) {
     lines.push(`URL;TYPE=HOME:${vcardEscape(pageUrl)}`);
   }
@@ -183,72 +236,150 @@ export function buildVCard(profile: HexaCardProfile, cardUrl?: string): string {
   return lines.join("\r\n");
 }
 
-function triggerVcfDownload(vcf: string, filename: string) {
-  const blob = new Blob([vcf], {
-    type: "text/x-vcard;charset=utf-8",
-  });
+function isAppleMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/iPad|iPhone|iPod/i.test(ua)) return true;
+  // iPadOS reports as Mac
+  return (
+    /Macintosh/i.test(ua) &&
+    typeof navigator.maxTouchPoints === "number" &&
+    navigator.maxTouchPoints > 1
+  );
+}
+
+async function deliverVcfFile(vcf: string, filename: string): Promise<void> {
+  const safeName = filename.endsWith(".vcf") ? filename : `${filename}.vcf`;
+  const blob = new Blob([vcf], { type: "text/vcard;charset=utf-8" });
+
+  // Android / supporting browsers: share sheet → Contacts
+  try {
+    const file = new File([blob], safeName, { type: "text/vcard" });
+    const nav = navigator as Navigator & {
+      canShare?: (data?: ShareData) => boolean;
+    };
+    if (typeof nav.share === "function" && nav.canShare?.({ files: [file] })) {
+      await nav.share({
+        files: [file],
+        title: safeName.replace(/\.vcf$/i, ""),
+        text: "Save to contacts",
+      });
+      return;
+    }
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError") return;
+    // fall through
+  }
+
   const url = URL.createObjectURL(blob);
+
+  // iOS Safari: navigating to the blob opens Add Contact (download attr is ignored)
+  if (isAppleMobile()) {
+    window.location.href = url;
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return;
+  }
+
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = safeName;
   a.rel = "noopener";
   a.style.display = "none";
   document.body.appendChild(a);
   a.click();
   a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-function isAppleMobile(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  return (
-    /iPhone|iPad|iPod/i.test(ua) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-  );
+async function fetchServerVcard(slug: string): Promise<string | null> {
+  const href = cardVcardHref(slug);
+  if (!href) return null;
+  try {
+    const res = await fetch(href, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "text/vcard, text/x-vcard, text/plain, */*" },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text.includes("BEGIN:VCARD")) return null;
+    return text;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Save Contact — same outcome as PHP vcard->generate_download():
- * produce a .vcf and open/download it so the phone can Add Contact.
+ * Save Contact — PHP-style .vcf download.
+ * 1) Fetch server /api/cards/vcard/[slug] when slug is known
+ * 2) Client-built .vcf fallback
+ * 3) Share sheet → iOS location → desktop download
  */
 export async function saveCardContactToDevice(
   profile: HexaCardProfile,
   cardUrl?: string,
+  explicitSlug?: string,
 ): Promise<void> {
-  const hasPhone = Boolean(
-    phoneDigitsForLink(
-      profile.contact.countryCode || "IN",
-      profile.contact.mobile,
-    ),
-  );
-  const hasEmail = Boolean(profile.contact.email.trim());
-  const hasName = Boolean(
-    profile.contact.cardName.trim() || profile.contact.businessName.trim(),
-  );
-
-  if (!hasName && !hasPhone && !hasEmail) {
-    window.alert("This card has no contact details to save yet.");
-    return;
-  }
-
-  const vcf = buildVCard(profile, cardUrl);
-  const name =
-    profile.contact.cardName.trim() ||
-    profile.contact.businessName.trim() ||
-    "hexacards-contact";
-  const filename = `${fileSafeName(name)}.vcf`;
-
-  // iOS Safari: open .vcf → Add Contact sheet
-  if (isAppleMobile()) {
-    try {
-      window.location.href = `data:text/x-vcard;charset=utf-8,${encodeURIComponent(vcf)}`;
+  try {
+    const contact = profile?.contact;
+    if (!contact) {
+      window.alert("Contact details are not available to save.");
       return;
+    }
+
+    const hasPhone = Boolean(
+      phoneDigitsForLink(
+        safeText(contact.countryCode) || "IN",
+        safeText(contact.mobile),
+      ),
+    );
+    const hasEmail = Boolean(safeText(contact.email));
+    const hasName = Boolean(
+      safeText(contact.cardName) || safeText(contact.businessName),
+    );
+
+    if (!hasName && !hasPhone && !hasEmail) {
+      window.alert("This card has no contact details to save yet.");
+      return;
+    }
+
+    const slug = resolveCardVcardSlug(profile, cardUrl, explicitSlug);
+    const name =
+      safeText(contact.cardName) ||
+      safeText(contact.businessName) ||
+      "hexacards-contact";
+    const filename = `${fileSafeName(slug || name)}.vcf`;
+
+    // On iOS, a real navigation to the attachment URL is the most reliable path
+    // (matches PHP generate_download). Only when we know the slug.
+    if (slug && isAppleMobile()) {
+      const href = cardVcardHref(slug);
+      if (href) {
+        window.location.assign(href);
+        return;
+      }
+    }
+
+    const serverVcf = slug ? await fetchServerVcard(slug) : null;
+    const vcf = serverVcf || buildVCard(profile, cardUrl);
+    await deliverVcfFile(vcf, filename);
+  } catch (err) {
+    console.error("[vcard] save failed:", err);
+    // Last resort: client blob without share
+    try {
+      const vcf = buildVCard(profile, cardUrl);
+      const name =
+        safeText(profile.contact?.cardName) ||
+        safeText(profile.contact?.businessName) ||
+        "hexacards-contact";
+      await deliverVcfFile(vcf, `${fileSafeName(name)}.vcf`);
     } catch {
-      // fall through to blob download
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "Could not save contact. Please try again.",
+      );
     }
   }
-
-  // Android / desktop: download .vcf (PHP generate_download)
-  triggerVcfDownload(vcf, filename);
 }

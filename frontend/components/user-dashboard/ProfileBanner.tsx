@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type MouseEvent } from "react";
 import {
   Camera,
   Phone,
@@ -40,7 +40,10 @@ import Minimalist from "@/components/Layouts/Minimalist";
 import CardLayoutBottom from "@/components/Layouts/CardLayoutBottom";
 import { cardShellClass } from "@/lib/public-card-shell";
 import { buildShareCardUrl } from "@/lib/site-url";
-import { saveCardContactToDevice } from "@/lib/vcard";
+import {
+  cardVcardHref,
+  saveCardContactToDevice,
+} from "@/lib/vcard";
 import {
   openWhatsAppCardShare,
   resolveCardShareUrl,
@@ -99,11 +102,23 @@ export default function ProfileBanner({
   const shareUrl = rewriteShareUrlToCurrentOrigin(
     slug ? buildShareCardUrl(slug) : cardPublicUrl(profile),
   );
+  const vcardHref = slug ? cardVcardHref(slug) : "";
 
   const ctaClass =
     "flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-semibold text-white transition-opacity hover:opacity-90";
   const infoCardClass =
     "min-w-0 rounded-xl border p-3 text-left transition-colors";
+
+  function handleSaveContactClick(
+    e?: MouseEvent<HTMLAnchorElement | HTMLButtonElement>,
+  ) {
+    e?.preventDefault();
+    void saveCardContactToDevice(
+      profile,
+      slug ? buildShareCardUrl(slug) : resolveCardShareUrl(profile),
+      slug,
+    );
+  }
 
   async function handleBrochureClick() {
     if (!hasBrochure) return;
@@ -230,6 +245,7 @@ export default function ProfileBanner({
         <Basic
           profile={profile}
           publicView={publicView}
+          cardSlug={slug}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -273,6 +289,7 @@ export default function ProfileBanner({
         <Modern
           profile={profile}
           publicView={publicView}
+          cardSlug={slug}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -316,6 +333,7 @@ export default function ProfileBanner({
         <Compact
           profile={profile}
           publicView={publicView}
+          cardSlug={slug}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -359,6 +377,7 @@ export default function ProfileBanner({
         <Social
           profile={profile}
           publicView={publicView}
+          cardSlug={slug}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -402,6 +421,7 @@ export default function ProfileBanner({
         <Minimalist
           profile={profile}
           publicView={publicView}
+          cardSlug={slug}
           onChangeBackground={
             onUploadBackground
               ? () => coverInputRef.current?.click()
@@ -547,20 +567,28 @@ export default function ProfileBanner({
         </p>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              void saveCardContactToDevice(
-                profile,
-                slug ? buildShareCardUrl(slug) : undefined,
-              )
-            }
-            className={ctaClass}
-            style={{ backgroundColor: accent }}
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            Save Contact
-          </button>
+          {vcardHref ? (
+            <a
+              href={vcardHref}
+              download={`${slug || "contact"}.vcf`}
+              onClick={handleSaveContactClick}
+              className={ctaClass}
+              style={{ backgroundColor: accent }}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Save Contact
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSaveContactClick}
+              className={ctaClass}
+              style={{ backgroundColor: accent }}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Save Contact
+            </button>
+          )}
           {hasBrochure ? (
             <button
               type="button"

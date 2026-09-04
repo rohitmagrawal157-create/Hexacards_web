@@ -41,7 +41,7 @@ const sharedCardIncluded = [
 const nfcMedia: ProductMedia[] = [
   {
     type: "image",
-    src: "/Images/Products/digitalCard.jpg",
+    src: "/Images/Products/digitalCard.jpeg",
     alt: "HexaCards NFC digital business card",
   },
   {
@@ -105,7 +105,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
       },
       {
         type: "image",
-        src: "/Images/Products/digitalCard.jpg",
+        src: "/Images/Products/digitalCard.jpeg",
         alt: "Hexa digital business card",
       },
       {
@@ -157,7 +157,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
       },
       {
         type: "image",
-        src: "/Images/Products/digitalCard.jpg",
+        src: "/Images/Products/digitalCard.jpeg",
         alt: "Hexa digital card",
       },
     ],
@@ -194,7 +194,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
   //     },
   //     {
   //       type: "image",
-  //       src: "/Images/Products/digitalCard.jpg",
+  //       src: "/Images/Products/digitalCard.jpeg",
   //       alt: "Hexa digital card",
   //     },
   //     {
@@ -236,12 +236,12 @@ export const productCatalog: Record<string, CatalogProduct> = {
     media: [
       {
         type: "image",
-        src: "/Images/Products/digitalQR.jpg",
+        src: "/Images/Products/DigitalprofileQr.jpeg",
         alt: "Hexa digital profile QR card",
       },
       {
         type: "image",
-        src: "/Images/Products/digitalCard.jpg",
+        src: "/Images/Products/digitalCard.jpeg",
         alt: "Hexa digital business card",
       },
       {
@@ -283,7 +283,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
     media: [
       {
         type: "image",
-        src: "/Images/Products/googleReview.jpg",
+        src: "/Images/Products/googleReview.jpeg",
         alt: "Hexa Google review card",
       },
       {
@@ -360,7 +360,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
       },
       {
         type: "image",
-        src: "/Images/Products/googleReview.jpg",
+        src: "/Images/Products/googleReview.jpeg",
         alt: "Hexa social media card style",
       },
     ],
@@ -407,7 +407,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
       },
       {
         type: "image",
-        src: "/Images/Products/googleReview.jpg",
+        src: "/Images/Products/googleReview.jpeg",
         alt: "Hexa social media card style",
       },
     ],
@@ -444,7 +444,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
     media: [
       {
         type: "image",
-        src: "/Images/Products/googleReview.jpg",
+        src: "/Images/Products/googleReview.jpeg",
         alt: "Hexa Google review card",
       },
       {
@@ -491,7 +491,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
     media: [
       {
         type: "image",
-        src: "/Images/Products/googleReview.jpg",
+        src: "/Images/Products/googleReview.jpeg",
         alt: "Hexa Google review card",
       },
       {
@@ -558,7 +558,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
     media: [
       {
         type: "image",
-        src: "/Images/Products/reviewStandy.jpg",
+        src: "/Images/Products/reviewStandy.jpeg",
         alt: "Hexa Google review standee",
       },
       {
@@ -605,7 +605,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
     media: [
       {
         type: "image",
-        src: "/Images/Products/reviewStandy.jpg",
+        src: "/Images/Products/reviewStandy.jpeg",
         alt: "Hexa Google review standee",
       },
       {
@@ -699,7 +699,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
     media: [
       {
         type: "image",
-        src: "/Images/Products/reviewStandy.jpg",
+        src: "/Images/Products/reviewStandy.jpeg",
         alt: "Hexa YouTube standee",
       },
       {

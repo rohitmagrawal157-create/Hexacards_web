@@ -43,12 +43,14 @@ import {
   openWhatsAppCardShare,
   resolveCardShareUrl,
 } from "@/lib/card-share";
+import { useMessageOwner } from "@/lib/message-owner-context";
 import CardCoverImage from "@/components/shared/CardCoverImage";
 import CardAvatarImage from "@/components/shared/CardAvatarImage";
 
 type ModernProps = {
   profile: HexaCardProfile;
   publicView?: boolean;
+  cardSlug?: string;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -145,9 +147,12 @@ function QuickIcon({
 export default function Modern({
   profile,
   publicView = false,
+  cardSlug,
   onChangeBackground,
   onChangeProfile,
 }: ModernProps) {
+  const ownerCtx = useMessageOwner();
+  const resolvedSlug = (cardSlug || ownerCtx.cardSlug || "").trim();
   const [waShareNumber, setWaShareNumber] = useState("");
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(true);
@@ -363,6 +368,7 @@ export default function Modern({
               void saveCardContactToDevice(
                 profile,
                 resolveCardShareUrl(profile),
+                resolvedSlug || undefined,
               )
             }
             label="Add to contacts"

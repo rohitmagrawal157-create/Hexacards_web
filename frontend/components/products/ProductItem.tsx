@@ -14,7 +14,7 @@ type MediaItem = {
 const media: MediaItem[] = [
   {
     type: "image",
-    src: "/Images/Products/digitalCard.jpg",
+    src: "/Images/Products/digitalCard.jpeg",
     alt: "HexaCards NFC digital business card",
   },
   {

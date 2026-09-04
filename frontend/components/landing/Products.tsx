@@ -11,6 +11,14 @@ import {
   type HomeCategoryCard,
 } from "@/lib/home-categories";
 
+/** Bust browser cache after product hero image refresh. */
+const PRODUCT_IMG_VERSION = "2026-09-04";
+
+function productImageSrc(src: string): string {
+  if (!src || src.startsWith("data:") || /^https?:\/\//i.test(src)) return src;
+  return src.includes("?") ? src : `${src}?v=${PRODUCT_IMG_VERSION}`;
+}
+
 function RevealHeading({ count }: { count: number }) {
   const label =
     count === 1
@@ -94,7 +102,7 @@ function ProductCard({ item }: { item: HomeCategoryCard }) {
     >
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-[#F3F4F6] sm:aspect-square">
         <Image
-          src={item.image}
+          src={productImageSrc(item.image)}
           alt={item.title}
           fill
           sizes="(max-width: 640px) 62vw, (max-width: 1024px) 42vw, 23vw"

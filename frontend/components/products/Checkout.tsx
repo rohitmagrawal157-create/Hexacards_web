@@ -236,7 +236,7 @@ export default function Checkout() {
           title: name
             ? `${orderDetails.productTitle} — ${name}`
             : orderDetails.productTitle,
-          image: orderDetails.image ?? "/Images/Products/digitalCard.jpg",
+          image: orderDetails.image ?? "/Images/Products/digitalCard.jpeg",
           price: linePrice,
           qty: lineQty,
         },
@@ -246,7 +246,7 @@ export default function Checkout() {
       {
         id: "hexa-nfc-card",
         title: name ? `Hexa NFC Card — ${name}` : "Hexa NFC Business Card",
-        image: "/Images/Products/digitalCard.jpg",
+        image: "/Images/Products/digitalCard.jpeg",
         price: linePrice,
         qty: lineQty,
       },

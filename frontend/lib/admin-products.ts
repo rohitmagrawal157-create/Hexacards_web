@@ -83,25 +83,25 @@ const DEFAULT_SECTIONS: AdminProductSection[] = [
     id: "business-card",
     title: "Business Card",
     subtitle: "NFC, PVC, and metal card products.",
-    imageSrc: "/Images/Products/digitalCard.jpg",
+    imageSrc: "/Images/Products/digitalCard.jpeg",
   },
   {
     id: "digital-profile-qr",
     title: "Digital Profile + QR",
     subtitle: "Print-ready QR cards that open your digital profile instantly.",
-    imageSrc: "/Images/Products/digitalQR.jpg",
+    imageSrc: "/Images/Products/DigitalprofileQr.jpeg",
   },
   {
     id: "social-media-card",
     title: "Social Media Card",
     subtitle: "Google review, Instagram, and YouTube social cards.",
-    imageSrc: "/Images/Products/googleReview.jpg",
+    imageSrc: "/Images/Products/googleReview.jpeg",
   },
   {
     id: "standee",
     title: "Standee",
     subtitle: "Google, Instagram, and YouTube review standees.",
-    imageSrc: "/Images/Products/reviewStandy.jpg",
+    imageSrc: "/Images/Products/reviewStandy.jpeg",
   },
   {
     id: "review-keychain",
@@ -266,7 +266,7 @@ export function parseYoutubeId(input: string): string | null {
 export function buildMediaFromDraft(draft: AdminProductDraft): ProductMedia[] {
   const alt = draft.shortTitle.trim() || draft.title.trim() || "Product";
   const primary =
-    draft.imageSrc.trim() || "/Images/Products/digitalCard.jpg";
+    draft.imageSrc.trim() || "/Images/Products/digitalCard.jpeg";
   const media: ProductMedia[] = [
     {
       type: "image",

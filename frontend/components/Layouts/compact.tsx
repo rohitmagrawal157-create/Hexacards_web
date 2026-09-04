@@ -44,12 +44,14 @@ import {
   openWhatsAppCardShare,
   resolveCardShareUrl,
 } from "@/lib/card-share";
+import { useMessageOwner } from "@/lib/message-owner-context";
 import CardCoverImage from "@/components/shared/CardCoverImage";
 import CardAvatarImage from "@/components/shared/CardAvatarImage";
 
 type CompactProps = {
   profile: HexaCardProfile;
   publicView?: boolean;
+  cardSlug?: string;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -186,9 +188,12 @@ function TabSwitcher({
 export default function Compact({
   profile,
   publicView = false,
+  cardSlug,
   onChangeBackground,
   onChangeProfile,
 }: CompactProps) {
+  const ownerCtx = useMessageOwner();
+  const resolvedSlug = (cardSlug || ownerCtx.cardSlug || "").trim();
   const [waShareNumber, setWaShareNumber] = useState("");
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(true);
@@ -404,6 +409,7 @@ export default function Compact({
               void saveCardContactToDevice(
                 profile,
                 resolveCardShareUrl(profile),
+                resolvedSlug || undefined,
               )
             }
             label="Add to contacts"

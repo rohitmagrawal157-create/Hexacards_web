@@ -55,25 +55,25 @@ export const products = [
     title: "Digital Profile + QR",
     description: "NFC + QR digital identity",
     price: "₹999",
-    image: "/Images/Products/digitalCard.png",
+    image: "/Images/Products/digitalCard.jpeg",
   },
   {
     title: "QR Code",
     description: "Instant scan-to-connect",
     price: "₹749",
-    image: "/Images/Products/QR.png",
+    image: "/Images/Products/DigitalprofileQr.jpeg",
   },
   {
     title: "Social Media Cards",
     description: "Get more Google reviews",
     price: "₹ 799",
-    image: "/Images/Products/googleReview.png",
+    image: "/Images/Products/googleReview.jpeg",
   },
   {
     title: "Review Stand",
     description: "Collect reviews on your counter",
     price: "₹699",
-    image: "/Images/Products/reviewStandy.png",
+    image: "/Images/Products/reviewStandy.jpeg",
   },
 ];
 

@@ -39,6 +39,7 @@ import {
   type HexaCardProfile,
 } from "@/lib/card-profile";
 import { useLogoImageUrl } from "@/lib/use-cover-image";
+import { useMessageOwner } from "@/lib/message-owner-context";
 import { saveCardContactToDevice } from "@/lib/vcard";
 import { cardShellClass } from "@/lib/public-card-shell";
 import {
@@ -87,6 +88,7 @@ export type BasicProfile = {
 type BasicProps = {
   profile: BasicProfile | HexaCardProfile;
   publicView?: boolean;
+  cardSlug?: string;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -142,10 +144,13 @@ function normalizeProfile(profile: BasicProfile | HexaCardProfile): BasicProfile
 export default function Basic({
   profile: rawProfile,
   publicView = false,
+  cardSlug,
   onChangeBackground,
   onChangeProfile,
 }: BasicProps) {
   const profile = normalizeProfile(rawProfile);
+  const ownerCtx = useMessageOwner();
+  const resolvedSlug = (cardSlug || ownerCtx.cardSlug || "").trim();
   const [businessOpen, setBusinessOpen] = useState(true);
   const [waShareNumber, setWaShareNumber] = useState("");
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -186,10 +191,12 @@ export default function Basic({
   }
 
   function handleSaveContact() {
-    if ("business" in rawProfile && "appearance" in rawProfile && "social" in rawProfile) {
+    const full = rawProfile as HexaCardProfile;
+    if (full?.contact && typeof full.contact.cardName === "string") {
       void saveCardContactToDevice(
-        rawProfile as HexaCardProfile,
-        resolveCardShareUrl(rawProfile as HexaCardProfile),
+        full,
+        resolveCardShareUrl(full),
+        resolvedSlug || undefined,
       );
       return;
     }

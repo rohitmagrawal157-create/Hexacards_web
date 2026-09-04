@@ -25,12 +25,14 @@ import {
   openWhatsAppCardShare,
   resolveCardShareUrl,
 } from "@/lib/card-share";
+import { useMessageOwner } from "@/lib/message-owner-context";
 import CardCoverImage from "@/components/shared/CardCoverImage";
 import CardAvatarImage from "@/components/shared/CardAvatarImage";
 
 type SocialProps = {
   profile: HexaCardProfile;
   publicView?: boolean;
+  cardSlug?: string;
   onChangeBackground?: () => void;
   onChangeProfile?: () => void;
 };
@@ -152,9 +154,12 @@ function GridIconTile({
 export default function Social({
   profile,
   publicView = false,
+  cardSlug,
   onChangeBackground,
   onChangeProfile,
 }: SocialProps) {
+  const ownerCtx = useMessageOwner();
+  const resolvedSlug = (cardSlug || ownerCtx.cardSlug || "").trim();
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [bioExpanded, setBioExpanded] = useState(false);
   const [waShareNumber, setWaShareNumber] = useState("");
@@ -474,6 +479,7 @@ export default function Social({
               void saveCardContactToDevice(
                 profile,
                 resolveCardShareUrl(profile),
+                resolvedSlug || undefined,
               )
             }
             className="flex-1 rounded-full py-3 text-center text-sm font-bold text-white transition-opacity hover:opacity-90"

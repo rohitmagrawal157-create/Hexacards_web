@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api-config";
+import { catalogImgPublicUrl } from "@/lib/admin-catalog-db";
 
 export type HomeCategoryCard = {
   id: string;
@@ -32,8 +33,7 @@ const CATEGORY_HUB_HREF: Record<string, string> = {
   standee: "/product/google-review-standee",
 };
 
-const FALLBACK_IMAGE = "/Images/Products/digitalCard.jpg";
-const CATALOG_IMG_DIR = "/Images/Products/";
+const FALLBACK_IMAGE = "/Images/Products/digitalCard.jpeg";
 /** Public site — categories/products hidden from marketing surfaces */
 export const HIDDEN_PUBLIC_CATEGORY_IDS = new Set(["review-keychain"]);
 export const HIDDEN_PUBLIC_PRODUCT_IDS = new Set([
@@ -41,7 +41,7 @@ export const HIDDEN_PUBLIC_PRODUCT_IDS = new Set([
   "metal-card",
 ]);
 
-const HOME_CATEGORIES_CACHE_KEY = "hexaHomeCategories.v3";
+const HOME_CATEGORIES_CACHE_KEY = "hexaHomeCategories.v4";
 
 function filterHiddenHomeCategories(
   cards: HomeCategoryCard[],
@@ -50,16 +50,7 @@ function filterHiddenHomeCategories(
 }
 
 function publicImg(stored: string | null | undefined): string | null {
-  const raw = String(stored ?? "").trim();
-  if (!raw) return null;
-  if (
-    raw.startsWith("data:") ||
-    /^https?:\/\//i.test(raw) ||
-    raw.startsWith("/")
-  ) {
-    return raw;
-  }
-  return `${CATALOG_IMG_DIR}${raw}`;
+  return catalogImgPublicUrl(stored);
 }
 
 /** Offline / API-down fallback — Super Admin categories shown on homepage */
@@ -69,7 +60,7 @@ export const FALLBACK_HOME_CATEGORIES: HomeCategoryCard[] = filterHiddenHomeCate
     title: "Business Card",
     description:
       "NFC and PVC cards — your full digital identity in one tap.",
-    image: "/Images/Products/digitalCard.jpg",
+    image: "/Images/Products/digitalCard.jpeg",
     href: "/product/nfc-business-card",
   },
   {
@@ -77,7 +68,7 @@ export const FALLBACK_HOME_CATEGORIES: HomeCategoryCard[] = filterHiddenHomeCate
     title: "Digital Profile + QR",
     description:
       "Print-ready QR that opens your profile instantly. No app, no friction.",
-    image: "/Images/Products/digitalQR.jpg",
+    image: "/Images/Products/DigitalprofileQr.jpeg",
     href: "/product/digital-profile-qr",
   },
   {
@@ -85,7 +76,7 @@ export const FALLBACK_HOME_CATEGORIES: HomeCategoryCard[] = filterHiddenHomeCate
     title: "Social Media Card",
     description:
       "Google, Instagram & YouTube cards — pick a platform and share in one tap.",
-    image: "/Images/Products/googleReview.jpg",
+    image: "/Images/Products/googleReview.jpeg",
     href: "/product/social-media-cards",
   },
   {
@@ -93,17 +84,9 @@ export const FALLBACK_HOME_CATEGORIES: HomeCategoryCard[] = filterHiddenHomeCate
     title: "Standee",
     description:
       "Google, Instagram & YouTube countertop standees for reviews and follows.",
-    image: "/Images/Products/reviewStandy.jpg",
+    image: "/Images/Products/reviewStandy.jpeg",
     href: "/product/google-review-standee",
   },
-  // {
-  //   id: "review-keychain",
-  //   title: "Review Keychain QR",
-  //   description:
-  //     "NFC + QR keychain that opens your Google review page — always on your keys.",
-  //   image: "/Images/Products/keychain-front-back.jpg",
-  //   href: "/product/review-keychain-qr",
-  // },
 ]);
 
 function productImage(product: ApiProduct | undefined): string | null {
