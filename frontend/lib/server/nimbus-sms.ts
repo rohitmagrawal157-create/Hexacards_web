@@ -113,9 +113,19 @@ export async function sendNimbusOtpSms(
 
     return { ok: true, providerResponse };
   } catch (err) {
+    const raw = err instanceof Error ? err.message : "SMS request failed";
+    // Node/undici often throws a bare "fetch failed" when the SMS host is
+    // unreachable, DNS fails, or TLS is blocked from the Vercel region.
+    const friendly =
+      /fetch failed|network|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|AbortError|timeout/i.test(
+        raw,
+      )
+        ? "Could not reach the SMS provider (Nimbus). Check NIMBUS_SMS_* credentials on Vercel, template/entity IDs, and that nimbusit.biz is reachable."
+        : raw;
+    console.error("[nimbus-sms] request failed", raw, err);
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "SMS request failed",
+      error: friendly,
     };
   }
 }

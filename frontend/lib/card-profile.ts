@@ -50,7 +50,10 @@ export type CardContactInfo = {
   state: string;
   city: string;
   address: string;
+  /** Storage filename / public path used for download */
   brochureName: string | null;
+  /** Original file name shown in the editor UI */
+  brochureDisplayName: string | null;
   brochureMime: string | null;
   brochureSize: number | null;
 };
@@ -261,6 +264,7 @@ export function defaultCardProfile(name = "User", phone = ""): HexaCardProfile {
       city: "",
       address: "",
       brochureName: null,
+      brochureDisplayName: null,
       brochureMime: null,
       brochureSize: null,
     },
@@ -312,6 +316,7 @@ export function getCardProfile(
         ...base.contact,
         ...parsed.contact,
         brochureName: parsed.contact?.brochureName ?? null,
+        brochureDisplayName: parsed.contact?.brochureDisplayName ?? null,
         brochureMime: parsed.contact?.brochureMime ?? null,
         brochureSize: parsed.contact?.brochureSize ?? null,
       },
@@ -606,6 +611,26 @@ export function formatFileSize(bytes: number | null | undefined) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/** Friendly label for brochure UI (original name preferred over storage key). */
+export function brochureDisplayLabel(
+  contact: Pick<
+    CardContactInfo,
+    "brochureName" | "brochureDisplayName"
+  > | null | undefined,
+): string {
+  const display = contact?.brochureDisplayName?.trim();
+  if (display) return display;
+  const stored = contact?.brochureName?.trim();
+  if (!stored) return "";
+  const base = stored.split("/").pop()?.split("?")[0] || stored;
+  // akshay-wagh-brochure.pdf → brochure.pdf style cleanup when no original name
+  if (/-brochure\./i.test(base)) {
+    const ext = base.includes(".") ? base.slice(base.lastIndexOf(".")) : "";
+    return `Brochure${ext || ".pdf"}`;
+  }
+  return base;
 }
 
 

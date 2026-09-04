@@ -9,9 +9,12 @@ import {
   Briefcase,
   Building2,
   Check,
+  CheckCircle2,
   Eye,
+  FileText,
   Globe,
   Link2,
+  Loader2,
   Menu,
   Palette,
   Pencil,
@@ -45,6 +48,7 @@ import {
   cardPublicSlug,
   cardPublicPath,
   clearBrochureFile,
+  brochureDisplayLabel,
   formatFileSize,
   getCardProfile,
   normalizePhoneForInput,
@@ -110,6 +114,10 @@ export default function EditCard() {
   const accentPersistTimer = useRef<number | null>(null);
   const pendingAccentRef = useRef<string | null>(null);
   const [brochureError, setBrochureError] = useState("");
+  const [brochureUploading, setBrochureUploading] = useState(false);
+  const [brochureClearing, setBrochureClearing] = useState(false);
+  const [brochurePendingName, setBrochurePendingName] = useState("");
+  const [brochureJustUploaded, setBrochureJustUploaded] = useState(false);
   const [locIds, setLocIds] = useState<{
     countryId: number | null;
     stateId: number | null;
@@ -536,6 +544,7 @@ export default function EditCard() {
   async function handleBrochureUpload(file: File | undefined) {
     if (!file || !profile) return;
     setBrochureError("");
+    setBrochureJustUploaded(false);
     if (file.size > BROCHURE_MAX_BYTES) {
       setBrochureError("Brochure must be 5 MB or smaller.");
       return;
@@ -556,6 +565,9 @@ export default function EditCard() {
       setBrochureError("Use PDF, DOC, DOCX, or image files only.");
       return;
     }
+
+    setBrochureUploading(true);
+    setBrochurePendingName(file.name);
     try {
       const username = resolveCardUsername(profile);
       const uploaded = await uploadCardBrochure({
@@ -564,55 +576,74 @@ export default function EditCard() {
         cardId: editingOrder?.cardId ?? null,
       });
 
+      const displayName =
+        uploaded.displayName?.trim() || file.name || "Brochure";
+
       const next: HexaCardProfile = {
         ...profile,
         contact: {
           ...profile.contact,
-          // Storage filename so any visitor can download
           brochureName: uploaded.filename,
+          brochureDisplayName: displayName,
           brochureMime: uploaded.mime || file.type || "application/octet-stream",
           brochureSize: uploaded.size || file.size,
         },
       };
       const saved = await persistProfile(next);
       setProfile(saved);
+      setBrochureJustUploaded(true);
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1800);
+      window.setTimeout(() => setBrochureJustUploaded(false), 3200);
     } catch (err) {
       setBrochureError(
         err instanceof Error ? err.message : "Could not save brochure.",
       );
+    } finally {
+      setBrochureUploading(false);
+      setBrochurePendingName("");
     }
   }
 
   async function handleBrochureClear() {
-    if (!profile) return;
+    if (!profile || brochureUploading || brochureClearing) return;
     setBrochureError("");
+    setBrochureJustUploaded(false);
+    setBrochureClearing(true);
     const username = resolveCardUsername(profile);
-    await clearCardBrochureRemote({
-      username,
-      cardId: editingOrder?.cardId ?? null,
-      filename: profile.contact.brochureName,
-    });
     try {
-      await clearBrochureFile();
-    } catch {
-      // legacy IndexedDB may be empty
-    }
-    const next: HexaCardProfile = {
-      ...profile,
-      contact: {
-        ...profile.contact,
-        brochureName: null,
-        brochureMime: null,
-        brochureSize: null,
-      },
-    };
-    try {
-      const saved = await persistProfile(next);
-      setProfile(saved);
-    } catch {
-      setProfile(next);
+      await clearCardBrochureRemote({
+        username,
+        cardId: editingOrder?.cardId ?? null,
+        filename: profile.contact.brochureName,
+      });
+      try {
+        await clearBrochureFile();
+      } catch {
+        // legacy IndexedDB may be empty
+      }
+      const next: HexaCardProfile = {
+        ...profile,
+        contact: {
+          ...profile.contact,
+          brochureName: null,
+          brochureDisplayName: null,
+          brochureMime: null,
+          brochureSize: null,
+        },
+      };
+      try {
+        const saved = await persistProfile(next);
+        setProfile(saved);
+      } catch {
+        setProfile(next);
+      }
+    } catch (err) {
+      setBrochureError(
+        err instanceof Error ? err.message : "Could not remove brochure.",
+      );
+    } finally {
+      setBrochureClearing(false);
     }
   }
 
@@ -931,59 +962,136 @@ export default function EditCard() {
 
                   <div className="sm:col-span-2">
                     <p className={labelClass()}>Brochure</p>
-                    <div className="mt-1.5 rounded-xl border border-dashed border-black/15 bg-[#FAFAF8] p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-[#141414]">
-                            {profile.contact.brochureName
-                              ? profile.contact.brochureName.includes("-brochure.")
-                                ? "Brochure uploaded"
-                                : profile.contact.brochureName
-                              : "Upload company brochure"}
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-[#8a8174]">
-                            PDF, DOC, or image · Max 5 MB
-                            {profile.contact.brochureSize
-                              ? ` · ${formatFileSize(profile.contact.brochureSize)} used`
-                              : ""}
-                          </p>
-                          {brochureError ? (
-                            <p className="mt-1.5 text-[11px] font-medium text-[#E24C4C]">
-                              {brochureError}
-                            </p>
-                          ) : null}
+                    {(() => {
+                      const hasBrochure = Boolean(
+                        profile.contact.brochureName,
+                      );
+                      const fileLabel = brochureUploading
+                        ? brochurePendingName || "Uploading file…"
+                        : brochureDisplayLabel(profile.contact) ||
+                          "Upload company brochure";
+                      const statusBusy =
+                        brochureUploading || brochureClearing;
+
+                      return (
+                        <div
+                          className={`mt-1.5 overflow-hidden rounded-xl border border-dashed bg-[#FAFAF8] p-4 transition-all duration-300 ${
+                            brochureError
+                              ? "border-[#E24C4C]/45 bg-[#FFF8F8]"
+                              : brochureJustUploaded || hasBrochure
+                                ? "border-[#BC7C10]/35 bg-[#FFFCF7]"
+                                : "border-black/15"
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                              <span
+                                className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-300 ${
+                                  brochureUploading
+                                    ? "bg-[#FFF8ED] text-[#BC7C10]"
+                                    : hasBrochure
+                                      ? "bg-[#141414] text-white"
+                                      : "bg-white text-[#8a8174] ring-1 ring-black/10"
+                                }`}
+                              >
+                                {brochureUploading ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : hasBrochure ? (
+                                  <FileText className="h-4 w-4" />
+                                ) : (
+                                  <Upload className="h-4 w-4" />
+                                )}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-[#141414]">
+                                  {fileLabel}
+                                </p>
+                                <p className="mt-0.5 text-[11px] leading-relaxed text-[#8a8174]">
+                                  {brochureUploading ? (
+                                    <span className="font-medium text-[#BC7C10]">
+                                      Uploading… please wait
+                                    </span>
+                                  ) : brochureClearing ? (
+                                    <span className="font-medium text-[#8a8174]">
+                                      Removing brochure…
+                                    </span>
+                                  ) : brochureJustUploaded ? (
+                                    <span className="inline-flex items-center gap-1 font-medium text-[#0D9488]">
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                      Uploaded successfully
+                                      {profile.contact.brochureSize
+                                        ? ` · ${formatFileSize(profile.contact.brochureSize)}`
+                                        : ""}
+                                    </span>
+                                  ) : hasBrochure ? (
+                                    <>
+                                      Ready on your public card
+                                      {profile.contact.brochureSize
+                                        ? ` · ${formatFileSize(profile.contact.brochureSize)}`
+                                        : ""}
+                                      {" · "}
+                                      PDF, DOC, or image
+                                    </>
+                                  ) : (
+                                    <>PDF, DOC, or image · Max 5 MB</>
+                                  )}
+                                </p>
+                                {brochureError ? (
+                                  <p className="mt-1.5 text-[11px] font-medium text-[#E24C4C]">
+                                    {brochureError}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={statusBusy}
+                                onClick={() => brochureRef.current?.click()}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-[#141414] transition hover:bg-[#FAFAF8] disabled:cursor-not-allowed disabled:opacity-55"
+                              >
+                                {brochureUploading ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Upload className="h-3.5 w-3.5" />
+                                )}
+                                {brochureUploading
+                                  ? "Uploading…"
+                                  : hasBrochure
+                                    ? "Replace"
+                                    : "Upload"}
+                              </button>
+                              {hasBrochure ? (
+                                <button
+                                  type="button"
+                                  disabled={statusBusy}
+                                  onClick={() => void handleBrochureClear()}
+                                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-[#E24C4C] transition hover:bg-[#FFF5F5] disabled:cursor-not-allowed disabled:opacity-55"
+                                >
+                                  {brochureClearing ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  )}
+                                  {brochureClearing ? "Removing…" : "Remove"}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                          <input
+                            ref={brochureRef}
+                            type="file"
+                            accept=".pdf,.doc,.docx,image/*,application/pdf"
+                            className="hidden"
+                            disabled={statusBusy}
+                            onChange={(e) => {
+                              void handleBrochureUpload(e.target.files?.[0]);
+                              e.target.value = "";
+                            }}
+                          />
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => brochureRef.current?.click()}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-[#141414] hover:bg-white"
-                          >
-                            <Upload className="h-3.5 w-3.5" />
-                            {profile.contact.brochureName ? "Replace" : "Upload"}
-                          </button>
-                          {profile.contact.brochureName ? (
-                            <button
-                              type="button"
-                              onClick={() => void handleBrochureClear()}
-                              className="rounded-lg px-3 py-2 text-[12px] font-semibold text-[#E24C4C] hover:bg-[#FFF5F5]"
-                            >
-                              Remove
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <input
-                        ref={brochureRef}
-                        type="file"
-                        accept=".pdf,.doc,.docx,image/*,application/pdf"
-                        className="hidden"
-                        onChange={(e) => {
-                          void handleBrochureUpload(e.target.files?.[0]);
-                          e.target.value = "";
-                        }}
-                      />
-                    </div>
+                      );
+                    })()}
                   </div>
                 </div>
               ) : null}

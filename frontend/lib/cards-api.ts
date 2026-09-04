@@ -144,6 +144,7 @@ export function cardDtoToProfile(
       city: "",
       address: "",
       brochureName: null,
+      brochureDisplayName: null,
       brochureMime: null,
       brochureSize: null,
     },
@@ -184,6 +185,9 @@ export function cardDtoToProfile(
       website: card.website || fallback.contact.website,
       address: card.address || fallback.contact.address,
       brochureName: card.brochure || fallback.contact.brochureName,
+      brochureDisplayName: fallback.contact.brochureDisplayName,
+      brochureMime: fallback.contact.brochureMime,
+      brochureSize: fallback.contact.brochureSize,
     },
     social: {
       ...fallback.social,
