@@ -40,6 +40,7 @@ import {
   formatOrderDate,
   fetchOrdersForPhone,
   isOrderDashboardHidden,
+  isOrderPaymentPaid,
   statusLabel,
   type HexaOrder,
   type HexaOrderStatus,
@@ -597,6 +598,7 @@ function CardsPanel({
 
   useEffect(() => {
     orders
+      .filter(isOrderPaymentPaid)
       .filter(isEditableCardOrder)
       .filter((order) => !isOrderDashboardHidden(order))
       .forEach((order) => {
@@ -614,12 +616,16 @@ function CardsPanel({
     };
   }, []);
 
+  const paidOrders = useMemo(
+    () => orders.filter(isOrderPaymentPaid),
+    [orders],
+  );
   const userCards = useMemo(
-    () => getUserDashboardCardsFromOrders(orders),
-    [orders, profileTick],
+    () => getUserDashboardCardsFromOrders(paidOrders),
+    [paidOrders, profileTick],
   );
   const hasCard = userCards.length > 0;
-  const totalSpend = orders.reduce((sum, o) => sum + o.total, 0);
+  const totalSpend = paidOrders.reduce((sum, o) => sum + o.total, 0);
 
   async function copyShareUrl(url: string) {
     try {
@@ -655,16 +661,16 @@ function CardsPanel({
           },
           {
             label: "Orders",
-            value: String(orders.length),
-            hint: orders.length
-              ? "See Order History to track"
+            value: String(paidOrders.length),
+            hint: paidOrders.length
+              ? "Successful payments only"
               : "None yet",
             icon: Package,
           },
           {
             label: "Total spent",
             value: `₹${totalSpend.toLocaleString("en-IN")}`,
-            hint: "All-time on HexaCards",
+            hint: "Paid orders only",
             icon: ShoppingBag,
           },
         ].map((stat) => {
@@ -1015,12 +1021,14 @@ function CardsPanel({
 }
 
 function OrdersPanel({ orders }: { orders: HexaOrder[] }) {
-  if (orders.length === 0) {
+  const paidOrders = orders.filter(isOrderPaymentPaid);
+
+  if (paidOrders.length === 0) {
     return (
       <EmptyPanel
         icon={ShoppingBag}
         title="No orders yet"
-        text="After you place an order at checkout, tracking details will appear here in Order History."
+        text="After a successful payment at checkout, tracking details will appear here. Failed or cancelled payments are not listed."
         action={{ href: "/products", label: "Browse products" }}
       />
     );
@@ -1031,10 +1039,10 @@ function OrdersPanel({ orders }: { orders: HexaOrder[] }) {
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/[0.06] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
         <div>
           <p className="text-sm font-semibold text-[#141414]">
-            {orders.length} placed order{orders.length === 1 ? "" : "s"}
+            {paidOrders.length} paid order{paidOrders.length === 1 ? "" : "s"}
           </p>
           <p className="text-xs text-[#6b6560]">
-            Track shipping status for every HexaCards order here.
+            Track shipping status for every successful HexaCards payment.
           </p>
         </div>
         <span className="rounded-md bg-[#FFF8ED] px-2.5 py-1 text-[10px] font-bold tracking-wide text-[#9a650d] uppercase ring-1 ring-[#BC7C10]/20">
@@ -1043,7 +1051,7 @@ function OrdersPanel({ orders }: { orders: HexaOrder[] }) {
       </div>
 
       <div className="space-y-3">
-        {orders.map((order) => {
+        {paidOrders.map((order) => {
           const steps = ["placed", "shipped", "delivered"] as const;
           const current = steps.indexOf(order.status);
           return (

@@ -13,6 +13,7 @@ type RouteContext = { params: Promise<{ slug: string }> };
  * GET /api/cards/by-slug/[slug]
  * Public card lookup by unic_card_name; increments page_view.
  * Links loaded from `links` table (social, brochure, website).
+ * Cards linked to unpaid / failed orders are not publicly served.
  */
 export async function GET(request: Request, context: RouteContext) {
   try {
@@ -44,6 +45,32 @@ export async function GET(request: Request, context: RouteContext) {
     if (!data) return jsonError(404, "Card not found");
 
     const row = data as CardRow;
+
+    // If this card is tied to checkout order(s), require at least one paid order
+    const cardId = Number(row.card_id);
+    const { data: linkedOrders } = await supabase
+      .from("orders")
+      .select("payment_status, card_id, card_slug")
+      .or(
+        [
+          `card_slug.eq.${slug}`,
+          Number.isFinite(cardId) && cardId > 0
+            ? `card_id.eq.${cardId}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(","),
+      )
+      .limit(20);
+
+    const orderRows = (linkedOrders as { payment_status: number }[] | null) ?? [];
+    if (
+      orderRows.length > 0 &&
+      !orderRows.some((o) => Number(o.payment_status) === 1)
+    ) {
+      return jsonError(404, "Card not found");
+    }
+
     if (row.end_date && isCardPastEndDate(row.end_date)) {
       return jsonError(410, "This profile has expired");
     }

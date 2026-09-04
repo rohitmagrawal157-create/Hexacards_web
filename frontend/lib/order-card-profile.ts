@@ -9,6 +9,7 @@ import {
 import { upsertOrderCardInDb } from "@/lib/cards-api";
 import {
   getOrderById,
+  isOrderPaymentPaid,
   updateOrder,
   type HexaOrder,
 } from "@/lib/orders";
@@ -206,6 +207,9 @@ export async function persistOrderCardProfile(
 
 /** Create isolated profile for a new order — does not touch other cards */
 export function initOrderCardProfile(order: HexaOrder): HexaCardProfile {
+  if (!isOrderPaymentPaid(order)) {
+    throw new Error("Card profile is only available after successful payment.");
+  }
   const existing = getOrderCardProfile(order.id);
   if (existing) return existing;
 
@@ -218,6 +222,9 @@ export function initOrderCardProfile(order: HexaOrder): HexaCardProfile {
 export async function initOrderCardProfileAsync(
   order: HexaOrder,
 ): Promise<HexaCardProfile> {
+  if (!isOrderPaymentPaid(order)) {
+    throw new Error("Card profile is only available after successful payment.");
+  }
   const profile = initOrderCardProfile(order);
   const result = await upsertOrderCardInDb(order, profile, {
     stateId: order.stateId ?? null,
@@ -278,8 +285,9 @@ function syncOrderCardDesignFromProfile(
   });
 }
 
-/** Ensure every placed card order has a saved profile (one-time per order) */
-export function ensureOrderCardProfile(order: HexaOrder): HexaCardProfile {
+/** Ensure every paid card order has a saved profile (one-time per order) */
+export function ensureOrderCardProfile(order: HexaOrder): HexaCardProfile | null {
+  if (!isOrderPaymentPaid(order)) return null;
   const saved = getOrderCardProfile(order.id);
   if (saved) return saved;
   return initOrderCardProfile(order);

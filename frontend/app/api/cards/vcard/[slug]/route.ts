@@ -48,7 +48,32 @@ export async function GET(_request: Request, context: RouteContext) {
     if (error) return jsonError(500, "Failed to load card", error.message);
     if (!data) return jsonError(404, "Card not found");
 
-    let card = mapCard(data as CardRow);
+    const row = data as CardRow;
+    const cardId = Number(row.card_id);
+    const { data: linkedOrders } = await supabase
+      .from("orders")
+      .select("payment_status")
+      .or(
+        [
+          `card_slug.eq.${slug}`,
+          Number.isFinite(cardId) && cardId > 0
+            ? `card_id.eq.${cardId}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(","),
+      )
+      .limit(20);
+    const orderRows =
+      (linkedOrders as { payment_status: number }[] | null) ?? [];
+    if (
+      orderRows.length > 0 &&
+      !orderRows.some((o) => Number(o.payment_status) === 1)
+    ) {
+      return jsonError(404, "Card not found");
+    }
+
+    let card = mapCard(row);
     try {
       const links = await fetchLinksForCard(supabase, card.cardId);
       card = applyLinksToCard(card, links);

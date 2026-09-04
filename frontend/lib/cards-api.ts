@@ -15,7 +15,7 @@ import {
   type HexaCardProfile,
 } from "@/lib/card-profile";
 import type { CardDto } from "@/lib/server/card-types";
-import { updateOrder, type HexaOrder } from "@/lib/orders";
+import { updateOrder, isOrderPaymentPaid, type HexaOrder } from "@/lib/orders";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
 import {
   resolveCardImageSrc,
@@ -263,6 +263,13 @@ export async function upsertOrderCardInDb(
   profile: HexaCardProfile,
   loc?: { stateId?: number | null; cityId?: number | null },
 ): Promise<{ cardId: number | null; error?: string }> {
+  if (!isOrderPaymentPaid(order)) {
+    return {
+      cardId: null,
+      error: "Payment required before creating a digital card",
+    };
+  }
+
   const auth = getAuthUser();
   const { slug } = resolveOrderLiveUrl(order);
   const ownerPhone =

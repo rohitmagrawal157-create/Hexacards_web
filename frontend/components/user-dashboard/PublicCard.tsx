@@ -12,7 +12,12 @@ import {
   type HexaCardProfile,
 } from "@/lib/card-profile";
 import { getAuthUser, isLoggedIn, isValidIndianPhone, normalizeIndianPhone } from "@/lib/auth";
-import { findOrderByCardSlug, fetchOrderByCardSlug, type HexaOrder } from "@/lib/orders";
+import {
+  findOrderByCardSlug,
+  fetchOrderByCardSlug,
+  isOrderPaymentPaid,
+  type HexaOrder,
+} from "@/lib/orders";
 import {
   getOrderCardProfile,
   loadOrderCardProfile,
@@ -27,7 +32,6 @@ import { MessageOwnerContext } from "@/lib/message-owner-context";
 import { isReservedRootSegment } from "@/lib/reserved-routes";
 import {
   buildOwnerDisplayCardUrl,
-  buildPublicCardUrl,
 } from "@/lib/site-url";
 import { publicCardPageClass } from "@/lib/public-card-shell";
 import ProfileBanner from "./ProfileBanner";
@@ -104,6 +108,13 @@ export default function PublicCard() {
         const order =
           findOrderByCardSlug(normalizedSlug) ??
           (await fetchOrderByCardSlug(normalizedSlug));
+        // Card exists in DB but checkout never paid — do not show
+        if (order && !isOrderPaymentPaid(order)) {
+          setProfile(null);
+          setNotFound(true);
+          setReady(true);
+          return;
+        }
         const local =
           order != null
             ? getOrderCardProfile(order.id) ??
@@ -151,7 +162,7 @@ export default function PublicCard() {
       const order =
         findOrderByCardSlug(normalizedSlug) ??
         (await fetchOrderByCardSlug(normalizedSlug));
-      if (order) {
+      if (order && isOrderPaymentPaid(order)) {
         const saved = getOrderCardProfile(order.id);
         const loaded =
           saved ??

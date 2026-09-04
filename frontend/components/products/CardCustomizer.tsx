@@ -52,9 +52,8 @@ const CARD_BODY = {
   white: "#FFFFFF",
 } as const;
 
-/** White card accents — gold matches black-card gold; order: gold, black, red, green, orange… */
+/** White card accents — black first, gold last */
 const whiteCardAccents = [
-  { label: "Gold", color: GOLD_SOLID },
   { label: "Black", color: "#141414" },
   { label: "Red", color: "#E53935" },
   { label: "Green", color: "#00B813" },
@@ -65,6 +64,7 @@ const whiteCardAccents = [
   { label: "Yellow", color: "#FDD835" },
   { label: "Sky Blue", color: "#00BFFF" },
   { label: "Hot Pink", color: "#FD0095" },
+  { label: "Gold", color: GOLD_SOLID },
 ] as const;
 
 const CARD_W = 244;

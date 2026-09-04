@@ -33,7 +33,7 @@ import {
 import LocationSelects, {
   type LocationValue,
 } from "@/components/shared/LocationSelects";
-import { fetchOrdersForPhone, type HexaOrder } from "@/lib/orders";
+import { fetchOrdersForPhone, isOrderPaymentPaid, type HexaOrder } from "@/lib/orders";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
 import { buildShareCardUrl } from "@/lib/site-url";
 import { uploadCardImage } from "@/lib/card-image-upload";
@@ -187,9 +187,10 @@ export default function EditCard() {
     let cancelled = false;
 
     async function initEditor() {
-      const orders = await fetchOrdersForPhone(auth!.phone);
+      const allOrders = await fetchOrdersForPhone(auth!.phone);
       if (cancelled) return;
 
+      const orders = allOrders.filter(isOrderPaymentPaid);
       if (orders.length === 0) {
         router.replace("/dashboard");
         return;
@@ -208,8 +209,9 @@ export default function EditCard() {
             cityId: order.cityId ?? null,
           });
         } else {
-          setEditingOrder(null);
-          setProfile(getCardProfile(auth!.name, auth!.phone));
+          // Unpaid / unknown order — do not open editor
+          router.replace("/dashboard");
+          return;
         }
       } else {
         const latest = orders[0] ?? null;

@@ -146,6 +146,8 @@ export async function syncCardsFromOrders(): Promise<{
   const taken = await fetchTakenCardSlugs(supabase);
 
   for (const order of rows) {
+    // Never create live cards from unpaid / failed / refunded checkouts
+    if (Number(order.payment_status) !== 1) continue;
     if (isOrderCardHidden(order)) continue;
     if (!isCardProductOrderRow(order)) continue;
 

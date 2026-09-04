@@ -68,6 +68,17 @@ export function isOrderDashboardHidden(order: HexaOrder): boolean {
   );
 }
 
+/**
+ * Entitlement gate: only successful Razorpay (or admin) payments unlock
+ * dashboard cards, order history, and public profile creation.
+ * Pending / failed / refunded never count.
+ */
+export function isOrderPaymentPaid(
+  order: Pick<HexaOrder, "paymentStatus"> | null | undefined,
+): boolean {
+  return order?.paymentStatus === "paid";
+}
+
 function phoneKey(phone: string | undefined | null): string {
   return normalizeIndianPhone(phone ?? "");
 }
@@ -343,10 +354,23 @@ export function getOrdersForPhone(phone: string): HexaOrder[] {
   return getOrders().filter((o) => orderOwnerKey(o) === digits);
 }
 
+/** Paid orders only — used for My Cards / Order History entitlement. */
+export function getPaidOrdersForPhone(phone: string): HexaOrder[] {
+  return getOrdersForPhone(phone).filter(isOrderPaymentPaid);
+}
+
 export async function fetchOrdersForPhone(phone: string): Promise<HexaOrder[]> {
   const digits = phoneKey(phone);
   if (!digits) return [];
   return fetchOrders({ ownerPhone: digits });
+}
+
+/** Dashboard-safe list: successful payments only. */
+export async function fetchPaidOrdersForPhone(
+  phone: string,
+): Promise<HexaOrder[]> {
+  const orders = await fetchOrdersForPhone(phone);
+  return orders.filter(isOrderPaymentPaid);
 }
 
 export async function fetchOrderByCardSlug(
@@ -355,15 +379,15 @@ export async function fetchOrderByCardSlug(
   const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
   const orders = await fetchOrders({ cardSlug: normalized });
-  return orders[0] ?? null;
+  return orders.find(isOrderPaymentPaid) ?? null;
 }
 
 export function hasPlacedOrder(phone: string): boolean {
-  return getOrdersForPhone(phone).length > 0;
+  return getPaidOrdersForPhone(phone).length > 0;
 }
 
 export async function hasPlacedOrderAsync(phone: string): Promise<boolean> {
-  const orders = await fetchOrdersForPhone(phone);
+  const orders = await fetchPaidOrdersForPhone(phone);
   return orders.length > 0;
 }
 
@@ -421,6 +445,8 @@ export function findOrderByCardSlug(slug: string): HexaOrder | null {
   const orders = getOrders();
   const found = findOrderByPublicSlug(slug, orders);
   if (!found || isOrderDashboardHidden(found)) return null;
+  // Unpaid checkouts must not resolve as live card owners
+  if (!isOrderPaymentPaid(found)) return null;
 
   if (!found.cardSlug?.trim()) {
     const { slug: computed, liveUrl } = resolveOrderLiveUrl(found);
