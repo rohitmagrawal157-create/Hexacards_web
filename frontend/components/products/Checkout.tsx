@@ -362,14 +362,14 @@ export default function Checkout() {
       if (needsDigitalProfile) {
         const finalSlug = await allocateOrderCardSlug(cardName);
         const liveUrl = buildPublicCardUrl(finalSlug, "canonical");
+        const baseDesign = order.cardDesign ?? cardDesign;
         withCardMeta =
           (await updateOrder(order.id, {
             cardSlug: finalSlug,
             cardUrl: liveUrl,
-            cardDesign: {
-              ...(order.cardDesign ?? cardDesign),
-              liveUrl,
-            },
+            cardDesign: baseDesign
+              ? { ...baseDesign, liveUrl }
+              : undefined,
           })) ?? order;
       }
 

@@ -407,8 +407,11 @@ export default function EditCard() {
         cardId: editingOrder?.cardId ?? null,
       });
 
+      const stamped = new Date().toISOString();
+      // Keep the cache-busted upload URL so previews refresh immediately
       const next: HexaCardProfile = {
         ...profile,
+        updatedAt: stamped,
         appearance: {
           ...profile.appearance,
           ...(kind === "profile"
@@ -420,7 +423,20 @@ export default function EditCard() {
 
       // Keep local cache + ensure cards row has paths (upload API also patches DB)
       try {
-        await persistProfile(next);
+        const saved = await persistProfile(next);
+        setProfile({
+          ...saved,
+          updatedAt: stamped,
+          appearance: {
+            ...saved.appearance,
+            logoImage:
+              kind === "profile" ? uploaded.url : saved.appearance.logoImage,
+            coverImage:
+              kind === "background"
+                ? uploaded.url
+                : saved.appearance.coverImage,
+          },
+        });
       } catch {
         // Path is already on disk/DB from upload; local save can retry on Save
       }
@@ -1052,6 +1068,7 @@ export default function EditCard() {
                                 titleLine={previewTitle}
                                 coverUrl={profile.appearance.coverImage}
                                 avatarUrl={profile.appearance.logoImage}
+                                version={profile.updatedAt}
                                 accent={profile.appearance.accentColor}
                                 mobile={profile.contact.mobile}
                                 email={profile.contact.email}
@@ -1070,6 +1087,7 @@ export default function EditCard() {
                       <div className="relative mt-3 h-[112px] w-[112px] overflow-hidden rounded-md shadow-[0_6px_20px_rgba(0,0,0,0.12)] ring-0.1 ring-[#141414] ring-offset-2">
                         <CardAvatarImage
                           src={profile.appearance.logoImage}
+                          version={profile.updatedAt}
                           className="absolute inset-0"
                         />
                         <div className="absolute right-1.5 bottom-1.5 flex items-center gap-1">
@@ -1115,7 +1133,10 @@ export default function EditCard() {
                     <div className="min-w-0">
                       <p className={labelClass()}>Card background</p>
                       <div className="relative mt-3 h-[112px] w-[212px] overflow-hidden rounded-md shadow-[0_8px_24px_rgba(0,0,0,0.1)] ring-0.1 ring-[#141414] ring-offset-2">
-                        <CardCoverImage src={profile.appearance.coverImage} />
+                        <CardCoverImage
+                          src={profile.appearance.coverImage}
+                          version={profile.updatedAt}
+                        />
                         <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-3 pt-8 pb-2.5 text-left text-[11px] font-semibold tracking-wide text-white uppercase">
                           {isDefaultCoverImage(profile.appearance.coverImage)
                             ? "Using default"

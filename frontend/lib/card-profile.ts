@@ -4,7 +4,10 @@ import {
 } from "libphonenumber-js";
 import { buildCardSlugFromName } from "@/lib/order-card";
 import { buildPublicCardPath, buildPublicCardUrl } from "@/lib/site-url";
-import { resolveCardImageSrc } from "@/lib/card-images";
+import {
+  resolveCardImageSrc,
+  withCardImageCacheBust,
+} from "@/lib/card-images";
 
 export type CardLayoutId =
   | "classic"
@@ -98,28 +101,39 @@ const LEGACY_DEFAULT_COVERS = new Set([
 ]);
 
 /** Keep custom uploads; map missing/legacy stock banners to the fixed default. */
-export function normalizeCoverImage(cover: string | null | undefined) {
+export function normalizeCoverImage(
+  cover: string | null | undefined,
+  version?: string | number | null,
+) {
   const trimmed = cover?.trim();
   if (!trimmed) return DEFAULT_CARD_BANNER;
   if (trimmed.startsWith("data:")) return trimmed;
-  if (LEGACY_DEFAULT_COVERS.has(trimmed)) return DEFAULT_CARD_BANNER;
-  return resolveCardImageSrc(trimmed, DEFAULT_CARD_BANNER);
+  if (LEGACY_DEFAULT_COVERS.has(trimmed.split("?")[0])) return DEFAULT_CARD_BANNER;
+  const resolved = resolveCardImageSrc(trimmed, DEFAULT_CARD_BANNER, version);
+  if (resolved === DEFAULT_CARD_BANNER) return resolved;
+  return withCardImageCacheBust(resolved, version);
 }
 
 /** Banner src for card UI — always falls back to the default stock image. */
 export function resolveCoverImageForDisplay(
   cover: string | null | undefined,
   shareImage?: string | null,
+  version?: string | number | null,
 ): string {
   const candidate = cover?.trim() || shareImage?.trim() || "";
-  return normalizeCoverImage(candidate || undefined);
+  return normalizeCoverImage(candidate || undefined, version);
 }
 
 /** Keep custom uploads; missing avatar uses the default avatar image. */
-export function normalizeLogoImage(logo: string | null | undefined) {
+export function normalizeLogoImage(
+  logo: string | null | undefined,
+  version?: string | number | null,
+) {
   if (!logo?.trim()) return DEFAULT_CARD_AVATAR;
   if (logo.startsWith("data:")) return logo;
-  return resolveCardImageSrc(logo, DEFAULT_CARD_AVATAR);
+  const resolved = resolveCardImageSrc(logo, DEFAULT_CARD_AVATAR, version);
+  if (resolved === DEFAULT_CARD_AVATAR) return resolved;
+  return withCardImageCacheBust(resolved, version);
 }
 
 export function isDefaultCoverImage(cover: string | null | undefined) {
@@ -308,8 +322,14 @@ export function getCardProfile(
       appearance: {
         ...base.appearance,
         ...parsed.appearance,
-        coverImage: normalizeCoverImage(parsed.appearance?.coverImage),
-        logoImage: normalizeLogoImage(parsed.appearance?.logoImage),
+        coverImage: normalizeCoverImage(
+          parsed.appearance?.coverImage,
+          parsed.updatedAt,
+        ),
+        logoImage: normalizeLogoImage(
+          parsed.appearance?.logoImage,
+          parsed.updatedAt,
+        ),
         accentColor: isMulticolorAccent(parsed.appearance?.accentColor)
           ? "#E91E63"
           : parsed.appearance?.accentColor || base.appearance.accentColor,

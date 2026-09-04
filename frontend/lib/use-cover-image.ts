@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { resolveCardImageSrc } from "@/lib/card-images";
+import {
+  resolveCardImageSrc,
+  withCardImageCacheBust,
+} from "@/lib/card-images";
 import {
   DEFAULT_CARD_AVATAR,
   DEFAULT_CARD_BANNER,
@@ -10,10 +13,15 @@ import {
 export function useCardDisplayImage(
   src: string | null | undefined,
   fallback: string,
+  version?: string | number | null,
 ): string {
   const resolved = useMemo(
-    () => resolveCardImageSrc(src, fallback),
-    [src, fallback],
+    () =>
+      withCardImageCacheBust(
+        resolveCardImageSrc(src, fallback, version),
+        version,
+      ),
+    [src, fallback, version],
   );
   const [url, setUrl] = useState(resolved);
 
@@ -23,16 +31,27 @@ export function useCardDisplayImage(
       return;
     }
 
+    let cancelled = false;
     const img = new window.Image();
-    img.onload = () => setUrl(resolved);
+    img.onload = () => {
+      if (!cancelled) setUrl(resolved);
+    };
     img.onerror = () => {
+      if (cancelled) return;
       if (resolved.includes("/storage/v1/object/public/")) {
         const name = resolved.split("/").pop()?.split("?")[0];
         if (name) {
-          const local = `/uploads/cards/${decodeURIComponent(name)}`;
+          const qs = resolved.includes("?")
+            ? `?${resolved.split("?").slice(1).join("?")}`
+            : "";
+          const local = `/uploads/cards/${decodeURIComponent(name)}${qs}`;
           const retry = new window.Image();
-          retry.onload = () => setUrl(local);
-          retry.onerror = () => setUrl(fallback);
+          retry.onload = () => {
+            if (!cancelled) setUrl(local);
+          };
+          retry.onerror = () => {
+            if (!cancelled) setUrl(fallback);
+          };
           retry.src = local;
           return;
         }
@@ -40,6 +59,9 @@ export function useCardDisplayImage(
       setUrl(fallback);
     };
     img.src = resolved;
+    return () => {
+      cancelled = true;
+    };
   }, [resolved, fallback]);
 
   return url;
@@ -49,14 +71,18 @@ export function useCardDisplayImage(
 export function useCoverImageUrl(
   cover?: string | null,
   shareImage?: string | null,
+  version?: string | number | null,
 ): string {
   const resolved = useMemo(
-    () => resolveCoverImageForDisplay(cover, shareImage),
-    [cover, shareImage],
+    () => resolveCoverImageForDisplay(cover, shareImage, version),
+    [cover, shareImage, version],
   );
-  return useCardDisplayImage(resolved, DEFAULT_CARD_BANNER);
+  return useCardDisplayImage(resolved, DEFAULT_CARD_BANNER, version);
 }
 
-export function useLogoImageUrl(logo?: string | null): string {
-  return useCardDisplayImage(logo, DEFAULT_CARD_AVATAR);
+export function useLogoImageUrl(
+  logo?: string | null,
+  version?: string | number | null,
+): string {
+  return useCardDisplayImage(logo, DEFAULT_CARD_AVATAR, version);
 }

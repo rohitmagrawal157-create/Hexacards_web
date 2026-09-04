@@ -81,7 +81,8 @@ async function uploadToSupabase(
   const { error } = await supabase.storage.from(BUCKET).upload(filename, buffer, {
     contentType,
     upsert: true,
-    cacheControl: "3600",
+    // Short TTL — same filename is overwritten on each upload
+    cacheControl: "60",
   });
 
   if (error) {

@@ -308,7 +308,11 @@ export default function Compact({
             onChangeBackground ? "Change background image" : undefined
           }
         >
-          <CardCoverImage src={profile.appearance.coverImage} alt="" />
+          <CardCoverImage
+            src={profile.appearance.coverImage}
+            version={profile.updatedAt}
+            alt=""
+          />
           {onChangeBackground ? (
             <button
               type="button"
@@ -330,7 +334,10 @@ export default function Compact({
           >
             <div className="relative">
               <div className="flex h-[100px] w-[100px] items-center justify-center overflow-hidden rounded-full border-[5px] border-white bg-[#f5f5f4] shadow-[0_10px_28px_rgba(0,0,0,0.22)] sm:h-[112px] sm:w-[112px]">
-                <CardAvatarImage src={profile.appearance.logoImage} />
+                <CardAvatarImage
+                  src={profile.appearance.logoImage}
+                  version={profile.updatedAt}
+                />
               </div>
               {onChangeProfile ? (
                 <button

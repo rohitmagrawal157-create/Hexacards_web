@@ -13,7 +13,7 @@ import {
   type OrderWriteBody,
 } from "@/lib/server/order-types";
 
-type RouteContext = { params: Promise<{ id: string }> | { id: string } };
+type RouteContext = { params: Promise<{ id: string }> };
 
 async function syncOrderItems(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -242,9 +242,9 @@ export async function PUT(request: Request, context: RouteContext) {
       patch.logo = logo ? orderLogoColumnValue(String(logo)) : null;
     }
     if (body.cardDesign !== undefined) {
-      let incoming = body.cardDesign;
+      let incoming: OrderCardDesignData | null = body.cardDesign;
       const logo = incoming?.logoSrc?.trim();
-      if (logo?.startsWith("data:image/")) {
+      if (incoming && logo?.startsWith("data:image/")) {
         try {
           const saved = await saveCardImage({
             username: sanitizeCardUsername(

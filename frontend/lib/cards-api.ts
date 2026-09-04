@@ -204,15 +204,22 @@ export function cardDtoToProfile(
     appearance: {
       ...fallback.appearance,
       logoImage: normalizeLogoImage(
-        resolveCardImageSrc(card.logo, fallback.appearance.logoImage || DEFAULT_CARD_AVATAR),
+        resolveCardImageSrc(
+          card.logo,
+          fallback.appearance.logoImage || DEFAULT_CARD_AVATAR,
+          card.updateTime,
+        ),
+        card.updateTime,
       ),
       coverImage: normalizeCoverImage(
         card.bgUrl || card.bgImg
           ? resolveCardImageSrc(
               card.bgUrl || card.bgImg,
               fallback.appearance.coverImage || DEFAULT_CARD_BANNER,
+              card.updateTime,
             )
           : fallback.appearance.coverImage || DEFAULT_CARD_BANNER,
+        card.updateTime,
       ),
       layout: layoutFromThemeId(card.themeId),
     },

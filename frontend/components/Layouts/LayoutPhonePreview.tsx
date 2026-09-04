@@ -29,6 +29,7 @@ type LayoutPhonePreviewProps = {
   titleLine: string;
   coverUrl?: string | null;
   avatarUrl?: string | null;
+  version?: string | number | null;
   accent?: string;
   mobile?: string;
   email?: string;
@@ -47,12 +48,13 @@ export default function LayoutPhonePreview({
   titleLine,
   coverUrl,
   avatarUrl,
+  version,
   accent = "#BC7C10",
   mobile,
   email,
 }: LayoutPhonePreviewProps) {
-  const cover = useCoverImageUrl(coverUrl);
-  const avatar = useLogoImageUrl(avatarUrl);
+  const cover = useCoverImageUrl(coverUrl, null, version);
+  const avatar = useLogoImageUrl(avatarUrl, version);
   const borderSoft = `${accent}33`;
   const mobileLabel = mobile?.trim() || "+91 ·····";
   const emailLabel = email?.trim() || "you@email.com";
@@ -159,6 +161,7 @@ export default function LayoutPhonePreview({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
+                  key={avatar}
                   src={avatar}
                   alt=""
                   className="h-full w-full object-cover"
@@ -330,7 +333,7 @@ export default function LayoutPhonePreview({
           >
             <div className="h-11 w-11 overflow-hidden rounded-full border-[3px] border-white bg-[#f5f5f4] shadow-md">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={avatar} alt="" className="h-full w-full object-cover" />
+                <img key={avatar} src={avatar} alt="" className="h-full w-full object-cover" />
             </div>
           </div>
           <div className="mt-1.5 px-1.5 text-center">
@@ -432,7 +435,7 @@ export default function LayoutPhonePreview({
           >
             <div className="h-12 w-12 overflow-hidden rounded-full border-[3px] border-white bg-[#f5f5f4] shadow-md">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={avatar} alt="" className="h-full w-full object-cover" />
+                <img key={avatar} src={avatar} alt="" className="h-full w-full object-cover" />
             </div>
           </div>
           <div className="mt-1.5 px-1.5 text-center">
@@ -518,7 +521,7 @@ export default function LayoutPhonePreview({
             style={{ outline: `1.5px solid ${accent}` }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={avatar} alt="" className="h-full w-full object-cover" />
+            <img key={avatar} src={avatar} alt="" className="h-full w-full object-cover" />
           </div>
           <p className="mt-1.5 max-w-full truncate text-[10px] font-extrabold text-[#0f0f12]">
             {name}
@@ -576,7 +579,7 @@ export default function LayoutPhonePreview({
         <div className="relative z-10 -mt-6 px-2.5 pr-7">
           <div className="h-12 w-12 overflow-hidden rounded-full border-[2.5px] border-white bg-[#f5f5f4] shadow-md">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={avatar} alt="" className="h-full w-full object-cover" />
+            <img key={avatar} src={avatar} alt="" className="h-full w-full object-cover" />
           </div>
         </div>
         <div className="px-2.5 pt-1.5 text-left">
@@ -670,7 +673,7 @@ export default function LayoutPhonePreview({
           style={{ outline: `1.5px solid ${accent}` }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={avatar} alt="" className="h-full w-full object-cover" />
+          <img key={avatar} src={avatar} alt="" className="h-full w-full object-cover" />
         </div>
         <p className="mt-1.5 max-w-full truncate text-[10px] font-extrabold text-[#0f0f12]">
           {name}

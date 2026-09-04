@@ -266,7 +266,11 @@ export default function Modern({
             onChangeBackground ? "Change background image" : undefined
           }
         >
-          <CardCoverImage src={profile.appearance.coverImage} alt="" />
+          <CardCoverImage
+            src={profile.appearance.coverImage}
+            version={profile.updatedAt}
+            alt=""
+          />
           {onChangeBackground ? (
             <button
               type="button"
@@ -289,7 +293,10 @@ export default function Modern({
           >
             <div className="relative">
               <div className="flex h-[120px] w-[120px] items-center justify-center overflow-hidden rounded-full border-[6px] border-white bg-[#f5f5f4] shadow-[0_10px_28px_rgba(0,0,0,0.22)] sm:h-[132px] sm:w-[132px]">
-                <CardAvatarImage src={profile.appearance.logoImage} />
+                <CardAvatarImage
+                  src={profile.appearance.logoImage}
+                  version={profile.updatedAt}
+                />
               </div>
               {onChangeProfile ? (
                 <button

@@ -80,6 +80,7 @@ export type BasicProfile = {
     pinterest?: string;
     tripadvisor?: string;
   };
+  updatedAt?: string;
 };
 
 type BasicProps = {
@@ -113,6 +114,7 @@ function normalizeProfile(profile: BasicProfile | HexaCardProfile): BasicProfile
         avatarImage: p.appearance.logoImage,
         logoImage: p.appearance.logoImage,
       },
+      updatedAt: p.updatedAt,
       business: {
         name: p.contact.businessName || undefined,
         about: p.business?.about,
@@ -332,6 +334,7 @@ export default function Basic({
         titleLine={profile.contact.title}
         coverUrl={profile.appearance.coverImage}
         avatarUrl={avatarUrl}
+        version={profile.updatedAt}
         accent={accent}
         onChangeBackground={onChangeBackground}
         onChangeProfile={onChangeProfile}

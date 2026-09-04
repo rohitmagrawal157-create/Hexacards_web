@@ -348,7 +348,11 @@ export default function Social({
 
       {/* Branded cover — a bit taller so more image shows */}
       <div className="relative min-h-52 overflow-hidden sm:min-h-60">
-        <CardCoverImage src={profile.appearance.coverImage} alt="" />
+        <CardCoverImage
+          src={profile.appearance.coverImage}
+          version={profile.updatedAt}
+          alt=""
+        />
         <div className="relative z-10">
         <div className="relative flex items-center justify-end gap-2 px-4 pt-4">
           {onChangeBackground ? (
@@ -369,7 +373,10 @@ export default function Social({
                 className="h-28 w-28 overflow-hidden rounded-full border-4 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.28)]"
                 style={{ borderColor: accent }}
               >
-                <CardAvatarImage src={profile.appearance.logoImage} />
+                <CardAvatarImage
+                  src={profile.appearance.logoImage}
+                  version={profile.updatedAt}
+                />
             </div>
             {onChangeProfile ? (
               <button

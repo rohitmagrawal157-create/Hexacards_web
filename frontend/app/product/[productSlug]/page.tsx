@@ -10,7 +10,7 @@ import {
 } from "@/lib/product-route-registry";
 
 type Props = {
-  params: Promise<{ productSlug: string }> | { productSlug: string };
+  params: Promise<{ productSlug: string }>;
 };
 
 export function generateStaticParams() {

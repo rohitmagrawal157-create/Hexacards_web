@@ -490,6 +490,7 @@ export default function ProfileBanner({
           <CardCoverImage
             src={profile.appearance.coverImage}
             shareImage={profile.appearance.shareImage}
+            version={profile.updatedAt}
             alt=""
           />
           {onUploadBackground ? (
@@ -514,7 +515,10 @@ export default function ProfileBanner({
               className="flex h-[112px] w-[112px] items-center justify-center overflow-hidden rounded-full border-[5px] border-white bg-[#f5f5f4] shadow-[0_8px_24px_rgba(0,0,0,0.18)]"
               style={{ outline: `2px solid ${accent}` }}
             >
-              <CardAvatarImage src={profile.appearance.logoImage} />
+              <CardAvatarImage
+                src={profile.appearance.logoImage}
+                version={profile.updatedAt}
+              />
             </div>
             {onUploadProfile ? (
               <button

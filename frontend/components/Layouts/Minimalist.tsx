@@ -312,7 +312,11 @@ export default function Minimalist({
           tabIndex={onChangeBackground ? 0 : undefined}
           aria-label={onChangeBackground ? "Change background image" : undefined}
         >
-          <CardCoverImage src={profile.appearance.coverImage} alt="" />
+          <CardCoverImage
+            src={profile.appearance.coverImage}
+            version={profile.updatedAt}
+            alt=""
+          />
           {onChangeBackground ? (
             <button
               type="button"
@@ -360,7 +364,10 @@ export default function Minimalist({
             }}
             aria-label={onChangeProfile ? "Change profile picture" : undefined}
           >
-            <CardAvatarImage src={profile.appearance.logoImage} />
+            <CardAvatarImage
+              src={profile.appearance.logoImage}
+              version={profile.updatedAt}
+            />
           </div>
           {onChangeProfile ? (
             <button

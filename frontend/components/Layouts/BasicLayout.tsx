@@ -9,6 +9,7 @@ export type BasicHeaderProps = {
   titleLine?: string;
   coverUrl?: string | null;
   avatarUrl?: string | null;
+  version?: string | number | null;
   accent?: string;
   /** Compact thumbnail for Appearance picker */
   preview?: boolean;
@@ -24,6 +25,7 @@ export default function BasicLayout({
   titleLine = "Hexa NFC Business Card",
   coverUrl,
   avatarUrl,
+  version,
   accent = "#BC7C10",
   preview = false,
   onChangeBackground,
@@ -52,7 +54,7 @@ export default function BasicLayout({
           }}
           aria-label={onChangeBackground ? "Change background image" : undefined}
         >
-          <CardCoverImage src={coverUrl} alt="" />
+          <CardCoverImage src={coverUrl} version={version} alt="" />
           {onChangeBackground ? (
             <button
               type="button"
@@ -78,7 +80,7 @@ export default function BasicLayout({
               }`}
               style={{ outline: `2px solid ${accent}` }}
             >
-              <CardAvatarImage src={avatarUrl} />
+              <CardAvatarImage src={avatarUrl} version={version} />
             </div>
             {onChangeProfile ? (
               <button

@@ -132,8 +132,14 @@ export function getOrderCardProfile(
     ...profile,
     appearance: {
       ...profile.appearance,
-      coverImage: normalizeCoverImage(profile.appearance?.coverImage),
-      logoImage: normalizeLogoImage(profile.appearance?.logoImage),
+      coverImage: normalizeCoverImage(
+        profile.appearance?.coverImage,
+        profile.updatedAt,
+      ),
+      logoImage: normalizeLogoImage(
+        profile.appearance?.logoImage,
+        profile.updatedAt,
+      ),
     },
   };
 }
