@@ -3,10 +3,11 @@ import {
   type CountryCode,
 } from "libphonenumber-js";
 import { buildCardSlugFromName } from "@/lib/order-card";
-import { buildPublicCardPath, buildPublicCardUrl } from "@/lib/site-url";
+import { buildPublicCardPath, buildShareCardUrl } from "@/lib/site-url";
 import {
   resolveCardImageSrc,
   withCardImageCacheBust,
+  getSupabaseCardImagePublicUrl,
 } from "@/lib/card-images";
 
 export type CardLayoutId =
@@ -175,6 +176,18 @@ export function multicolorWheelStyle() {
 
 export function isMulticolorAccent(color: string | null | undefined) {
   return (color || "").trim().toLowerCase() === MULTICOLOR_ACCENT;
+}
+
+/** Normalize stored / API accent to a usable hex (or legacy multicolor). */
+export function normalizeCardAccent(
+  color: string | null | undefined,
+): string | null {
+  const raw = (color || "").trim();
+  if (!raw) return null;
+  if (isMulticolorAccent(raw)) return MULTICOLOR_ACCENT;
+  if (/^#[0-9A-Fa-f]{6}$/.test(raw)) return `#${raw.slice(1).toUpperCase()}`;
+  if (/^[0-9A-Fa-f]{6}$/.test(raw)) return `#${raw.toUpperCase()}`;
+  return null;
 }
 
 /** Resolved accent tokens for card UI — solid colors only */
@@ -464,9 +477,9 @@ export function cardPublicSlug(profile: HexaCardProfile) {
   return buildCardSlugFromName(name);
 }
 
-/** Public share URL — canonical production link (hexacards.com). */
+/** Public profile / share URL — live host on Vercel, hexacards.com in production. */
 export function cardPublicUrl(profile: HexaCardProfile) {
-  return buildPublicCardUrl(cardPublicSlug(profile), "canonical");
+  return buildShareCardUrl(cardPublicSlug(profile));
 }
 
 /** Local app path — works on hexacards.com and *.vercel.app */
@@ -525,15 +538,62 @@ export async function clearBrochureFile(): Promise<void> {
   db.close();
 }
 
+/** Turn stored brochure name/URL into a public download link. */
+export function resolveBrochureDownloadUrl(
+  stored: string | null | undefined,
+): string | null {
+  const raw = String(stored ?? "").trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw.split("#")[0];
+  if (raw.startsWith("/uploads/")) return raw.split("?")[0];
+
+  const name = raw.split("/").pop()?.split("?")[0] || "";
+  if (!name) return null;
+
+  // Uploaded storage file (preferred)
+  if (/-brochure\./i.test(name)) {
+    const remote = getSupabaseCardImagePublicUrl(name);
+    if (remote) return remote;
+    return `/uploads/cards/${name}`;
+  }
+
+  // Legacy: plain original filename only lived in IndexedDB
+  return null;
+}
+
+function brochureDownloadName(stored?: string | null): string {
+  const raw = String(stored ?? "").trim();
+  const name = raw.split("/").pop()?.split("?")[0] || "brochure.pdf";
+  return name || "brochure.pdf";
+}
+
+/**
+ * Simple brochure download:
+ * 1) Public URL / Supabase file (works for any visitor)
+ * 2) IndexedDB fallback (owner device only, legacy)
+ */
 export async function openBrochureDownload(fileName?: string | null) {
+  const remote = resolveBrochureDownloadUrl(fileName);
+  if (remote) {
+    const a = document.createElement("a");
+    a.href = remote;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.download = brochureDownloadName(fileName);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return true;
+  }
+
   const blob = await getBrochureFile();
   if (!blob) return false;
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.target = "_blank";
-  a.rel = "noreferrer";
-  a.download = fileName || "brochure";
+  a.rel = "noopener noreferrer";
+  a.download = brochureDownloadName(fileName) || "brochure";
   document.body.appendChild(a);
   a.click();
   a.remove();

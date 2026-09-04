@@ -33,7 +33,6 @@ import CardContactForm from "@/components/user-dashboard/CardContactForm";
 import CardLayoutFooter from "./CardLayoutFooter";
 import CardShareModal from "./CardShareModal";
 import {
-  cardPublicUrl,
   openBrochureDownload,
   phoneDigitsForLink,
   resolveCardAccent,
@@ -200,7 +199,7 @@ export default function Minimalist({
   const about = profile.business.about?.trim() || "";
   const services = (profile.business.services ?? []).filter((s) => s.trim());
   const hasBrochure = Boolean(profile.contact.brochureName);
-  const shareUrl = cardPublicUrl(profile);
+  const shareUrl = resolveCardShareUrl(profile);
 
   const country = profile.contact.countryCode || "IN";
   const mobile = profile.contact.mobile?.trim() || "";
@@ -257,7 +256,7 @@ export default function Minimalist({
 
   function handleWhatsAppShare(toNumber?: string) {
     openWhatsAppCardShare({
-      shareUrl,
+      shareUrl: resolveCardShareUrl(profile),
       toNumber,
       countryCode: country,
     });
@@ -449,7 +448,12 @@ export default function Minimalist({
       <div className="mt-4 flex items-center justify-center gap-2.5 px-6">
         <button
           type="button"
-          onClick={() => void saveCardContactToDevice(profile)}
+          onClick={() =>
+            void saveCardContactToDevice(
+              profile,
+              resolveCardShareUrl(profile),
+            )
+          }
           className="min-w-0 flex-1 rounded-full py-2.5 text-center text-[11px] font-bold tracking-wide text-white uppercase shadow-sm transition-transform hover:scale-[1.02]"
           style={{ backgroundColor: accent }}
         >

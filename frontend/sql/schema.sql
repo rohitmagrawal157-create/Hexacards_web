@@ -231,6 +231,7 @@ create table if not exists public.cards (
   bg_url          varchar(500),
   theme_id        integer      not null default 1
                   references public.card_theme (theme_id) on delete restrict,
+  accent_color    varchar(32),
   mobile          varchar(20)  not null default '',
   email           varchar(255),
   website         varchar(500),

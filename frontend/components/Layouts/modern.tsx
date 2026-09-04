@@ -359,7 +359,12 @@ export default function Modern({
           ) : null}
           <QuickIcon
             icon={UserPlus}
-            onClick={() => void saveCardContactToDevice(profile)}
+            onClick={() =>
+              void saveCardContactToDevice(
+                profile,
+                resolveCardShareUrl(profile),
+              )
+            }
             label="Add to contacts"
             accent={accent}
           />

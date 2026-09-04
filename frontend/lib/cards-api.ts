@@ -7,6 +7,7 @@ import { getAuthUser, normalizeIndianPhone } from "@/lib/auth";
 import {
   DEFAULT_CARD_AVATAR,
   DEFAULT_CARD_BANNER,
+  normalizeCardAccent,
   normalizeCardLayout,
   normalizeCoverImage,
   normalizeLogoImage,
@@ -82,6 +83,8 @@ export function profileToCardBody(
   const whatsapp = normalizeIndianPhone(profile.contact.whatsapp) || mobile;
   const logo = dbImagePath(profile.appearance.logoImage);
   const cover = dbImagePath(profile.appearance.coverImage);
+  const accentColor =
+    normalizeCardAccent(profile.appearance.accentColor) || "#141414";
 
   return {
     unicCardName: opts.slug.trim().toLowerCase(),
@@ -94,6 +97,7 @@ export function profileToCardBody(
     bgImg: cover,
     bgUrl: cover,
     themeId: themeIdFromLayout(profile.appearance.layout),
+    accentColor,
     mobile,
     email: profile.contact.email.trim() || null,
     website: profile.contact.website.trim(),
@@ -222,6 +226,10 @@ export function cardDtoToProfile(
         card.updateTime,
       ),
       layout: layoutFromThemeId(card.themeId),
+      accentColor:
+        normalizeCardAccent(card.accentColor) ??
+        normalizeCardAccent(fallback.appearance.accentColor) ??
+        "#141414",
     },
     updatedAt: card.updateTime || new Date().toISOString(),
   };

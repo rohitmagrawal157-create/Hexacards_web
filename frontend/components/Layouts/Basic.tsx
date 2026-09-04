@@ -32,7 +32,7 @@ import CardContactForm from "@/components/user-dashboard/CardContactForm";
 import CardLayoutFooter from "./CardLayoutFooter";
 import CardShareModal from "./CardShareModal";
 import {
-  defaultCardProfile,
+  openBrochureDownload,
   formatDialNumber,
   phoneDigitsForLink,
   resolveCardAccent,
@@ -56,6 +56,7 @@ export type BasicProfile = {
     address?: string;
     countryCode?: string;
     whatsapp?: string;
+    brochureName?: string | null;
   };
   appearance: {
     accentColor: string;
@@ -107,6 +108,7 @@ function normalizeProfile(profile: BasicProfile | HexaCardProfile): BasicProfile
           .join(", "),
         countryCode: p.contact.countryCode,
         whatsapp: p.contact.whatsapp,
+        brochureName: p.contact.brochureName,
       },
       appearance: {
         accentColor: p.appearance.accentColor,
@@ -184,25 +186,30 @@ export default function Basic({
   }
 
   function handleSaveContact() {
-    const base = defaultCardProfile(name, mobile);
-    void saveCardContactToDevice({
-      ...base,
-      contact: {
-        ...base.contact,
-        cardName: name,
-        title: profile.contact.title || "",
-        businessName: profile.business?.name || "",
-        countryCode: country,
-        mobile,
-        whatsapp,
-        email: profile.contact.email || "",
-        website: websiteRaw,
-        address: profile.contact.address || "",
-      },
-      appearance: {
-        ...base.appearance,
-        logoImage: avatarUrl,
-      },
+    if ("business" in rawProfile && "appearance" in rawProfile && "social" in rawProfile) {
+      void saveCardContactToDevice(
+        rawProfile as HexaCardProfile,
+        resolveCardShareUrl(rawProfile as HexaCardProfile),
+      );
+      return;
+    }
+    window.alert("Contact details are not available to save.");
+  }
+
+  function handleBrochure() {
+    const brochureName =
+      profile.contact.brochureName ||
+      ("contact" in rawProfile
+        ? (rawProfile as HexaCardProfile).contact?.brochureName
+        : null);
+    if (!brochureName) {
+      window.alert("No brochure uploaded for this card yet.");
+      return;
+    }
+    void openBrochureDownload(brochureName).then((ok) => {
+      if (!ok) {
+        window.alert("Brochure file not found. Please re-upload it in Edit card.");
+      }
     });
   }
 
@@ -217,7 +224,11 @@ export default function Basic({
       Icon: FaWhatsapp,
       href: waDigits ? `https://wa.me/${waDigits}` : undefined,
     },
-    { label: "Brochure", Icon: FileText, href: "#brochure" },
+    {
+      label: "Brochure",
+      Icon: FileText,
+      onClick: handleBrochure,
+    },
     {
       label: "Website",
       Icon: Globe,

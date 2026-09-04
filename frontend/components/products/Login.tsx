@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, Smartphone, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Smartphone, ShieldCheck } from "lucide-react";
 import {
   clearAuthUser,
   getAuthUser,
@@ -49,10 +49,7 @@ export default function Login() {
   async function sendOtp() {
     setError("");
     setInfo("");
-    if (!firstName.trim()) {
-      setError("Please enter your first name.");
-      return;
-    }
+    // First / last name inputs are hidden — API accepts empty names
     if (!isValidIndianPhone(phoneDigits)) {
       setError("Enter a valid 10-digit Indian mobile number.");
       return;
@@ -67,9 +64,9 @@ export default function Login() {
       }>("/api/auth/otp/send", {
         method: "POST",
         body: JSON.stringify({
-          firstName: firstName.trim(),
-          lastName:  lastName.trim(),
-          mobile:    phoneDigits,
+          firstName: firstName.trim() || "User",
+          lastName: lastName.trim(),
+          mobile: phoneDigits,
         }),
       });
 
@@ -182,12 +179,12 @@ export default function Login() {
             </span>
             <div>
               <h2 className="text-lg font-extrabold text-[#141414]">
-                {step === "phone" ? "Enter your details" : "Verify OTP"}
+                {step === "phone" ? "Enter your mobile number" : "Verify OTP"}
               </h2>
               <p className="mt-1 text-sm text-[#5c5346]">
                 {step === "phone"
-                  ? "Your name and mobile number — we’ll send an OTP via SMS to verify your account."
-                  : `Hi ${firstName.trim()}, enter the 6-digit OTP sent to +91 ${phoneDigits}.`}
+                  ? "We’ll send an OTP via SMS to verify your account."
+                  : `Enter the 6-digit OTP sent to +91 ${phoneDigits}.`}
               </p>
             </div>
           </div>
@@ -228,6 +225,7 @@ export default function Login() {
               }}
               className="space-y-4"
             >
+              {/* First / last name hidden — login is mobile-only
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label
@@ -265,6 +263,7 @@ export default function Login() {
                   />
                 </div>
               </div>
+              */}
 
               <div>
                 <label

@@ -13,6 +13,7 @@ import {
   buildCardShareText,
   buildCardShareTweet,
   openWhatsAppCardShare,
+  rewriteShareUrlToCurrentOrigin,
 } from "@/lib/card-share";
 
 type CardShareModalProps = {
@@ -21,7 +22,7 @@ type CardShareModalProps = {
   accent: string;
   /** Used as email subject / share name */
   cardName?: string;
-  /** Canonical public card URL (https://hexacards.com/slug) */
+  /** Canonical public card URL for this deployment (e.g. https://hexacards-web.vercel.app/slug) */
   shareUrl?: string;
 };
 
@@ -45,9 +46,10 @@ export default function CardShareModal({
 }: CardShareModalProps) {
   if (!open || typeof document === "undefined") return null;
 
-  const url =
+  const url = rewriteShareUrlToCurrentOrigin(
     shareUrl.trim() ||
-    (typeof window !== "undefined" ? window.location.href : "");
+      (typeof window !== "undefined" ? window.location.href : ""),
+  );
   const message = buildCardShareText(url);
   const tweet = buildCardShareTweet(url);
   const emailSubject = buildCardShareEmailSubject(cardName);

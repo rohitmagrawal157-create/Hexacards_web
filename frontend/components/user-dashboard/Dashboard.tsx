@@ -224,7 +224,12 @@ export default function Dashboard() {
       }
       setUser(auth);
       setOrders(await fetchOrdersForPhone(auth.phone));
-      setMessages(await fetchCardMessages({ ownerPhone: auth.phone }));
+      setMessages(
+        await fetchCardMessages({
+          ownerPhone: auth.phone,
+          userId: auth.userId,
+        }),
+      );
       setAuthReady(true);
     }
 
@@ -249,7 +254,10 @@ export default function Dashboard() {
         setMessages(getCardMessages());
         return;
       }
-      void fetchCardMessages({ ownerPhone: current.phone }).then(setMessages);
+      void fetchCardMessages({
+        ownerPhone: current.phone,
+        userId: current.userId,
+      }).then(setMessages);
     }
 
     function onVisibility() {
@@ -320,7 +328,10 @@ export default function Dashboard() {
     void Promise.all([
       next ? fetchOrdersForPhone(next.phone) : Promise.resolve([] as HexaOrder[]),
       next
-        ? fetchCardMessages({ ownerPhone: next.phone })
+        ? fetchCardMessages({
+            ownerPhone: next.phone,
+            userId: next.userId,
+          })
         : Promise.resolve(getCardMessages()),
     ])
       .then(([ordersList, messagesList]) => {
@@ -540,9 +551,10 @@ export default function Dashboard() {
                   setMessages(getCardMessages());
                   return;
                 }
-                void fetchCardMessages({ ownerPhone: auth.phone }).then(
-                  setMessages,
-                );
+                void fetchCardMessages({
+                  ownerPhone: auth.phone,
+                  userId: auth.userId,
+                }).then(setMessages);
               }}
             />
           ) : null}

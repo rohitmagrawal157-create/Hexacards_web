@@ -3,7 +3,10 @@ import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import { deleteCardForAdmin } from "@/lib/server/card-admin-delete";
 import {
   CARD_COLS,
+  CARD_COLS_LEGACY,
+  isAccentColumnMissingError,
   mapCard,
+  stripAccentFromPayload,
   type CardRow,
   type CardUpdateBody,
 } from "@/lib/server/card-types";
@@ -30,11 +33,19 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!cardId) return jsonError(400, "card_id must be a positive integer");
 
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("cards")
       .select(CARD_COLS)
       .eq("card_id", cardId)
       .maybeSingle();
+
+    if (error && isAccentColumnMissingError(error.message)) {
+      ({ data, error } = await supabase
+        .from("cards")
+        .select(CARD_COLS_LEGACY)
+        .eq("card_id", cardId)
+        .maybeSingle());
+    }
 
     if (error) return jsonError(500, "Failed to load card", error.message);
     if (!data) return jsonError(404, "Card not found");
@@ -84,6 +95,12 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (body.themeId !== undefined || body.theme_id !== undefined) {
       set("theme_id", Number(body.themeId ?? body.theme_id) || 1);
     }
+    if (body.accentColor !== undefined || body.accent_color !== undefined) {
+      const accent = String(body.accentColor ?? body.accent_color ?? "")
+        .trim()
+        .slice(0, 32);
+      set("accent_color", accent || "#141414");
+    }
     if (body.mobile !== undefined) set("mobile", String(body.mobile ?? "").trim());
     if (body.email !== undefined) set("email", body.email ? String(body.email).trim() : null);
     if (body.code !== undefined) set("code", String(body.code || "91").trim() || "91");
@@ -125,12 +142,21 @@ export async function PATCH(request: Request, context: RouteContext) {
     let cardRow: CardRow | null = null;
 
     if (hasCardFields) {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("cards")
         .update(cardPayload)
         .eq("card_id", cardId)
         .select(CARD_COLS)
         .maybeSingle();
+
+      if (error && isAccentColumnMissingError(error.message)) {
+        ({ data, error } = await supabase
+          .from("cards")
+          .update(stripAccentFromPayload(cardPayload))
+          .eq("card_id", cardId)
+          .select(CARD_COLS_LEGACY)
+          .maybeSingle());
+      }
 
       if (error) {
         if (error.code === "23505") {
@@ -141,11 +167,18 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (!data) return jsonError(404, "Card not found");
       cardRow = data as CardRow;
     } else {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("cards")
         .select(CARD_COLS)
         .eq("card_id", cardId)
         .maybeSingle();
+      if (error && isAccentColumnMissingError(error.message)) {
+        ({ data, error } = await supabase
+          .from("cards")
+          .select(CARD_COLS_LEGACY)
+          .eq("card_id", cardId)
+          .maybeSingle());
+      }
       if (error) return jsonError(500, "Failed to load card", error.message);
       if (!data) return jsonError(404, "Card not found");
       cardRow = data as CardRow;

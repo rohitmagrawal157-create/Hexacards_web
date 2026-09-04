@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
-import { CARD_COLS, mapCard, type CardRow } from "@/lib/server/card-types";
+import { CARD_COLS, CARD_COLS_LEGACY, isAccentColumnMissingError, mapCard, type CardRow } from "@/lib/server/card-types";
 import {
   cardImageDbFields,
   saveCardImage,
@@ -107,12 +107,20 @@ export async function POST(request: Request) {
     };
 
     if (cardId) {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("cards")
         .update(payload)
         .eq("card_id", cardId)
         .select(CARD_COLS)
         .maybeSingle();
+      if (error && isAccentColumnMissingError(error.message)) {
+        ({ data, error } = await supabase
+          .from("cards")
+          .update(payload)
+          .eq("card_id", cardId)
+          .select(CARD_COLS_LEGACY)
+          .maybeSingle());
+      }
       if (error) {
         console.warn("[card-images] DB update by id:", error.message);
       } else if (data) {
@@ -121,12 +129,20 @@ export async function POST(request: Request) {
     }
 
     if (!card) {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("cards")
         .update(payload)
         .eq("unic_card_name", safeUser)
         .select(CARD_COLS)
         .maybeSingle();
+      if (error && isAccentColumnMissingError(error.message)) {
+        ({ data, error } = await supabase
+          .from("cards")
+          .update(payload)
+          .eq("unic_card_name", safeUser)
+          .select(CARD_COLS_LEGACY)
+          .maybeSingle());
+      }
       if (error) {
         console.warn("[card-images] DB update by slug:", error.message);
       } else if (data) {

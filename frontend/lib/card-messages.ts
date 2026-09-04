@@ -65,13 +65,20 @@ export async function fetchCardMessages(opts?: {
   const ownerPhone =
     normalizeIndianPhone(opts?.ownerPhone ?? "") ||
     normalizeIndianPhone(auth?.phone ?? "");
-  const params = new URLSearchParams();
-  if (opts?.userId) params.set("userId", String(opts.userId));
-  else if (ownerPhone) params.set("ownerPhone", ownerPhone);
+  const userId =
+    (opts?.userId && opts.userId > 0 ? opts.userId : null) ||
+    (auth?.userId && auth.userId > 0 ? auth.userId : null);
 
-  const qs = params.toString();
+  const params = new URLSearchParams();
+  if (userId) params.set("userId", String(userId));
+  if (ownerPhone) params.set("ownerPhone", ownerPhone);
+
+  if (!params.toString()) {
+    return getCardMessages();
+  }
+
   const res = await apiFetch<CardMessage[]>(
-    `/api/messages${qs ? `?${qs}` : ""}`,
+    `/api/messages?${params.toString()}`,
   );
 
   if (res.ok && Array.isArray(res.data)) {
@@ -107,6 +114,16 @@ export async function saveCardMessage(input: {
   cardSlug?: string | null;
 }): Promise<CardMessage> {
   const ownerPhone = normalizeIndianPhone(input.ownerPhone ?? "");
+  const cardId =
+    input.cardId != null && Number(input.cardId) > 0
+      ? Number(input.cardId)
+      : null;
+  const cardSlug = input.cardSlug?.trim().toLowerCase() || null;
+  const userId =
+    input.userId != null && Number(input.userId) > 0
+      ? Number(input.userId)
+      : null;
+
   const id = `MSG-${Date.now().toString().slice(-8)}`;
   const next: CardMessage = {
     id,
@@ -119,15 +136,11 @@ export async function saveCardMessage(input: {
     read: false,
   };
 
-  if (!ownerPhone) {
-    // Fallback: local-only (visitor can't route to an owner)
-    const all = readMessages();
-    all.unshift(next);
-    writeMessages(all);
-    console.warn(
-      "[messages] No ownerPhone — saved locally only. Pass card owner phone.",
+  const canRoute = Boolean(ownerPhone || cardId || cardSlug || userId);
+  if (!canRoute) {
+    throw new Error(
+      "This card cannot receive messages right now. Ask the owner to open Edit card and Save once.",
     );
-    return next;
   }
 
   const res = await apiFetch<CardMessage>("/api/messages", {
@@ -135,28 +148,29 @@ export async function saveCardMessage(input: {
     body: JSON.stringify({
       ...next,
       messageCode: id,
-      ownerPhone,
-      userId: input.userId ?? null,
-      cardId: input.cardId ?? null,
-      cardSlug: input.cardSlug ?? null,
+      ownerPhone: ownerPhone || undefined,
+      userId,
+      cardId,
+      cardSlug,
     }),
   });
 
   if (res.ok && res.data) {
     const saved = toCardMessage(res.data as CardMessage & Record<string, unknown>);
-    window.dispatchEvent(new Event("hexa-card-messages-change"));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("hexa-card-messages-change"));
+    }
     return saved;
   }
 
   console.error(
-    "[messages] Supabase save failed — stored locally:",
+    "[messages] Supabase save failed:",
     res.error,
     res.details,
   );
-  const all = readMessages();
-  all.unshift(next);
-  writeMessages(all);
-  return next;
+  throw new Error(
+    res.error || "Could not send message. Please try again.",
+  );
 }
 
 export async function markMessageRead(id: string) {

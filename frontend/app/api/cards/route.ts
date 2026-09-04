@@ -2,8 +2,11 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import {
   CARD_COLS,
+  CARD_COLS_LEGACY,
+  isAccentColumnMissingError,
   mapCard,
   slugifyCardName,
+  stripAccentFromPayload,
   type CardCreateBody,
   type CardRow,
 } from "@/lib/server/card-types";
@@ -95,6 +98,12 @@ function buildCardPayload(
   if (body.themeId !== undefined || body.theme_id !== undefined) {
     payload.theme_id = Number(body.themeId ?? body.theme_id) || 1;
   }
+  if (body.accentColor !== undefined || body.accent_color !== undefined) {
+    const accent = String(body.accentColor ?? body.accent_color ?? "")
+      .trim()
+      .slice(0, 32);
+    payload.accent_color = accent || "#141414";
+  }
   if (body.mobile !== undefined) {
     payload.mobile = String(body.mobile ?? "").trim();
   }
@@ -156,7 +165,21 @@ export async function GET(request: Request) {
     }
     if (slug) query = query.eq("unic_card_name", slug);
 
-    const { data, error } = await query;
+    let { data, error } = await query;
+    if (error && isAccentColumnMissingError(error.message)) {
+      let legacy = supabase
+        .from("cards")
+        .select(CARD_COLS_LEGACY)
+        .order("card_id", { ascending: true });
+      if (userId) {
+        const id = Number(userId);
+        legacy = legacy.eq("user_id", id);
+      }
+      if (slug) legacy = legacy.eq("unic_card_name", slug);
+      const legacyResult = await legacy;
+      data = legacyResult.data as typeof data;
+      error = legacyResult.error;
+    }
     if (error) {
       if (
         error.message.includes("does not exist") ||
@@ -203,11 +226,19 @@ export async function POST(request: Request) {
     const built = buildCardPayload(body, true, resolvedUserId);
     if ("error" in built && built.error) return jsonError(400, built.error);
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("cards")
       .insert(built.payload)
       .select(CARD_COLS)
       .single();
+
+    if (error && isAccentColumnMissingError(error.message)) {
+      ({ data, error } = await supabase
+        .from("cards")
+        .insert(stripAccentFromPayload(built.payload as Record<string, unknown>))
+        .select(CARD_COLS_LEGACY)
+        .single());
+    }
 
     if (error) {
       if (error.code === "23505") {

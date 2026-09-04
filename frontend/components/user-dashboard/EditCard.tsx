@@ -35,6 +35,7 @@ import LocationSelects, {
 } from "@/components/shared/LocationSelects";
 import { fetchOrdersForPhone, type HexaOrder } from "@/lib/orders";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
+import { buildShareCardUrl } from "@/lib/site-url";
 import { uploadCardImage } from "@/lib/card-image-upload";
 import {
   loadOrderCardProfile,
@@ -42,13 +43,11 @@ import {
 } from "@/lib/order-card-profile";
 import {
   cardPublicSlug,
-  cardPublicUrl,
   cardPublicPath,
   clearBrochureFile,
   formatFileSize,
   getCardProfile,
   normalizePhoneForInput,
-  saveBrochureFile,
   saveCardProfile,
   BROCHURE_MAX_BYTES,
   CARD_ACCENT_COLORS,
@@ -60,8 +59,13 @@ import {
   type CardLayoutId,
   type HexaCardProfile,
 } from "@/lib/card-profile";
+import {
+  clearCardBrochureRemote,
+  uploadCardBrochure,
+} from "@/lib/card-brochure-upload";
 import PhoneNumberField from "./PhoneNumberField";
 import ProfileBanner from "./ProfileBanner";
+import { MessageOwnerContext } from "@/lib/message-owner-context";
 import CardCoverImage from "@/components/shared/CardCoverImage";
 import CardAvatarImage from "@/components/shared/CardAvatarImage";
 import ImageCropModal, {
@@ -103,6 +107,8 @@ export default function EditCard() {
   const [savedFlash, setSavedFlash] = useState(false);
   const [serviceInput, setServiceInput] = useState("");
   const brochureRef = useRef<HTMLInputElement>(null);
+  const accentPersistTimer = useRef<number | null>(null);
+  const pendingAccentRef = useRef<string | null>(null);
   const [brochureError, setBrochureError] = useState("");
   const [locIds, setLocIds] = useState<{
     countryId: number | null;
@@ -263,6 +269,76 @@ export default function EditCard() {
     setProfile((p) =>
       p ? { ...p, appearance: { ...p.appearance, [key]: value } } : p,
     );
+  }
+
+  async function applyAccentColor(color: string) {
+    if (!profile) return;
+    pendingAccentRef.current = color;
+    const next: HexaCardProfile = {
+      ...profile,
+      appearance: {
+        ...profile.appearance,
+        accentColor: color,
+      },
+    };
+    setProfile(next);
+    try {
+      const saved = await persistProfile(next);
+      setProfile(saved);
+      if (pendingAccentRef.current === color) {
+        pendingAccentRef.current = null;
+      }
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1800);
+    } catch {
+      window.alert(
+        "Accent updated in the editor, but could not be saved. Please tap Save.",
+      );
+    }
+  }
+
+  function onCustomAccentPick(color: string) {
+    if (!profile) return;
+    pendingAccentRef.current = color;
+    // Update UI immediately; debounce DB/local persist while dragging the picker
+    setProfile((p) =>
+      p
+        ? {
+            ...p,
+            appearance: { ...p.appearance, accentColor: color },
+          }
+        : p,
+    );
+    if (accentPersistTimer.current) {
+      window.clearTimeout(accentPersistTimer.current);
+    }
+    accentPersistTimer.current = window.setTimeout(() => {
+      void applyAccentColor(color);
+    }, 350);
+  }
+
+  async function handleViewCard() {
+    if (!profile) return;
+    if (accentPersistTimer.current) {
+      window.clearTimeout(accentPersistTimer.current);
+      accentPersistTimer.current = null;
+    }
+    const accent = pendingAccentRef.current;
+    const next: HexaCardProfile = accent
+      ? {
+          ...profile,
+          appearance: { ...profile.appearance, accentColor: accent },
+        }
+      : profile;
+    pendingAccentRef.current = null;
+    const path = cardPublicPath(next);
+    try {
+      const saved = await persistProfile(next);
+      setProfile(saved);
+    } catch {
+      setProfile(next);
+    }
+    window.open(path, "_blank", "noopener,noreferrer");
   }
 
   function requestDefaultImage(kind: "cover" | "logo") {
@@ -470,21 +546,36 @@ export default function EditCard() {
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ];
-    if (file.type && !allowed.includes(file.type) && !file.name.match(/\.(pdf|png|jpe?g|webp|docx?)$/i)) {
+    if (
+      file.type &&
+      !allowed.includes(file.type) &&
+      !file.name.match(/\.(pdf|png|jpe?g|webp|docx?)$/i)
+    ) {
       setBrochureError("Use PDF, DOC, DOCX, or image files only.");
       return;
     }
     try {
-      await saveBrochureFile(file);
-      setProfile({
+      const username = resolveCardUsername(profile);
+      const uploaded = await uploadCardBrochure({
+        username,
+        file,
+        cardId: editingOrder?.cardId ?? null,
+      });
+
+      const next: HexaCardProfile = {
         ...profile,
         contact: {
           ...profile.contact,
-          brochureName: file.name,
-          brochureMime: file.type || "application/octet-stream",
-          brochureSize: file.size,
+          // Storage filename so any visitor can download
+          brochureName: uploaded.filename,
+          brochureMime: uploaded.mime || file.type || "application/octet-stream",
+          brochureSize: uploaded.size || file.size,
         },
-      });
+      };
+      const saved = await persistProfile(next);
+      setProfile(saved);
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1800);
     } catch (err) {
       setBrochureError(
         err instanceof Error ? err.message : "Could not save brochure.",
@@ -495,8 +586,18 @@ export default function EditCard() {
   async function handleBrochureClear() {
     if (!profile) return;
     setBrochureError("");
-    await clearBrochureFile();
-    setProfile({
+    const username = resolveCardUsername(profile);
+    await clearCardBrochureRemote({
+      username,
+      cardId: editingOrder?.cardId ?? null,
+      filename: profile.contact.brochureName,
+    });
+    try {
+      await clearBrochureFile();
+    } catch {
+      // legacy IndexedDB may be empty
+    }
+    const next: HexaCardProfile = {
       ...profile,
       contact: {
         ...profile.contact,
@@ -504,7 +605,13 @@ export default function EditCard() {
         brochureMime: null,
         brochureSize: null,
       },
-    });
+    };
+    try {
+      const saved = await persistProfile(next);
+      setProfile(saved);
+    } catch {
+      setProfile(next);
+    }
   }
 
   async function handleSave(): Promise<boolean> {
@@ -558,15 +665,13 @@ export default function EditCard() {
     );
   }
 
-  const cardShareUrl = editingOrder
-    ? resolveOrderLiveUrl(editingOrder).liveUrl
-    : cardPublicUrl(profile);
-  const cardSharePath = editingOrder
-    ? `/${resolveOrderLiveUrl(editingOrder).slug}`
-    : cardPublicPath(profile);
   const slug = editingOrder
     ? resolveOrderLiveUrl(editingOrder).slug
     : cardPublicSlug(profile);
+  const cardShareUrl = buildShareCardUrl(slug);
+  const cardSharePath = editingOrder
+    ? `/${resolveOrderLiveUrl(editingOrder).slug}`
+    : cardPublicPath(profile);
 
   return (
     <div className="min-h-screen bg-[#FAFAF8] text-[#141414]">
@@ -594,14 +699,14 @@ export default function EditCard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Link
-              href={cardPublicPath(profile)}
-              target="_blank"
+            <button
+              type="button"
+              onClick={() => void handleViewCard()}
               className="hidden items-center gap-1.5 rounded-lg border border-black/[0.08] px-3 py-2 text-[13px] font-semibold text-[#141414] hover:bg-[#FAFAF8] sm:inline-flex"
             >
               <Eye className="h-3.5 w-3.5" />
               View card
-            </Link>
+            </button>
             <button
               type="button"
               onClick={handleSave}
@@ -828,8 +933,11 @@ export default function EditCard() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-[#141414]">
-                            {profile.contact.brochureName ||
-                              "Upload company brochure"}
+                            {profile.contact.brochureName
+                              ? profile.contact.brochureName.includes("-brochure.")
+                                ? "Brochure uploaded"
+                                : profile.contact.brochureName
+                              : "Upload company brochure"}
                           </p>
                           <p className="mt-0.5 text-[11px] text-[#8a8174]">
                             PDF, DOC, or image · Max 5 MB
@@ -1184,7 +1292,7 @@ export default function EditCard() {
                         <button
                           key={color}
                           type="button"
-                          onClick={() => updateAppearance("accentColor", color)}
+                          onClick={() => void applyAccentColor(color)}
                           className={`h-9 w-9 rounded-full ring-2 ring-offset-2 ${
                             profile.appearance.accentColor.toLowerCase() ===
                             color.toLowerCase()
@@ -1224,9 +1332,7 @@ export default function EditCard() {
                               ? profile.appearance.accentColor
                               : "#141414"
                           }
-                          onChange={(e) =>
-                            updateAppearance("accentColor", e.target.value)
-                          }
+                          onChange={(e) => onCustomAccentPick(e.target.value)}
                           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                           aria-label="Open color picker"
                         />
@@ -1287,18 +1393,29 @@ export default function EditCard() {
                   Share card preview
                 </p>
                 <div className="mx-auto w-full max-w-[320px]">
-                  <ProfileBanner
-                    profile={profile}
-                    userName={user.name}
-                    slug={slug}
-                    compact
-                    onUploadProfile={(file) =>
-                      void openImageCrop(file, "profile")
-                    }
-                    onUploadBackground={(file) =>
-                      void openImageCrop(file, "background")
-                    }
-                  />
+                  <MessageOwnerContext.Provider
+                    value={{
+                      ownerPhone:
+                        user.phone ||
+                        profile.contact.mobile.replace(/\D/g, "").slice(-10),
+                      userId: user.userId ?? editingOrder?.userId ?? null,
+                      cardId: editingOrder?.cardId ?? null,
+                      cardSlug: slug || null,
+                    }}
+                  >
+                    <ProfileBanner
+                      profile={profile}
+                      userName={user.name}
+                      slug={slug}
+                      compact
+                      onUploadProfile={(file) =>
+                        void openImageCrop(file, "profile")
+                      }
+                      onUploadBackground={(file) =>
+                        void openImageCrop(file, "background")
+                      }
+                    />
+                  </MessageOwnerContext.Provider>
                 </div>
               </div>
             </aside>

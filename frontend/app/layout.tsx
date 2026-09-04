@@ -25,6 +25,15 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    (() => {
+      const share = process.env.NEXT_PUBLIC_SHARE_SITE_URL?.trim();
+      if (share && !/localhost|127\.0\.0\.1/i.test(share)) return share;
+      const site = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+      if (site && !/localhost|127\.0\.0\.1/i.test(site)) return site;
+      return "https://hexacards-web.vercel.app";
+    })(),
+  ),
   title: "HexaCards — Interactive Identity Cards",
   description:
     "Tap-first profile cards for teams, events, and directories. Fast, accessible, and built for the web.",

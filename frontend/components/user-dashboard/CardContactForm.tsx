@@ -11,6 +11,7 @@ import {
   verifyRecaptchaOnServer,
 } from "@/lib/recaptcha";
 import { resolveCardAccent } from "@/lib/card-profile";
+import { isReservedRootSegment } from "@/lib/reserved-routes";
 import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 
 type CardContactFormProps = {
@@ -19,19 +20,31 @@ type CardContactFormProps = {
   /** Override context — card owner phone for inbox routing */
   ownerPhone?: string;
   cardSlug?: string;
+  cardId?: number | null;
+  userId?: number | null;
 };
+
+function slugFromPathname(): string {
+  if (typeof window === "undefined") return "";
+  const seg = window.location.pathname.split("/").filter(Boolean)[0] || "";
+  if (!seg || isReservedRootSegment(seg)) return "";
+  return seg.trim().toLowerCase();
+}
 
 export default function CardContactForm({
   accentColor,
   className = "",
   ownerPhone: ownerPhoneProp,
   cardSlug: cardSlugProp,
+  cardId: cardIdProp,
+  userId: userIdProp,
 }: CardContactFormProps) {
   const ownerCtx = useMessageOwner();
   const ownerPhone = ownerPhoneProp || ownerCtx.ownerPhone || "";
-  const cardSlug = cardSlugProp || ownerCtx.cardSlug || "";
-  const userId = ownerCtx.userId ?? null;
-  const cardId = ownerCtx.cardId ?? null;
+  const cardSlug =
+    cardSlugProp || ownerCtx.cardSlug || slugFromPathname() || "";
+  const userId = userIdProp ?? ownerCtx.userId ?? null;
+  const cardId = cardIdProp ?? ownerCtx.cardId ?? null;
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const [contactForm, setContactForm] = useState({
     name: "",
@@ -47,6 +60,12 @@ export default function CardContactForm({
   const accent = accentTheme.solid;
   const accentSoft = accentTheme.soft;
   const accentMuted = accentTheme.muted;
+  const canReceiveMessages = Boolean(
+    ownerPhone ||
+      (cardId != null && Number(cardId) > 0) ||
+      cardSlug ||
+      (userId != null && Number(userId) > 0),
+  );
 
   useEffect(() => {
     if (!captchaEnabled) return;
@@ -82,6 +101,12 @@ export default function CardContactForm({
     }
     if (contactForm.phone && contactForm.phone.length !== 10) {
       setContactError("Phone number must be 10 digits.");
+      return;
+    }
+    if (!canReceiveMessages) {
+      setContactError(
+        "This card cannot receive messages right now. Please try again later.",
+      );
       return;
     }
     if (contactSubmitting) return;

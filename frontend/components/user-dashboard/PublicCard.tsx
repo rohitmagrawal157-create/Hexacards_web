@@ -43,11 +43,28 @@ export default function PublicCard() {
   const [editHref, setEditHref] = useState("/dashboard/edit-card");
   const [notFound, setNotFound] = useState(false);
   const [ownerPhone, setOwnerPhone] = useState("");
+  const [ownerUserId, setOwnerUserId] = useState<number | null>(null);
   const [cardId, setCardId] = useState<number | null>(null);
   const [isOwner, setIsOwner] = useState(false);
 
   function resolveOwnerAccountPhone(order: HexaOrder | null | undefined): string {
-    return normalizeIndianPhone(order?.ownerPhone ?? "");
+    return (
+      normalizeIndianPhone(order?.ownerPhone ?? "") ||
+      normalizeIndianPhone(order?.phone ?? "")
+    );
+  }
+
+  /** Phone used to route contact-form messages into the owner's dashboard inbox */
+  function resolveMessageOwnerPhone(
+    order: HexaOrder | null | undefined,
+    cardMobile?: string | null,
+    profileMobile?: string | null,
+  ): string {
+    return (
+      resolveOwnerAccountPhone(order) ||
+      normalizeIndianPhone(cardMobile ?? "") ||
+      normalizeIndianPhone(profileMobile ?? "")
+    );
   }
 
   function syncOwnerAccess(ownerAccountPhone: string) {
@@ -71,6 +88,7 @@ export default function PublicCard() {
 
   const loadCard = useCallback(async () => {
     setIsOwner(false);
+    setOwnerUserId(null);
     const normalizedSlug = slugParam.trim().toLowerCase();
 
     if (!normalizedSlug || isReservedRootSegment(normalizedSlug)) {
@@ -86,7 +104,6 @@ export default function PublicCard() {
         const order =
           findOrderByCardSlug(normalizedSlug) ??
           (await fetchOrderByCardSlug(normalizedSlug));
-        const ownerAccountPhone = resolveOwnerAccountPhone(order);
         const local =
           order != null
             ? getOrderCardProfile(order.id) ??
@@ -103,6 +120,11 @@ export default function PublicCard() {
 
         const slug = dbCard.unicCardName;
         const ownerDisplayUrl = buildOwnerDisplayCardUrl(slug);
+        const messageOwnerPhone = resolveMessageOwnerPhone(
+          order,
+          dbCard.mobile,
+          loaded.contact.mobile,
+        );
 
         setProfile(loaded);
         setUserName(
@@ -115,8 +137,11 @@ export default function PublicCard() {
             ? `/dashboard/edit-card?order=${encodeURIComponent(order.id)}`
             : "/dashboard/edit-card",
         );
-        setOwnerPhone(ownerAccountPhone);
-        syncOwnerAccess(ownerAccountPhone);
+        setOwnerPhone(messageOwnerPhone);
+        setOwnerUserId(
+          dbCard.userId && dbCard.userId > 0 ? dbCard.userId : null,
+        );
+        syncOwnerAccess(messageOwnerPhone);
         setCardId(dbCard.cardId);
         setNotFound(false);
         setReady(true);
@@ -127,12 +152,16 @@ export default function PublicCard() {
         findOrderByCardSlug(normalizedSlug) ??
         (await fetchOrderByCardSlug(normalizedSlug));
       if (order) {
-        const ownerAccountPhone = resolveOwnerAccountPhone(order);
         const saved = getOrderCardProfile(order.id);
         const loaded =
           saved ??
           loadOrderCardProfile(order, order.customerName, order.phone);
-        const { slug, liveUrl } = resolveOrderLiveUrl(order);
+        const { slug } = resolveOrderLiveUrl(order);
+        const messageOwnerPhone = resolveMessageOwnerPhone(
+          order,
+          null,
+          loaded.contact.mobile,
+        );
         setProfile(loaded);
         setUserName(
           loaded.contact.cardName?.trim() ||
@@ -144,8 +173,11 @@ export default function PublicCard() {
         setEditHref(
           `/dashboard/edit-card?order=${encodeURIComponent(order.id)}`,
         );
-        setOwnerPhone(ownerAccountPhone);
-        syncOwnerAccess(ownerAccountPhone);
+        setOwnerPhone(messageOwnerPhone);
+        setOwnerUserId(
+          order.userId && order.userId > 0 ? order.userId : null,
+        );
+        syncOwnerAccess(messageOwnerPhone);
         setCardId(order.cardId ?? null);
         setNotFound(false);
         setReady(true);
@@ -168,6 +200,9 @@ export default function PublicCard() {
     setOwnerPhone(
       normalizeIndianPhone(auth?.phone ?? "") ||
         normalizeIndianPhone(stored.contact.mobile),
+    );
+    setOwnerUserId(
+      auth?.userId && auth.userId > 0 ? auth.userId : null,
     );
     syncOwnerAccess(normalizeIndianPhone(auth?.phone ?? ""));
     setCardId(null);
@@ -226,6 +261,7 @@ export default function PublicCard() {
     <MessageOwnerContext.Provider
       value={{
         ownerPhone,
+        userId: ownerUserId,
         cardId,
         cardSlug: publicSlug || null,
       }}

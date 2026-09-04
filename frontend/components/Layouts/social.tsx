@@ -470,7 +470,12 @@ export default function Social({
         <div className="mt-5 flex items-center gap-2">
           <button
             type="button"
-            onClick={() => void saveCardContactToDevice(profile)}
+            onClick={() =>
+              void saveCardContactToDevice(
+                profile,
+                resolveCardShareUrl(profile),
+              )
+            }
             className="flex-1 rounded-full py-3 text-center text-sm font-bold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: accent }}
           >

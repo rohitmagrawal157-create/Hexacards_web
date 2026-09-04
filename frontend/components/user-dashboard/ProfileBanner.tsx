@@ -39,9 +39,13 @@ import Social from "@/components/Layouts/social";
 import Minimalist from "@/components/Layouts/Minimalist";
 import CardLayoutBottom from "@/components/Layouts/CardLayoutBottom";
 import { cardShellClass } from "@/lib/public-card-shell";
-import { buildPublicCardUrl } from "@/lib/site-url";
+import { buildShareCardUrl } from "@/lib/site-url";
 import { saveCardContactToDevice } from "@/lib/vcard";
-import { openWhatsAppCardShare } from "@/lib/card-share";
+import {
+  openWhatsAppCardShare,
+  resolveCardShareUrl,
+  rewriteShareUrlToCurrentOrigin,
+} from "@/lib/card-share";
 import CardShareModal from "@/components/Layouts/CardShareModal";
 import CardCoverImage from "@/components/shared/CardCoverImage";
 import CardAvatarImage from "@/components/shared/CardAvatarImage";
@@ -92,9 +96,9 @@ export default function ProfileBanner({
       : "");
   const services = profile.business.services.filter((s) => s.trim());
   const hasBrochure = Boolean(profile.contact.brochureName);
-  const shareUrl = slug
-    ? buildPublicCardUrl(slug, "canonical")
-    : cardPublicUrl(profile);
+  const shareUrl = rewriteShareUrlToCurrentOrigin(
+    slug ? buildShareCardUrl(slug) : cardPublicUrl(profile),
+  );
 
   const ctaClass =
     "flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-semibold text-white transition-opacity hover:opacity-90";
@@ -111,7 +115,7 @@ export default function ProfileBanner({
 
   function handleWhatsAppShare(toNumber?: string) {
     openWhatsAppCardShare({
-      shareUrl,
+      shareUrl: resolveCardShareUrl(profile),
       toNumber,
       countryCode: profile.contact.countryCode,
     });
@@ -548,7 +552,7 @@ export default function ProfileBanner({
             onClick={() =>
               void saveCardContactToDevice(
                 profile,
-                slug ? buildPublicCardUrl(slug, "canonical") : undefined,
+                slug ? buildShareCardUrl(slug) : undefined,
               )
             }
             className={ctaClass}

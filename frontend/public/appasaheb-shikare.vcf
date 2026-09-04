@@ -1,0 +1,11 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Appasaheb Shikare
+N:Shikare;Appasaheb;;;
+TITLE:Invictus Web Solutions
+TEL;TYPE=CELL,VOICE:+917499246991
+EMAIL;TYPE=INTERNET:appasahebshikare74@gmail.com
+URL:https://hexacards-web.vercel.app/appasaheb-shikare
+ADR;TYPE=WORK:;;Medicover Opposite Invictus Web Solutions Office;Chhatrapati Sambhajinagar;Maharashtra;;
+PHOTO;VALUE=URI:https://ypcwdkyyshqqploimmkt.supabase.co/storage/v1/object/public/card-images/appasaheb-shikare-profile.jpg?v=1788507411508
+END:VCARD

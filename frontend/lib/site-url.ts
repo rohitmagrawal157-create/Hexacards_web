@@ -1,17 +1,32 @@
 const DEFAULT_CANONICAL = "https://hexacards.com";
+/** Live web app used for WhatsApp / social shares while on Vercel */
+const DEFAULT_PUBLIC_APP = "https://hexacards-web.vercel.app";
+
+function stripTrailingSlash(url: string): string {
+  return url.replace(/\/$/, "");
+}
+
+function isLocalHost(hostnameOrUrl: string): boolean {
+  const value = hostnameOrUrl
+    .replace(/^https?:\/\//i, "")
+    .split("/")[0]
+    .split(":")[0]
+    .toLowerCase();
+  return value === "localhost" || value === "127.0.0.1";
+}
 
 /** Production share link base (QR, NFC, SMS, DB). */
 export function getCanonicalSiteOrigin(): string {
   const fromEnv =
     process.env.NEXT_PUBLIC_CANONICAL_SITE_URL?.trim() ||
     process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  return (fromEnv || DEFAULT_CANONICAL).replace(/\/$/, "");
+  return stripTrailingSlash(fromEnv || DEFAULT_CANONICAL);
 }
 
 /** Current deployment origin — Vercel preview or browser. */
 export function getRuntimeSiteOrigin(): string {
   if (typeof window !== "undefined") {
-    return window.location.origin.replace(/\/$/, "");
+    return stripTrailingSlash(window.location.origin);
   }
 
   const vercel = process.env.VERCEL_URL?.trim();
@@ -21,6 +36,41 @@ export function getRuntimeSiteOrigin(): string {
   }
 
   return getCanonicalSiteOrigin();
+}
+
+/**
+ * Public origin for WhatsApp / Share links.
+ * Never uses localhost — prefers env, then current *.vercel.app, then live app.
+ */
+export function getShareSiteOrigin(): string {
+  const shareEnv = process.env.NEXT_PUBLIC_SHARE_SITE_URL?.trim();
+  if (shareEnv && !isLocalHost(shareEnv)) {
+    return stripTrailingSlash(shareEnv);
+  }
+
+  const siteEnv = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (siteEnv && !isLocalHost(siteEnv)) {
+    return stripTrailingSlash(siteEnv);
+  }
+
+  if (typeof window !== "undefined") {
+    const { hostname, origin } = window.location;
+    if (isVercelPreviewHost(hostname)) {
+      return stripTrailingSlash(origin);
+    }
+    if (!isLocalHost(hostname) && hostname !== "") {
+      // Real custom domain (e.g. hexacards.com)
+      return stripTrailingSlash(origin);
+    }
+  }
+
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) {
+    const host = vercel.replace(/^https?:\/\//, "");
+    if (!isLocalHost(host)) return `https://${host}`;
+  }
+
+  return DEFAULT_PUBLIC_APP;
 }
 
 export function isVercelPreviewHost(hostname: string): boolean {
@@ -36,12 +86,13 @@ export function isPreviewDeployment(): boolean {
   return isVercelPreviewHost(vercel.replace(/^https?:\/\//, ""));
 }
 
-export type PublicCardUrlMode = "canonical" | "runtime";
+export type PublicCardUrlMode = "canonical" | "runtime" | "share";
 
 /**
  * Build a full public card URL.
- * - canonical: always hexacards.com (share / QR / production)
- * - runtime: current domain (Vercel testing or local dev)
+ * - canonical: hexacards.com (QR / NFC / production print)
+ * - runtime: current domain (local preview navigation)
+ * - share: public app host for WhatsApp / social (never localhost)
  */
 export function buildPublicCardUrl(
   slug: string,
@@ -49,7 +100,11 @@ export function buildPublicCardUrl(
 ): string {
   const clean = slug.trim().replace(/^\/+/, "");
   const base =
-    mode === "runtime" ? getRuntimeSiteOrigin() : getCanonicalSiteOrigin();
+    mode === "runtime"
+      ? getRuntimeSiteOrigin()
+      : mode === "share"
+        ? getShareSiteOrigin()
+        : getCanonicalSiteOrigin();
   return `${base}/${clean}`;
 }
 
@@ -60,5 +115,19 @@ export function buildPublicCardPath(slug: string): string {
 
 /** Owner dashboard / edit bar — show test URL on Vercel, production URL otherwise. */
 export function buildOwnerDisplayCardUrl(slug: string): string {
-  return buildPublicCardUrl(slug, isPreviewDeployment() ? "runtime" : "canonical");
+  return buildPublicCardUrl(
+    slug,
+    isPreviewDeployment() ||
+      (typeof window !== "undefined" && isLocalHost(window.location.hostname))
+      ? "share"
+      : "canonical",
+  );
+}
+
+/**
+ * URL used when someone taps Share (WhatsApp, social, copy link).
+ * Always a public host — e.g. https://hexacards-web.vercel.app/akshay-wagh
+ */
+export function buildShareCardUrl(slug: string): string {
+  return buildPublicCardUrl(slug, "share");
 }

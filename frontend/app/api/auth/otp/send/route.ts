@@ -20,7 +20,7 @@ import {
  * POST /api/auth/otp/send
  * Body: { firstName, lastName, mobile }
  *
- * 1. Validate name + Indian mobile
+ * 1. Validate Indian mobile (name optional — defaults to "User" for new accounts)
  * 2. Generate 6-digit OTP + expiry (10 min)
  * 3. Create or update user row in Supabase
  * 4. Send SMS via Nimbus (enabled when OTP_SMS_ENABLED=true or credentials are set)
@@ -29,11 +29,12 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as OtpSendBody;
 
-    const firstName = String(body.firstName ?? body.first_name ?? "").trim();
+    const firstName =
+      String(body.firstName ?? body.first_name ?? "").trim() || "User";
     const lastName = String(body.lastName ?? body.last_name ?? "").trim();
     const mobile = normalizeMobile(String(body.mobile ?? ""));
 
-    if (!firstName) return jsonError(400, "first_name is required");
+    // first_name optional on login UI — defaults to "User"
     if (!isValidIndianMobile(mobile)) {
       return jsonError(400, "Valid 10-digit mobile number is required");
     }
@@ -62,11 +63,10 @@ export async function POST(request: Request) {
     let row: UserRow;
 
     if (existing?.user_id) {
+      // Don't overwrite stored name when login UI hides name fields
       const { data, error } = await supabase
         .from("users")
         .update({
-          first_name: firstName,
-          last_name: lastName,
           otp,
           otp_expiry: otpExpiry,
         })

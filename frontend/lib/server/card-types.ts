@@ -10,6 +10,7 @@ export type CardRow = {
   bg_img: string | null;
   bg_url: string | null;
   theme_id: number;
+  accent_color?: string | null;
   mobile: string;
   email: string | null;
   website: string | null;
@@ -47,6 +48,8 @@ export type CardDto = {
   bgImg: string | null;
   bgUrl: string | null;
   themeId: number;
+  /** Dashboard Appearance accent (e.g. #141414) */
+  accentColor?: string | null;
   mobile: string;
   email: string | null;
   website: string | null;
@@ -100,6 +103,8 @@ export type CardCreateBody = {
   bg_url?: string | null;
   themeId?: number;
   theme_id?: number;
+  accentColor?: string | null;
+  accent_color?: string | null;
   mobile?: string;
   email?: string | null;
   website?: string | null;
@@ -156,6 +161,7 @@ export function mapCard(row: CardRow): CardDto {
     bgImg: row.bg_img ?? null,
     bgUrl: row.bg_url ?? null,
     themeId: Number(row.theme_id),
+    accentColor: row.accent_color?.trim() || null,
     mobile: row.mobile,
     email: row.email ?? null,
     website: row.website ?? null,
@@ -183,8 +189,24 @@ export function mapCard(row: CardRow): CardDto {
   };
 }
 
-export const CARD_COLS =
+export const CARD_COLS_LEGACY =
   "card_id, unic_card_name, card_name, job_name, business_name, user_id, logo, bg_img, bg_url, theme_id, mobile, email, website, code, whatsapp, state_id, city_id, address, about, facebook_url, instagram_url, linkedin_url, twitter_url, youtube_url, google_url, about_company, services, brochure, page_view, start_date, end_date, date_time, update_time, status" as const;
+
+export const CARD_COLS =
+  "card_id, unic_card_name, card_name, job_name, business_name, user_id, logo, bg_img, bg_url, theme_id, accent_color, mobile, email, website, code, whatsapp, state_id, city_id, address, about, facebook_url, instagram_url, linkedin_url, twitter_url, youtube_url, google_url, about_company, services, brochure, page_view, start_date, end_date, date_time, update_time, status" as const;
+
+export function isAccentColumnMissingError(message: string | undefined | null) {
+  return Boolean(message && /accent_color/i.test(message));
+}
+
+export function stripAccentFromPayload<T extends Record<string, unknown>>(
+  payload: T,
+): T {
+  if (!("accent_color" in payload)) return payload;
+  const next = { ...payload };
+  delete next.accent_color;
+  return next;
+}
 
 export function slugifyCardName(input: string): string {
   return input
