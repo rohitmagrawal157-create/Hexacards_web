@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { HoneycombPageStatus } from "@/components/ui/honeycomb-loader";
@@ -50,6 +50,9 @@ export default function PublicCard() {
   const [ownerUserId, setOwnerUserId] = useState<number | null>(null);
   const [cardId, setCardId] = useState<number | null>(null);
   const [isOwner, setIsOwner] = useState(false);
+  const loadSeq = useRef(0);
+  const ownerPhoneRef = useRef("");
+  const hasPaintedRef = useRef(false);
 
   function resolveOwnerAccountPhone(order: HexaOrder | null | undefined): string {
     return (
@@ -58,7 +61,6 @@ export default function PublicCard() {
     );
   }
 
-  /** Phone used to route contact-form messages into the owner's dashboard inbox */
   function resolveMessageOwnerPhone(
     order: HexaOrder | null | undefined,
     cardMobile?: string | null,
@@ -90,154 +92,202 @@ export default function PublicCard() {
     );
   }
 
-  const loadCard = useCallback(async () => {
-    setIsOwner(false);
-    setOwnerUserId(null);
+  function applyLoadedCard(opts: {
+    loaded: HexaCardProfile;
+    slug: string;
+    order: HexaOrder | null;
+    dbCardName?: string;
+    dbUserId?: number | null;
+    dbCardId?: number | null;
+    dbMobile?: string | null;
+  }) {
+    const {
+      loaded,
+      slug,
+      order,
+      dbCardName,
+      dbUserId,
+      dbCardId,
+      dbMobile,
+    } = opts;
+    const messageOwnerPhone = resolveMessageOwnerPhone(
+      order,
+      dbMobile,
+      loaded.contact.mobile,
+    );
+    ownerPhoneRef.current = messageOwnerPhone;
+
+    setProfile(loaded);
+    setUserName(
+      loaded.contact.cardName?.trim() || dbCardName || "HexaCards User",
+    );
+    setPublicSlug(slug);
+    setPublicUrl(buildOwnerDisplayCardUrl(slug));
+    setEditHref(
+      order
+        ? `/dashboard/edit-card?order=${encodeURIComponent(order.id)}`
+        : "/dashboard/edit-card",
+    );
+    setOwnerPhone(messageOwnerPhone);
+    setOwnerUserId(
+      dbUserId && dbUserId > 0
+        ? dbUserId
+        : order?.userId && order.userId > 0
+          ? order.userId
+          : null,
+    );
+    syncOwnerAccess(messageOwnerPhone);
+    setCardId(dbCardId && dbCardId > 0 ? dbCardId : order?.cardId ?? null);
+    setNotFound(false);
+    setReady(true);
+    hasPaintedRef.current = true;
+  }
+
+  const loadCard = useCallback(async (mode: "full" | "soft" = "full") => {
+    const seq = ++loadSeq.current;
     const normalizedSlug = slugParam.trim().toLowerCase();
 
     if (!normalizedSlug || isReservedRootSegment(normalizedSlug)) {
-      setNotFound(true);
-      setReady(true);
-      return;
-    }
-
-    if (normalizedSlug) {
-      // Prefer Supabase so public links work across devices
-      const dbCard = await fetchCardBySlug(normalizedSlug);
-      if (dbCard) {
-        const order =
-          findOrderByCardSlug(normalizedSlug) ??
-          (await fetchOrderByCardSlug(normalizedSlug));
-        // Card exists in DB but checkout never paid — do not show
-        if (order && !isOrderPaymentPaid(order)) {
-          setProfile(null);
-          setNotFound(true);
-          setReady(true);
-          return;
-        }
-        const local =
-          order != null
-            ? getOrderCardProfile(order.id) ??
-              loadOrderCardProfile(order, order.customerName, order.phone)
-            : null;
-        const loaded = cardDtoToProfile(dbCard, local);
-        if (order) {
-          try {
-            cacheOrderCardProfile(order.id, loaded);
-          } catch {
-            // ignore quota
-          }
-        }
-
-        const slug = dbCard.unicCardName;
-        const ownerDisplayUrl = buildOwnerDisplayCardUrl(slug);
-        const messageOwnerPhone = resolveMessageOwnerPhone(
-          order,
-          dbCard.mobile,
-          loaded.contact.mobile,
-        );
-
-        setProfile(loaded);
-        setUserName(
-          loaded.contact.cardName?.trim() || dbCard.cardName || "HexaCards User",
-        );
-        setPublicSlug(slug);
-        setPublicUrl(ownerDisplayUrl);
-        setEditHref(
-          order
-            ? `/dashboard/edit-card?order=${encodeURIComponent(order.id)}`
-            : "/dashboard/edit-card",
-        );
-        setOwnerPhone(messageOwnerPhone);
-        setOwnerUserId(
-          dbCard.userId && dbCard.userId > 0 ? dbCard.userId : null,
-        );
-        syncOwnerAccess(messageOwnerPhone);
-        setCardId(dbCard.cardId);
-        setNotFound(false);
-        setReady(true);
-        return;
-      }
-
-      const order =
-        findOrderByCardSlug(normalizedSlug) ??
-        (await fetchOrderByCardSlug(normalizedSlug));
-      if (order && isOrderPaymentPaid(order)) {
-        const saved = getOrderCardProfile(order.id);
-        const loaded =
-          saved ??
-          loadOrderCardProfile(order, order.customerName, order.phone);
-        const { slug } = resolveOrderLiveUrl(order);
-        const messageOwnerPhone = resolveMessageOwnerPhone(
-          order,
-          null,
-          loaded.contact.mobile,
-        );
-        setProfile(loaded);
-        setUserName(
-          loaded.contact.cardName?.trim() ||
-            order.customerName ||
-            "HexaCards User",
-        );
-        setPublicSlug(slug);
-        setPublicUrl(buildOwnerDisplayCardUrl(slug));
-        setEditHref(
-          `/dashboard/edit-card?order=${encodeURIComponent(order.id)}`,
-        );
-        setOwnerPhone(messageOwnerPhone);
-        setOwnerUserId(
-          order.userId && order.userId > 0 ? order.userId : null,
-        );
-        syncOwnerAccess(messageOwnerPhone);
-        setCardId(order.cardId ?? null);
-        setNotFound(false);
-        setReady(true);
-        return;
-      }
-
+      if (seq !== loadSeq.current) return;
       setProfile(null);
       setNotFound(true);
       setReady(true);
+      hasPaintedRef.current = false;
       return;
     }
 
-    const auth = getAuthUser();
-    const stored = getCardProfile(auth?.name, auth?.phone);
-    setUserName(auth?.name || stored.contact.cardName || "HexaCards User");
-    setProfile(stored);
-    setPublicSlug(cardPublicSlug(stored));
-    setPublicUrl(cardPublicUrl(stored));
-    setEditHref("/dashboard/edit-card");
-    setOwnerPhone(
-      normalizeIndianPhone(auth?.phone ?? "") ||
-        normalizeIndianPhone(stored.contact.mobile),
-    );
-    setOwnerUserId(
-      auth?.userId && auth.userId > 0 ? auth.userId : null,
-    );
-    syncOwnerAccess(normalizeIndianPhone(auth?.phone ?? ""));
-    setCardId(null);
-    setNotFound(false);
-    setReady(true);
+    // Instant paint from local cache (View card / returning visitors)
+    const localOrder = findOrderByCardSlug(normalizedSlug);
+    if (
+      mode === "full" &&
+      localOrder &&
+      isOrderPaymentPaid(localOrder)
+    ) {
+      const local =
+        getOrderCardProfile(localOrder.id) ??
+        loadOrderCardProfile(
+          localOrder,
+          localOrder.customerName,
+          localOrder.phone,
+        );
+      const { slug } = resolveOrderLiveUrl(localOrder);
+      applyLoadedCard({
+        loaded: local,
+        slug,
+        order: localOrder,
+        dbCardName: localOrder.customerName,
+        dbUserId: localOrder.userId,
+        dbCardId: localOrder.cardId,
+      });
+    }
+
+    // Network refresh — parallel card + order (was sequential)
+    const [dbCard, remoteOrder] = await Promise.all([
+      fetchCardBySlug(normalizedSlug, {
+        // Soft refresh shouldn't inflate page views
+        countView: mode === "full",
+      }),
+      // Skip network order lookup when local paid order already known
+      localOrder && isOrderPaymentPaid(localOrder)
+        ? Promise.resolve(null)
+        : fetchOrderByCardSlug(normalizedSlug),
+    ]);
+
+    if (seq !== loadSeq.current) return;
+
+    const order =
+      (localOrder && isOrderPaymentPaid(localOrder) ? localOrder : null) ??
+      remoteOrder;
+
+    if (dbCard) {
+      if (order && !isOrderPaymentPaid(order)) {
+        setProfile(null);
+        setNotFound(true);
+        setReady(true);
+        return;
+      }
+
+      const local =
+        order != null
+          ? getOrderCardProfile(order.id) ??
+            loadOrderCardProfile(order, order.customerName, order.phone)
+          : null;
+      const localIsNewer =
+        Boolean(local?.updatedAt) &&
+        Date.parse(local!.updatedAt) >=
+          Date.parse(dbCard.updateTime || dbCard.dateTime || "0");
+      const loaded = localIsNewer ? local! : cardDtoToProfile(dbCard, local);
+
+      if (order) {
+        try {
+          cacheOrderCardProfile(order.id, loaded);
+        } catch {
+          // ignore quota
+        }
+      }
+
+      applyLoadedCard({
+        loaded,
+        slug: dbCard.unicCardName,
+        order,
+        dbCardName: dbCard.cardName,
+        dbUserId: dbCard.userId,
+        dbCardId: dbCard.cardId,
+        dbMobile: dbCard.mobile,
+      });
+      return;
+    }
+
+    if (order && isOrderPaymentPaid(order)) {
+      const saved = getOrderCardProfile(order.id);
+      const loaded =
+        saved ??
+        loadOrderCardProfile(order, order.customerName, order.phone);
+      const { slug } = resolveOrderLiveUrl(order);
+      applyLoadedCard({
+        loaded,
+        slug,
+        order,
+        dbCardName: order.customerName,
+        dbUserId: order.userId,
+        dbCardId: order.cardId,
+      });
+      return;
+    }
+
+    // Only show not-found if we never painted a local card
+    if (mode === "full" || !hasPaintedRef.current) {
+      setProfile(null);
+      setNotFound(true);
+      setReady(true);
+    }
   }, [slugParam]);
 
   useEffect(() => {
-    void loadCard();
+    void loadCard("full");
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const onChange = () => {
-      void loadCard();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        // Soft: keep current UI visible while refreshing
+        void loadCard("soft");
+      }, 500);
     };
     const onAuthChange = () => {
-      syncOwnerAccess(ownerPhone);
+      syncOwnerAccess(ownerPhoneRef.current);
     };
     window.addEventListener("hexa-order-profiles-change", onChange);
     window.addEventListener("hexa-orders-change", onChange);
     window.addEventListener("hexa-auth-change", onAuthChange);
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener("hexa-order-profiles-change", onChange);
       window.removeEventListener("hexa-orders-change", onChange);
       window.removeEventListener("hexa-auth-change", onAuthChange);
     };
-  }, [loadCard, ownerPhone]);
+  }, [loadCard]);
 
   if (!ready) {
     return (

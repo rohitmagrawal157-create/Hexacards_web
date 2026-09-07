@@ -21,15 +21,16 @@ import { usePublicProduct } from "@/lib/public-product-catalog";
 import { HoneycombLoader } from "@/components/ui/honeycomb-loader";
 import {
   saveOrder,
-  updateOrder,
 } from "@/lib/orders";
 import {
-  buildPaymentFailedPath,
   goToPaidThankYou,
+  goToPaymentFailed,
 } from "@/lib/order-thank-you";
 import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
-import { allocateOrderCardSlug } from "@/lib/order-card";
-import { buildPublicCardUrl } from "@/lib/site-url";
+import {
+  attachOrderCardLinkAfterPayment,
+  clearOrderCardLinkOnFailedPayment,
+} from "@/lib/order-card";
 import { startRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { INDIA_COUNTRY_ID } from "@/lib/location-api";
 import { syncUserProfileFromCheckout } from "@/lib/user-profile-sync";
@@ -106,6 +107,10 @@ export default function DigitalQrOrderForm() {
       phone: prev.phone || auth.phone || "",
     }));
   }, []);
+
+  useEffect(() => {
+    router.prefetch("/thank-you");
+  }, [router]);
 
   const fullName = useMemo(
     () => `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
@@ -189,19 +194,9 @@ export default function DigitalQrOrderForm() {
       }
 
       const cardName = cardDesign?.name || customerName;
-      const finalSlug = await allocateOrderCardSlug(cardName);
-      const liveUrl = buildPublicCardUrl(finalSlug, "canonical");
-      const finalized =
-        (await updateOrder(order.id, {
-          cardSlug: finalSlug,
-          cardUrl: liveUrl,
-          cardDesign: cardDesign
-            ? { ...cardDesign, liveUrl }
-            : undefined,
-        })) ?? order;
 
       await startRazorpayCheckout({
-        order: finalized,
+        order,
         amount: product.price,
         customerId: auth.userId ?? null,
         customerName,
@@ -210,16 +205,22 @@ export default function DigitalQrOrderForm() {
         onPaid: (paidOrder) => {
           clearDraft();
           goToPaidThankYou(router, paidOrder);
-          void initOrderCardProfileAsync(paidOrder).catch((err) => {
-            console.error("Card profile setup after payment failed", err);
-          });
         },
-        onFailed: async () => {
-          await updateOrder(finalized.id, { paymentStatus: "failed" });
+        onConfirmed: async (confirmed) => {
+          try {
+            const withLink = await attachOrderCardLinkAfterPayment(
+              confirmed,
+              cardName,
+            );
+            await initOrderCardProfileAsync(withLink);
+          } catch (err) {
+            console.error("Card profile setup after payment failed", err);
+          }
+        },
+        onFailed: () => {
           clearDraft();
-          router.replace(
-            buildPaymentFailedPath(finalized.id, `/order/${PRODUCT_ID}`),
-          );
+          goToPaymentFailed(router, order.id, `/order/${PRODUCT_ID}`);
+          void clearOrderCardLinkOnFailedPayment(order.id);
         },
       });
     } catch (err) {

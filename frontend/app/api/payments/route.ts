@@ -144,6 +144,12 @@ export async function POST(request: Request) {
       if (status.toLowerCase() === "success") {
         orderPatch.payment_method = "razorpay";
       }
+      // Failed / cancelled payment — never keep a public card link on the order
+      if (nextPaymentStatus === "failed" || nextPaymentStatus === "refunded") {
+        orderPatch.card_id = null;
+        orderPatch.card_slug = null;
+        orderPatch.card_url = null;
+      }
       await supabase
         .from("orders")
         .update(orderPatch)

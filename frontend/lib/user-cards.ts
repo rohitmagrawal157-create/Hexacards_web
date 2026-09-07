@@ -3,6 +3,7 @@ import { clampLogoLayout, resolveOrderLiveUrl } from "@/lib/order-card";
 import { compressCardLogoDataUrl } from "@/lib/order-logo-store";
 import { getOrderCardProfile } from "@/lib/order-card-profile";
 import { getOrdersForPhone, isOrderDashboardHidden, isOrderPaymentPaid, type HexaOrder } from "@/lib/orders";
+import { buildOwnerDisplayCardUrl } from "@/lib/site-url";
 
 export type SavedCardDesign = {
   title?: string;
@@ -234,9 +235,11 @@ export function orderToDashboardCard(
       ? order.reviewLink.replace(/^https?:\/\//, "").replace(/\/$/, "")
       : "") ||
     order.productTitle;
-  const { slug, liveUrl: publicUrl } = editable
+  const { slug } = editable
     ? resolveOrderLiveUrl(order)
-    : { slug: order.id, liveUrl: "" };
+    : { slug: order.id };
+  // Owner-facing URL — never localhost (rewrites local checkout leftovers)
+  const publicUrl = editable ? buildOwnerDisplayCardUrl(slug) : "";
 
   return {
     orderId: order.id,
@@ -271,10 +274,14 @@ export function getUserDashboardCards(phone: string): UserDashboardCard[] {
 export function getUserDashboardCardsFromOrders(
   orders: HexaOrder[],
 ): UserDashboardCard[] {
-  return orders
+  return [...orders]
     .filter(isOrderPaymentPaid)
     .filter((order) => !isOrderDashboardHidden(order))
     .filter(isDashboardProductOrder)
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
     .map((order, index) => orderToDashboardCard(order, index === 0));
 }
 

@@ -14,6 +14,8 @@ import {
   LogOut,
   Menu,
   Package,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   RefreshCw,
   ShoppingBag,
@@ -31,8 +33,8 @@ import {
   touchSuperAdminSession,
   type SuperAdminUser,
 } from "@/lib/super-admin-auth";
-import { formatOrderDate, fetchOrders, getOrders, statusLabel, type HexaOrder } from "@/lib/orders";
-import { fetchAdminUsers, getAdminUsers } from "@/lib/admin-directory";
+import { formatOrderDate, fetchOrders, getOrders, isOrderPaymentPaid, paymentStatusLabel, statusLabel, type HexaOrder } from "@/lib/orders";
+import { fetchAdminCards, fetchAdminUsers, getAdminUsers } from "@/lib/admin-directory";
 import {
   addAdminProduct,
   addAdminSection,
@@ -253,9 +255,11 @@ export default function SuperAdminDashboard() {
   const [user, setUser] = useState<SuperAdminUser | null>(null);
   const [active, setActive] = useState<NavKey>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [orders, setOrders] = useState<HexaOrder[]>([]);
   const [usersCount, setUsersCount] = useState(0);
+  const [cardsCount, setCardsCount] = useState(0);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [sections, setSections] = useState<AdminProductSection[]>([]);
   const [productsBySection, setProductsBySection] = useState<
@@ -299,6 +303,27 @@ export default function SuperAdminDashboard() {
   }, [searchParams, router]);
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem("hexaAdminSidebarCollapsed");
+      if (raw === "1") setSidebarCollapsed(true);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("hexaAdminSidebarCollapsed", next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
+
+  useEffect(() => {
     if (!isSuperAdminLoggedIn()) {
       router.replace(superAdminLoginPathWithNext("/super-admin"));
       return;
@@ -314,8 +339,12 @@ export default function SuperAdminDashboard() {
       const touched = touchSuperAdminSession() ?? auth;
       setUser(touched);
       setOrders(await fetchOrders());
-      const adminUsers = await fetchAdminUsers();
+      const [adminUsers, adminCards] = await Promise.all([
+        fetchAdminUsers(),
+        fetchAdminCards(),
+      ]);
       setUsersCount(adminUsers.length);
+      setCardsCount(adminCards.length);
       const nextSections = await getAdminSections();
       const bySection = await getAdminProductsBySection();
       setSections(nextSections);
@@ -338,8 +367,12 @@ export default function SuperAdminDashboard() {
       }
       touchSuperAdminSession();
       setOrders(await fetchOrders());
-      const adminUsers = await fetchAdminUsers();
+      const [adminUsers, adminCards] = await Promise.all([
+        fetchAdminUsers(),
+        fetchAdminCards(),
+      ]);
       setUsersCount(adminUsers.length);
+      setCardsCount(adminCards.length);
       const nextSections = await getAdminSections();
       const bySection = await getAdminProductsBySection();
       setSections(nextSections);
@@ -367,6 +400,7 @@ export default function SuperAdminDashboard() {
     window.addEventListener("hexa-super-admin-auth-change", onAuthChange);
     window.addEventListener("hexa-orders-change", onDataChange);
     window.addEventListener("hexa-admin-directory-change", onDataChange);
+    window.addEventListener("hexa-admin-cards-change", onDataChange);
     window.addEventListener("hexa-admin-products-change", onDataChange);
     window.addEventListener("focus", syncWorkspace);
     window.addEventListener("pointerdown", onActivity);
@@ -376,6 +410,7 @@ export default function SuperAdminDashboard() {
       window.removeEventListener("hexa-super-admin-auth-change", onAuthChange);
       window.removeEventListener("hexa-orders-change", onDataChange);
       window.removeEventListener("hexa-admin-directory-change", onDataChange);
+      window.removeEventListener("hexa-admin-cards-change", onDataChange);
       window.removeEventListener("hexa-admin-products-change", onDataChange);
       window.removeEventListener("focus", syncWorkspace);
       window.removeEventListener("pointerdown", onActivity);
@@ -386,12 +421,24 @@ export default function SuperAdminDashboard() {
   const avatar = useMemo(() => (user ? initials(user.name) : "SA"), [user]);
   const copy = sectionMeta(active);
   const overviewStats = useMemo(() => {
-    const totalOrders = orders.length;
-    const todaysOrders = orders.filter((o) => isSameLocalDay(o.createdAt)).length;
+    // Same paid gate as Orders / Payments: paymentStatus === "paid" only.
+    const paidOrders = orders.filter(isOrderPaymentPaid);
+    const todaysOrders = paidOrders.filter((o) =>
+      isSameLocalDay(o.createdAt),
+    ).length;
     const totalUsers = usersCount || getAdminUsers().length;
-    const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
-    return { todaysOrders, totalOrders, totalUsers, totalRevenue };
-  }, [orders, usersCount]);
+    const totalRevenue = paidOrders.reduce((sum, o) => sum + o.total, 0);
+    return {
+      todaysOrders,
+      /** Matches Orders → Paid count */
+      totalOrders: paidOrders.length,
+      totalCards: cardsCount,
+      totalUsers,
+      totalRevenue,
+      /** All paid orders (newest first) — do not require card slug yet */
+      recentOrders: paidOrders.slice(0, 5),
+    };
+  }, [orders, usersCount, cardsCount]);
   const editingProduct = editingId
     ? products.find((p) => p.id === editingId) ?? null
     : null;
@@ -411,8 +458,12 @@ export default function SuperAdminDashboard() {
 
   function handleRefresh() {
     setRefreshing(true);
-    void fetchOrders()
-      .then((list) => setOrders(list))
+    void Promise.all([fetchOrders(), fetchAdminCards(), fetchAdminUsers()])
+      .then(([list, cards, users]) => {
+        setOrders(list);
+        setCardsCount(cards.length);
+        setUsersCount(users.length);
+      })
       .finally(() => {
         void syncProducts().finally(() => {
           window.setTimeout(() => setRefreshing(false), 500);
@@ -962,11 +1013,24 @@ export default function SuperAdminDashboard() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-[#141414] hover:bg-black/[0.04] lg:hidden"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-[#141414] transition-colors hover:bg-black/[0.04] lg:hidden"
               aria-label="Open menu"
               onClick={() => setSidebarOpen(true)}
             >
               <Menu className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              className="hidden h-9 w-9 items-center justify-center rounded-lg text-[#141414] transition-colors hover:bg-black/[0.04] lg:flex"
+              aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+              title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+              onClick={toggleSidebarCollapsed}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen className="h-5 w-5" />
+              ) : (
+                <PanelLeftClose className="h-5 w-5" />
+              )}
             </button>
             <Link href="/" className="relative h-8 w-[132px] sm:h-9 sm:w-[150px]">
               <Image
@@ -1025,11 +1089,18 @@ export default function SuperAdminDashboard() {
         </div>
       </header>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 overflow-hidden lg:gap-8 lg:px-8 lg:py-6">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 overflow-hidden lg:gap-0 lg:px-8 lg:py-6">
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-[264px] transform border-r border-black/[0.06] bg-white pt-14 transition-transform lg:static lg:z-auto lg:block lg:w-[264px] lg:shrink-0 lg:translate-x-0 lg:self-stretch lg:rounded-xl lg:border lg:pt-0 lg:shadow-[0_1px_2px_rgba(0,0,0,0.03)] ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-          }`}
+          className={[
+            "fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col border-r border-black/[0.06] bg-white pt-14",
+            "transition-[transform,opacity,margin,width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+            "lg:static lg:z-auto lg:shrink-0 lg:self-stretch lg:overflow-hidden lg:rounded-xl lg:border lg:pt-0 lg:shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full",
+            sidebarCollapsed
+              ? "lg:pointer-events-none lg:mr-0 lg:w-0 lg:translate-x-0 lg:border-0 lg:opacity-0 lg:shadow-none"
+              : "lg:mr-8 lg:w-[264px] lg:translate-x-0 lg:opacity-100",
+          ].join(" ")}
+          aria-hidden={sidebarCollapsed ? true : undefined}
         >
           <div className="flex items-center justify-between border-b border-black/[0.06] px-4 py-3 lg:hidden">
             <span className="text-sm font-semibold">Menu</span>
@@ -1042,7 +1113,25 @@ export default function SuperAdminDashboard() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <nav className="space-y-1 p-3">
+          <div className="hidden items-center justify-between border-b border-black/[0.06] px-3 py-2.5 lg:flex">
+            <span className="px-1 text-[10px] font-bold tracking-[0.14em] text-[#8a8174] uppercase">
+              Navigation
+            </span>
+            <button
+              type="button"
+              onClick={toggleSidebarCollapsed}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-[#5c5346] transition-colors hover:bg-black/[0.04] hover:text-[#141414]"
+              aria-label="Hide sidebar"
+              title="Hide sidebar"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </div>
+          <nav
+            className={`min-h-0 flex-1 space-y-1 overflow-y-auto p-3 transition-opacity duration-200 ${
+              sidebarCollapsed ? "lg:opacity-0" : "lg:opacity-100"
+            }`}
+          >
             {MENU_ITEMS.map((item) => (
               <NavButton
                 key={item.key}
@@ -1065,13 +1154,31 @@ export default function SuperAdminDashboard() {
         {sidebarOpen ? (
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+            className="fixed inset-0 z-40 bg-black/30 transition-opacity duration-300 lg:hidden"
             aria-label="Close menu overlay"
             onClick={() => setSidebarOpen(false)}
           />
         ) : null}
 
-        <main className="admin-main-scroll min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-0 lg:py-0">
+        <main
+          className={[
+            "admin-main-scroll relative min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-0 lg:py-0",
+            "transition-[padding,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          ].join(" ")}
+        >
+          {sidebarCollapsed ? (
+            <button
+              type="button"
+              onClick={toggleSidebarCollapsed}
+              className="mb-4 hidden items-center gap-2 rounded-lg border border-black/[0.08] bg-white px-3 py-2 text-[12px] font-semibold text-[#141414] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all hover:border-[#BC7C10]/35 hover:bg-[#FFFCF7] hover:text-[#9a650d] lg:inline-flex"
+              aria-label="Show sidebar"
+              title="Show sidebar"
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+              Show menu
+            </button>
+          ) : null}
+
           <div className="mb-6">
             <p className="text-[10px] font-bold tracking-[0.14em] text-[#BC7C10] uppercase">
               {copy.title}
@@ -1084,18 +1191,24 @@ export default function SuperAdminDashboard() {
 
           {active === "overview" ? (
             <div className="space-y-6">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 <StatCard
                   label="Today's orders"
                   value={overviewStats.todaysOrders}
-                  hint="Orders placed today"
+                  hint="Paid orders today"
                   icon={ShoppingBag}
                 />
                 <StatCard
-                  label="Total orders"
+                  label="Paid orders"
                   value={overviewStats.totalOrders}
-                  hint="All platform orders"
+                  hint="Same as Orders → Paid"
                   icon={Package}
+                />
+                <StatCard
+                  label="Total cards"
+                  value={overviewStats.totalCards}
+                  hint="Same as Cards section"
+                  icon={CreditCard}
                 />
                 <StatCard
                   label="Total users"
@@ -1106,7 +1219,7 @@ export default function SuperAdminDashboard() {
                 <StatCard
                   label="Total revenue"
                   value={formatCurrency(overviewStats.totalRevenue)}
-                  hint="Sum of order totals"
+                  hint="From paid orders"
                   icon={IndianRupee}
                 />
               </div>
@@ -1114,11 +1227,14 @@ export default function SuperAdminDashboard() {
               <div className="rounded-xl border border-black/[0.06] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                 <div className="border-b border-black/[0.06] px-5 py-4">
                   <h2 className="font-dashboard text-base font-bold text-[#141414]">
-                    Recent orders
+                    Recent paid orders
                   </h2>
+                  <p className="mt-0.5 text-xs text-[#8a8174]">
+                    Same paid orders as the Orders section (newest first)
+                  </p>
                 </div>
-                {orders.length === 0 ? (
-                  <p className="px-5 py-8 text-sm text-[#8a8174]">No orders yet.</p>
+                {overviewStats.recentOrders.length === 0 ? (
+                  <p className="px-5 py-8 text-sm text-[#8a8174]">No paid orders yet.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[640px] text-left text-sm">
@@ -1132,7 +1248,7 @@ export default function SuperAdminDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {orders.slice(0, 5).map((order) => (
+                        {overviewStats.recentOrders.map((order) => (
                           <tr
                             key={order.id}
                             className="border-b border-black/[0.04] last:border-0"
@@ -1153,7 +1269,7 @@ export default function SuperAdminDashboard() {
                             </td>
                             <td className="px-5 py-3">
                               <span className="rounded-md bg-[#FFF8ED] px-2 py-1 text-xs font-semibold text-[#9a650d]">
-                                {statusLabel(order.status)}
+                                {paymentStatusLabel(order.paymentStatus ?? "pending")}
                               </span>
                             </td>
                           </tr>

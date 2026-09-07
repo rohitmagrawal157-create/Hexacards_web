@@ -154,7 +154,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from("cards")
       .select(CARD_COLS)
-      .order("card_id", { ascending: true });
+      .order("card_id", { ascending: false });
 
     if (userId) {
       const id = Number(userId);
@@ -170,7 +170,7 @@ export async function GET(request: Request) {
       let legacy = supabase
         .from("cards")
         .select(CARD_COLS_LEGACY)
-        .order("card_id", { ascending: true });
+        .order("card_id", { ascending: false });
       if (userId) {
         const id = Number(userId);
         legacy = legacy.eq("user_id", id);

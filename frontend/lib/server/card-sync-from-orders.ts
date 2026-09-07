@@ -9,6 +9,11 @@ import {
   computeCardEndDateIso,
   toIsoDateOnly,
 } from "@/lib/card-validity";
+import { buildPublicCardUrl } from "@/lib/site-url";
+
+function canonicalCardUrl(slug: string): string {
+  return buildPublicCardUrl(slug, "canonical");
+}
 
 const NON_CARD_PRODUCT_SLUGS = new Set([
   "google-standee",
@@ -151,6 +156,38 @@ export async function syncCardsFromOrders(): Promise<{
     if (isOrderCardHidden(order)) continue;
     if (!isCardProductOrderRow(order)) continue;
 
+    // Source of truth: linked cards.unic_card_name — keep order slug/url in sync
+    const linkedCardId =
+      order.card_id != null && Number(order.card_id) > 0
+        ? Number(order.card_id)
+        : null;
+    if (linkedCardId) {
+      const { data: linkedCard } = await supabase
+        .from("cards")
+        .select("unic_card_name")
+        .eq("card_id", linkedCardId)
+        .maybeSingle();
+      const linkedSlug = String(linkedCard?.unic_card_name ?? "")
+        .trim()
+        .toLowerCase();
+      if (linkedSlug) {
+        taken.add(linkedSlug);
+        const nextUrl = canonicalCardUrl(linkedSlug);
+        const slugMismatch =
+          String(order.card_slug ?? "").trim().toLowerCase() !== linkedSlug;
+        const urlMismatch =
+          String(order.card_url ?? "").trim().replace(/\/$/, "") !== nextUrl;
+        if (slugMismatch || urlMismatch) {
+          await supabase
+            .from("orders")
+            .update({ card_slug: linkedSlug, card_url: nextUrl })
+            .eq("order_id", order.order_id);
+          linked += 1;
+        }
+        continue;
+      }
+    }
+
     const slug = buildSlugFromOrder(order, taken);
     if (!slug) continue;
     taken.add(slug);
@@ -163,10 +200,15 @@ export async function syncCardsFromOrders(): Promise<{
 
     if (existingCard?.card_id) {
       const cardId = Number(existingCard.card_id);
-      if (Number(order.card_id) !== cardId || order.card_slug !== slug) {
+      const nextUrl = canonicalCardUrl(slug);
+      if (
+        Number(order.card_id) !== cardId ||
+        order.card_slug !== slug ||
+        String(order.card_url ?? "").trim().replace(/\/$/, "") !== nextUrl
+      ) {
         await supabase
           .from("orders")
-          .update({ card_id: cardId, card_slug: slug })
+          .update({ card_id: cardId, card_slug: slug, card_url: nextUrl })
           .eq("order_id", order.order_id);
         linked += 1;
       }
@@ -235,7 +277,8 @@ export async function syncCardsFromOrders(): Promise<{
       .update({
         card_id: cardId,
         card_slug: slug,
-        card_url: cardDesign?.liveUrl || `https://hexacards.com/${slug}`,
+        // Always match the live card slug — never keep a stale cardDesign.liveUrl
+        card_url: canonicalCardUrl(slug),
       })
       .eq("order_id", order.order_id);
 

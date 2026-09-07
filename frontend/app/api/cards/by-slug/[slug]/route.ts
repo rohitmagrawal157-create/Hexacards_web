@@ -45,25 +45,29 @@ export async function GET(request: Request, context: RouteContext) {
     if (!data) return jsonError(404, "Card not found");
 
     const row = data as CardRow;
-
-    // If this card is tied to checkout order(s), require at least one paid order
     const cardId = Number(row.card_id);
-    const { data: linkedOrders } = await supabase
-      .from("orders")
-      .select("payment_status, card_id, card_slug")
-      .or(
-        [
-          `card_slug.eq.${slug}`,
-          Number.isFinite(cardId) && cardId > 0
-            ? `card_id.eq.${cardId}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(","),
-      )
-      .limit(20);
 
-    const orderRows = (linkedOrders as { payment_status: number }[] | null) ?? [];
+    // Payment gate + links in parallel (was sequential → slower "Loading card…")
+    const [linkedOrdersResult, links] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("payment_status, card_id, card_slug")
+        .or(
+          [
+            `card_slug.eq.${slug}`,
+            Number.isFinite(cardId) && cardId > 0
+              ? `card_id.eq.${cardId}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(","),
+        )
+        .limit(20),
+      fetchLinksForCard(supabase, cardId),
+    ]);
+
+    const orderRows =
+      (linkedOrdersResult.data as { payment_status: number }[] | null) ?? [];
     if (
       orderRows.length > 0 &&
       !orderRows.some((o) => Number(o.payment_status) === 1)
@@ -78,6 +82,7 @@ export async function GET(request: Request, context: RouteContext) {
     let pageView = Number(row.page_view) || 0;
     if (countView) {
       pageView += 1;
+      // Fire-and-forget view increment — never block the card response
       void supabase
         .from("cards")
         .update({ page_view: pageView })
@@ -85,7 +90,6 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const card = mapCard({ ...row, page_view: pageView });
-    const links = await fetchLinksForCard(supabase, card.cardId);
     return jsonOk(applyLinksToCard(card, links));
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");

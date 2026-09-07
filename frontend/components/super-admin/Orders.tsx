@@ -15,6 +15,7 @@ import {
   formatOrderDate,
   fetchOrders,
   getOrders,
+  isOrderPaymentPaid,
   paymentStatusLabel,
   statusLabel,
   type HexaOrder,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/orders";
 import {
   buildOrderCardDesign,
+  isPdfLogoSrc,
   printFinishLabel,
 } from "@/lib/order-card";
 import {
@@ -73,7 +75,7 @@ function toCsv(rows: HexaOrder[]): string {
       `"${o.productTitle.replace(/"/g, '""')}"`,
       o.total,
       formatOrderDate(o.createdAt),
-      paymentStatusLabel(o.paymentStatus ?? "paid"),
+      paymentStatusLabel(o.paymentStatus ?? "pending"),
       o.phone,
       `"${formatOrderAddress(o).replace(/"/g, '""')}"`,
       statusLabel(o.status),
@@ -113,7 +115,7 @@ function printOrderDetail(order: HexaOrder) {
       </head>
       <body>
         <h1>Order ${order.id}</h1>
-        <p class="meta">${formatOrderDate(order.createdAt)} · ${statusLabel(order.status)} · ${paymentStatusLabel(order.paymentStatus ?? "paid")}</p>
+        <p class="meta">${formatOrderDate(order.createdAt)} · ${statusLabel(order.status)} · ${paymentStatusLabel(order.paymentStatus ?? "pending")}</p>
 
         <h2>Customer &amp; shipping</h2>
         <table>
@@ -156,7 +158,7 @@ function printTable(rows: HexaOrder[]) {
   const rowsHtml = rows
     .map(
       (o) =>
-        `<tr><td>${o.id}</td><td>${o.customerName}</td><td>${o.productTitle}</td><td>${formatCurrency(o.total)}</td><td>${formatOrderDate(o.createdAt)}</td><td>${paymentStatusLabel(o.paymentStatus ?? "paid")}</td><td>${o.phone}</td><td>${formatOrderAddress(o)}</td></tr>`,
+        `<tr><td>${o.id}</td><td>${o.customerName}</td><td>${o.productTitle}</td><td>${formatCurrency(o.total)}</td><td>${formatOrderDate(o.createdAt)}</td><td>${paymentStatusLabel(o.paymentStatus ?? "pending")}</td><td>${o.phone}</td><td>${formatOrderAddress(o)}</td></tr>`,
     )
     .join("");
   win.document.write(`
@@ -220,7 +222,7 @@ export default function OrdersPanel({
           o.phone,
           o.email,
           formatOrderAddress(o),
-          paymentStatusLabel(o.paymentStatus ?? "paid"),
+          paymentStatusLabel(o.paymentStatus ?? "pending"),
         ]
           .join(" ")
           .toLowerCase()
@@ -244,10 +246,10 @@ export default function OrdersPanel({
     safePage * PAGE_SIZE,
   );
 
-  const paidCount = rows.filter((o) => (o.paymentStatus ?? "paid") === "paid").length;
+  const paidCount = rows.filter(isOrderPaymentPaid).length;
   const pendingCount = rows.filter((o) => o.paymentStatus === "pending").length;
   const totalRevenue = rows
-    .filter((o) => (o.paymentStatus ?? "paid") === "paid")
+    .filter(isOrderPaymentPaid)
     .reduce((sum, o) => sum + o.total, 0);
 
   return (
@@ -351,6 +353,7 @@ export default function OrdersPanel({
           <table className="w-full min-w-[1480px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-black/[0.06] bg-[#FFFCF7] text-[11px] font-bold tracking-wide text-[#8a8174] uppercase">
+                <th className="whitespace-nowrap px-4 py-3">Action</th>
                 <th className="whitespace-nowrap px-4 py-3">
                   <button
                     type="button"
@@ -372,17 +375,26 @@ export default function OrdersPanel({
                 <th className="whitespace-nowrap px-4 py-3">Payment status</th>
                 <th className="whitespace-nowrap px-4 py-3">Number</th>
                 <th className="min-w-[240px] px-4 py-3">Address</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map((order) => {
-                const payment = order.paymentStatus ?? "paid";
+                const payment = order.paymentStatus ?? "pending";
                 return (
                   <tr
                     key={order.id}
                     className="border-b border-black/[0.04] align-top last:border-0"
                   >
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setViewOrder(order)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-[#141414] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#BC7C10]"
+                      >
+                        <Eye className="h-3 w-3" />
+                        View
+                      </button>
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-[#141414]">
                       {order.id}
                     </td>
@@ -415,16 +427,6 @@ export default function OrdersPanel({
                     </td>
                     <td className="px-4 py-3 break-words text-[#5c5346]">
                       {formatOrderAddress(order)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setViewOrder(order)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-[#141414] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#BC7C10]"
-                      >
-                        <Eye className="h-3 w-3" />
-                        View
-                      </button>
                     </td>
                   </tr>
                 );
@@ -588,9 +590,9 @@ export default function OrdersPanel({
                         </p>
                         <p className="mt-1">
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${paymentBadge(viewOrder.paymentStatus ?? "paid")}`}
+                            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${paymentBadge(viewOrder.paymentStatus ?? "pending")}`}
                           >
-                            {paymentStatusLabel(viewOrder.paymentStatus ?? "paid")}
+                            {paymentStatusLabel(viewOrder.paymentStatus ?? "pending")}
                           </span>
                         </p>
                       </div>
@@ -642,7 +644,12 @@ export default function OrdersPanel({
                       />
                       <DetailField
                         label="Live URL"
-                        value={buildOrderCardDesign(viewOrder).liveUrl}
+                        value={
+                          viewOrder.paymentStatus === "paid" &&
+                          viewOrder.cardSlug?.trim()
+                            ? buildOrderCardDesign(viewOrder).liveUrl
+                            : "—"
+                        }
                         className="sm:col-span-2"
                       />
                     </div>
@@ -681,19 +688,48 @@ export default function OrdersPanel({
                       </button>
                     </div>
                     <div className="mt-4 flex min-h-[140px] items-center justify-center rounded-xl border border-dashed border-black/[0.08] bg-[#FFFCF7] p-6">
-                      {buildOrderCardDesign(viewOrder).logoSrc ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={buildOrderCardDesign(viewOrder).logoSrc}
-                          alt="Uploaded logo"
-                          className="max-h-32 max-w-full object-contain"
-                        />
-                      ) : (
-                        <p className="text-sm text-[#8a8174]">No logo uploaded</p>
-                      )}
+                      {(() => {
+                        const logoSrc = buildOrderCardDesign(viewOrder).logoSrc;
+                        if (!logoSrc) {
+                          return (
+                            <p className="text-sm text-[#8a8174]">No logo uploaded</p>
+                          );
+                        }
+                        if (isPdfLogoSrc(logoSrc)) {
+                          return (
+                            <div className="flex w-full max-w-md flex-col items-center gap-3">
+                              <object
+                                data={logoSrc}
+                                type="application/pdf"
+                                className="h-48 w-full rounded-md border border-black/[0.06] bg-white"
+                              >
+                                <p className="p-4 text-center text-sm text-[#8a8174]">
+                                  PDF logo uploaded
+                                </p>
+                              </object>
+                              <a
+                                href={logoSrc}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs font-semibold text-[#BC7C10] hover:underline"
+                              >
+                                Open PDF logo
+                              </a>
+                            </div>
+                          );
+                        }
+                        return (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={logoSrc}
+                            alt="Uploaded logo"
+                            className="max-h-32 max-w-full object-contain"
+                          />
+                        );
+                      })()}
                     </div>
                     <p className="mt-2 text-xs text-[#8a8174]">
-                      Logo appears on the back side only · PNG with transparent background recommended
+                      Logo · PNG recommended for card preview · JPG/PDF print-only
                     </p>
                   </section>
                 </div>

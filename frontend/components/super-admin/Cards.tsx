@@ -501,9 +501,14 @@ export default function CardsPanel({
       );
     }
 
-    list = [...list].sort((a, b) =>
-      sortAsc ? a.srNo - b.srNo : b.srNo - a.srNo,
-    );
+    list = [...list].sort((a, b) => {
+      const aId = Number(a.id.match(/^card-(\d+)$/)?.[1] || 0);
+      const bId = Number(b.id.match(/^card-(\d+)$/)?.[1] || 0);
+      if (aId !== bId) {
+        return sortAsc ? aId - bId : bId - aId;
+      }
+      return sortAsc ? a.srNo - b.srNo : b.srNo - a.srNo;
+    });
 
     return list;
   }, [viewFiltered, search, sortAsc]);

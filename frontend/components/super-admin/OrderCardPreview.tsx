@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   buildOrderCardDesign,
   buildOrderCardDesignAsync,
+  isPdfLogoSrc,
   logoForCardFinish,
   prepareCardLogoDataUrl,
   printFinishLabel,
@@ -237,7 +238,7 @@ function BackLogo({
   useEffect(() => {
     let cancelled = false;
     setFailed(false);
-    if (!src) {
+    if (!src || isPdfLogoSrc(src)) {
       setCleanSrc(undefined);
       return;
     }
@@ -476,7 +477,7 @@ function pdf3FrontPageHtml(design: ResolvedOrderCardDesign) {
 }
 
 function pdfLogoImg(src?: string, black = false) {
-  if (!src) return "";
+  if (!src || isPdfLogoSrc(src)) return "";
   const filter = black
     ? `filter:${BLACK_LOGO_FILTER};-webkit-filter:${BLACK_LOGO_FILTER};`
     : "";
@@ -621,28 +622,54 @@ export function OrderCardPreview({
             ) : null}
             <PreviewDetail label="Logo">
               {design.logoSrc ? (
-                <span className="inline-flex items-center gap-2.5">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={design.logoSrc}
-                    alt=""
-                    className="h-8 w-8 rounded-md border border-black/[0.08] bg-[#FFFCF7] object-contain p-0.5"
-                  />
-                  Uploaded
-                </span>
+                isPdfLogoSrc(design.logoSrc) ? (
+                  <span className="inline-flex flex-wrap items-center gap-2.5">
+                    <span className="rounded-md border border-black/[0.08] bg-[#FFFCF7] px-2 py-1 text-[11px] font-semibold tracking-wide text-[#8a8174] uppercase">
+                      PDF
+                    </span>
+                    <a
+                      href={design.logoSrc}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[13px] font-medium text-[#BC7C10] underline-offset-2 hover:underline"
+                    >
+                      Open logo PDF
+                    </a>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={design.logoSrc}
+                      alt=""
+                      className="h-8 w-8 rounded-md border border-black/[0.08] bg-[#FFFCF7] object-contain p-0.5"
+                    />
+                    Uploaded
+                  </span>
+                )
               ) : (
                 "Not uploaded"
               )}
             </PreviewDetail>
             <PreviewDetail label="QR link">
-              <a
-                href={design.liveUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="break-all text-[13px] font-medium text-[#BC7C10] underline-offset-2 hover:underline"
-              >
-                {design.liveUrl}
-              </a>
+              {order.paymentStatus === "paid" && order.cardSlug?.trim() ? (
+                <a
+                  href={design.liveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="break-all text-[13px] font-medium text-[#BC7C10] underline-offset-2 hover:underline"
+                >
+                  {design.liveUrl}
+                </a>
+              ) : (
+                <span className="text-[13px] text-[#8a8174]">
+                  {order.paymentStatus === "failed"
+                    ? "Not generated — payment failed"
+                    : order.paymentStatus === "pending"
+                      ? "Not generated — payment pending"
+                      : "Not generated"}
+                </span>
+              )}
             </PreviewDetail>
           </dl>
         </div>
@@ -679,6 +706,21 @@ export function orderLogoPrintHtml(
 ): string | null {
   const resolved = design ?? buildOrderCardDesign(order);
   if (!resolved.logoSrc) return null;
+  if (isPdfLogoSrc(resolved.logoSrc)) {
+    return `
+    <!DOCTYPE html>
+    <html>
+      <head><title>Logo — ${escapeHtml(resolved.name)}</title></head>
+      <body style="margin:0;min-height:100vh;background:#fff;">
+        <embed
+          src='${escapeAttr(resolved.logoSrc)}'
+          type="application/pdf"
+          style="width:100vw;height:100vh;border:0;"
+        />
+      </body>
+    </html>
+  `;
+  }
   return `
     <!DOCTYPE html>
     <html>
@@ -804,6 +846,15 @@ export function printHtmlDocument(html: string, title: string) {
 export function printOrderLogoPdf(order: HexaOrder) {
   void (async () => {
     const design = await buildOrderCardDesignAsync(order);
+    if (!design.logoSrc) {
+      window.alert("No logo uploaded for this order.");
+      return;
+    }
+    // Native PDF files: open/download the file itself (cannot render in <img>).
+    if (isPdfLogoSrc(design.logoSrc)) {
+      window.open(design.logoSrc, "_blank", "noopener,noreferrer");
+      return;
+    }
     const html = orderLogoPrintHtml(order, design);
     if (!html) {
       window.alert("No logo uploaded for this order.");

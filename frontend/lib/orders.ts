@@ -7,6 +7,7 @@ import {
   persistOrderLogo,
   stripLogoForLocalStorage,
 } from "@/lib/order-logo-store";
+import { isLocalHost, normalizeStoredCardUrl } from "@/lib/site-url";
 
 export type HexaOrderStatus = "placed" | "shipped" | "delivered";
 
@@ -218,7 +219,16 @@ function dtoToHexaOrder(dto: HexaOrder & Record<string, unknown>): HexaOrder {
     cardId:
       dto.cardId != null && Number(dto.cardId) > 0 ? Number(dto.cardId) : null,
     cardSlug: dto.cardSlug ? String(dto.cardSlug) : undefined,
-    cardUrl: dto.cardUrl ? String(dto.cardUrl) : undefined,
+    cardUrl: (() => {
+      const raw = dto.cardUrl ? String(dto.cardUrl) : undefined;
+      if (!raw) return undefined;
+      const slug = dto.cardSlug ? String(dto.cardSlug) : undefined;
+      // Drop localhost leftovers from local checkouts so UI/QR never share them
+      if (isLocalHost(raw)) {
+        return slug ? normalizeStoredCardUrl(raw, slug, "canonical") : undefined;
+      }
+      return raw;
+    })(),
     cardHidden:
       Boolean(dto.cardHidden) ||
       Boolean(
@@ -468,8 +478,11 @@ async function persistCardDesignLogo(
   orderId: string,
   design: OrderCardDesignData,
 ): Promise<OrderCardDesignData> {
-  if (!design.logoSrc?.startsWith("data:image/")) return design;
-  const dataUrl = design.logoSrc;
+  const src = design.logoSrc?.trim() ?? "";
+  const isImage = src.startsWith("data:image/");
+  const isPdf = src.startsWith("data:application/pdf");
+  if (!isImage && !isPdf) return design;
+  const dataUrl = src;
   await persistOrderLogo(orderId, dataUrl);
   try {
     const uploaded = await uploadOrderDesignLogo({ orderId, dataUrl });
@@ -517,7 +530,10 @@ export async function saveOrder(
     companyName: order.companyName ?? order.businessName,
   };
 
-  if (next.cardDesign?.logoSrc?.startsWith("data:image/")) {
+  if (
+    next.cardDesign?.logoSrc?.startsWith("data:image/") ||
+    next.cardDesign?.logoSrc?.startsWith("data:application/pdf")
+  ) {
     next.cardDesign = await persistCardDesignLogo(next.id, next.cardDesign);
     if (next.cardDesign.logoSrc && !next.cardDesign.logoSrc.startsWith("data:")) {
       next.orderLogoSrc =
@@ -561,7 +577,10 @@ export async function updateOrder(
   patch: Partial<HexaOrder>,
 ): Promise<HexaOrder | null> {
   const nextPatch = { ...patch };
-  if (nextPatch.cardDesign?.logoSrc?.startsWith("data:image/")) {
+  if (
+    nextPatch.cardDesign?.logoSrc?.startsWith("data:image/") ||
+    nextPatch.cardDesign?.logoSrc?.startsWith("data:application/pdf")
+  ) {
     nextPatch.cardDesign = await persistCardDesignLogo(id, nextPatch.cardDesign);
     if (
       nextPatch.cardDesign.logoSrc &&

@@ -86,3 +86,12 @@ export function buildPaymentFailedPath(
   }
   return `/thank-you?${params.toString()}`;
 }
+
+/** Leave checkout immediately on failure — do not wait on cleanup APIs. */
+export function goToPaymentFailed(
+  router: { replace: (href: string) => void },
+  orderId: string,
+  retryPath?: string,
+) {
+  router.replace(buildPaymentFailedPath(orderId, retryPath));
+}

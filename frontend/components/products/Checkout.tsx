@@ -21,17 +21,18 @@ import {
 } from "@/lib/auth";
 import {
   saveOrder,
-  updateOrder,
   type HexaOrder,
 } from "@/lib/orders";
 import {
-  buildPaymentFailedPath,
   goToPaidThankYou,
+  goToPaymentFailed,
 } from "@/lib/order-thank-you";
 import { initOrderCardProfileAsync } from "@/lib/order-card-profile";
 import { confirmRazorpayPayment } from "@/lib/razorpay-checkout";
-import { allocateOrderCardSlug } from "@/lib/order-card";
-import { buildPublicCardUrl } from "@/lib/site-url";
+import {
+  attachOrderCardLinkAfterPayment,
+  clearOrderCardLinkOnFailedPayment,
+} from "@/lib/order-card";
 import { isEditableCardOrder } from "@/lib/user-cards";
 import { syncUserProfileFromCheckout } from "@/lib/user-profile-sync";
 import LocationSelects, {
@@ -130,6 +131,8 @@ export default function Checkout() {
   } | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  /** True once Razorpay result is known — hide checkout and leave immediately. */
+  const [paymentLeaving, setPaymentLeaving] = useState(false);
   const [orderProductId, setOrderProductId] = useState<string | undefined>(undefined);
   const [orderDetails, setOrderDetails] = useState<{
     productTitle?: string;
@@ -157,6 +160,11 @@ export default function Checkout() {
       }));
     }
     setAuthReady(true);
+  }, [router]);
+
+  // Warm /thank-you so post-payment navigation is not blocked by first compile in dev.
+  useEffect(() => {
+    router.prefetch("/thank-you");
   }, [router]);
 
   // If user logs out while we're already on checkout, redirect them
@@ -359,19 +367,6 @@ export default function Checkout() {
       }
 
       let withCardMeta = order;
-      if (needsDigitalProfile) {
-        const finalSlug = await allocateOrderCardSlug(cardName);
-        const liveUrl = buildPublicCardUrl(finalSlug, "canonical");
-        const baseDesign = order.cardDesign ?? cardDesign;
-        withCardMeta =
-          (await updateOrder(order.id, {
-            cardSlug: finalSlug,
-            cardUrl: liveUrl,
-            cardDesign: baseDesign
-              ? { ...baseDesign, liveUrl }
-              : undefined,
-          })) ?? order;
-      }
 
       const clientTxnId = order.clientTxnId ?? `ord_${withCardMeta.id}_${Date.now().toString(36)}`;
       const createRes = await fetch("/api/razorpay/create", {
@@ -413,6 +408,40 @@ export default function Checkout() {
         throw new Error("Razorpay script is not loaded yet. Please try again.");
       }
 
+      let paymentSettled = false;
+
+      const leaveFailed = (reason?: string) => {
+        if (paymentSettled) return;
+        paymentSettled = true;
+        setPaymentLeaving(true);
+        goToPaymentFailed(router, withCardMeta.id, "/checkout");
+
+        void (async () => {
+          try {
+            if (withCardMeta.orderId) {
+              await fetch("/api/payments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  clientTxnId,
+                  amount: Number(withCardMeta.total || total),
+                  customerId: auth.userId ?? null,
+                  remark: reason
+                    ? `Order ${withCardMeta.id} payment failed: ${reason}`
+                    : `Order ${withCardMeta.id} payment dismissed`,
+                  status: "failed",
+                  orderId: withCardMeta.orderId,
+                  txnAt: new Date().toISOString(),
+                }),
+              });
+            }
+            await clearOrderCardLinkOnFailedPayment(withCardMeta.id);
+          } catch (err) {
+            console.error("Failed payment cleanup", err);
+          }
+        })();
+      };
+
       const paymentWindow = new (window as any).Razorpay({
         key: razorpayKey,
         amount: createJson.data.amount,
@@ -425,14 +454,20 @@ export default function Checkout() {
           razorpay_order_id?: string;
           razorpay_signature?: string;
         }) => {
+          if (paymentSettled) return;
           if (
             !response.razorpay_order_id ||
             !response.razorpay_payment_id ||
             !response.razorpay_signature
           ) {
-            window.alert("Incomplete payment response from Razorpay.");
+            leaveFailed("Incomplete payment response from Razorpay.");
             return;
           }
+
+          paymentSettled = true;
+          setPaymentLeaving(true);
+          // Prefetch again right before navigate (in case mount prefetch was skipped).
+          router.prefetch("/thank-you");
 
           const paidOrder: HexaOrder = {
             ...withCardMeta,
@@ -446,6 +481,7 @@ export default function Checkout() {
             // ignore
           }
 
+          // Leave checkout immediately — never show the form again
           goToPaidThankYou(router, paidOrder);
 
           void (async () => {
@@ -460,7 +496,11 @@ export default function Checkout() {
                 customerId: auth.userId ?? null,
               });
               if (needsDigitalProfile) {
-                await initOrderCardProfileAsync(confirmed);
+                const withLink = await attachOrderCardLinkAfterPayment(
+                  confirmed,
+                  cardName,
+                );
+                await initOrderCardProfileAsync(withLink);
               }
             } catch (handlerErr) {
               console.error("Razorpay success handler failed", handlerErr);
@@ -480,55 +520,26 @@ export default function Checkout() {
           color: "#BC7C10",
         },
         modal: {
-          ondismiss: async () => {
-            if (withCardMeta.orderId) {
-              await fetch("/api/payments", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  clientTxnId,
-                  amount: Number(withCardMeta.total || total),
-                  customerId: auth.userId ?? null,
-                  remark: `Order ${withCardMeta.id} payment dismissed`,
-                  status: "failed",
-                  orderId: withCardMeta.orderId,
-                  txnAt: new Date().toISOString(),
-                }),
-              });
-            }
-            await updateOrder(withCardMeta.id, { paymentStatus: "failed" });
-            router.replace(buildPaymentFailedPath(withCardMeta.id, "/checkout"));
+          ondismiss: () => {
+            // Razorpay may fire dismiss after success — ignore if already settled
+            leaveFailed("Payment cancelled");
           },
         },
       });
 
-      paymentWindow.on("payment.failed", async (response: {
+      paymentWindow.on("payment.failed", (response: {
         error?: { description?: string; reason?: string };
       }) => {
         const reason =
           response.error?.description ||
           response.error?.reason ||
           "Payment failed";
-        if (withCardMeta.orderId) {
-          await fetch("/api/payments", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              clientTxnId,
-              amount: Number(withCardMeta.total || total),
-              customerId: auth.userId ?? null,
-              remark: `Order ${withCardMeta.id} payment failed: ${reason}`,
-              status: "failed",
-              orderId: withCardMeta.orderId,
-              txnAt: new Date().toISOString(),
-            }),
-          });
-        }
-        await updateOrder(withCardMeta.id, { paymentStatus: "failed" });
-        router.replace(buildPaymentFailedPath(withCardMeta.id, "/checkout"));
+        leaveFailed(reason);
       });
 
       paymentWindow.open();
+      // Keep submitting/overlay until thank-you or failed route takes over
+      return;
     } catch (err) {
       console.error("Failed to place order", err);
       const message =
@@ -536,7 +547,6 @@ export default function Checkout() {
           ? err.message
           : "Could not place your order. Please sign in again and retry.";
       window.alert(message);
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -552,6 +562,20 @@ export default function Checkout() {
       <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
         <p className="text-sm font-medium text-[#5c5346]">
           Checking sign-in…
+        </p>
+      </div>
+    );
+  }
+
+  if (paymentLeaving) {
+    return (
+      <div className="mx-auto flex min-h-[50vh] max-w-6xl flex-col items-center justify-center gap-3 px-4 py-16 text-center sm:px-6 lg:px-8">
+        <HoneycombLoader className="h-10 w-10" />
+        <p className="text-sm font-semibold text-[#141414]">
+          Updating payment status…
+        </p>
+        <p className="text-xs text-[#8a8174]">
+          Taking you to the next screen
         </p>
       </div>
     );

@@ -21,6 +21,7 @@ import {
   resolveCardImageSrc,
   toCardImageDbName,
 } from "@/lib/card-images";
+import { buildPublicCardUrl } from "@/lib/site-url";
 
 const LAYOUT_TO_THEME: Record<CardLayoutId, number> = {
   classic: 1,
@@ -348,11 +349,22 @@ export async function upsertOrderCardInDb(
 
   if (!card) return { cardId: null, error };
 
-  if (order.cardId !== card.cardId || order.userId !== card.userId) {
+  const nextSlug = card.unicCardName;
+  const nextUrl = buildPublicCardUrl(nextSlug, "canonical");
+  const needsOrderLink =
+    order.cardId !== card.cardId ||
+    order.userId !== card.userId ||
+    order.cardSlug?.trim().toLowerCase() !== nextSlug.trim().toLowerCase() ||
+    (order.cardUrl || "").replace(/\/$/, "") !== nextUrl;
+
+  // Avoid redundant order writes — they fan out hexa-orders-change / localStorage
+  // and make every open dashboard/admin tab refetch at once.
+  if (needsOrderLink) {
     await updateOrder(order.id, {
       cardId: card.cardId,
       userId: card.userId,
-      cardSlug: card.unicCardName,
+      cardSlug: nextSlug,
+      cardUrl: nextUrl,
     });
   }
 

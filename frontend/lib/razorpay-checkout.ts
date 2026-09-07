@@ -117,7 +117,10 @@ export type RazorpayCheckoutInput = {
   customerName: string;
   email: string;
   contactPhone: string;
+  /** Called immediately when Razorpay reports success — navigate away here. */
   onPaid: (order: HexaOrder) => void | Promise<void>;
+  /** Called after server payment confirm — create card link / profile here. */
+  onConfirmed?: (order: HexaOrder) => void | Promise<void>;
   onFailed: (reason?: string) => void | Promise<void>;
 };
 
@@ -185,8 +188,10 @@ export async function startRazorpayCheckout(
   const finishFailed = async (reason?: string) => {
     if (settled) return;
     settled = true;
+    // Navigate / UI callback first so the order form is not left on screen
+    await input.onFailed(reason);
     if (order.orderId) {
-      await fetch("/api/payments", {
+      void fetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -202,7 +207,6 @@ export async function startRazorpayCheckout(
         }),
       });
     }
-    await input.onFailed(reason);
   };
 
   const paymentWindow = new window.Razorpay({
@@ -223,12 +227,13 @@ export async function startRazorpayCheckout(
         return;
       }
 
-      const paidOrder: HexaOrder = {
+      settled = true;
+      const optimisticPaid: HexaOrder = {
         ...order,
         paymentStatus: "paid",
       };
-      settled = true;
-      void Promise.resolve(input.onPaid(paidOrder));
+      // Leave the order/checkout UI immediately
+      void Promise.resolve(input.onPaid(optimisticPaid));
 
       void confirmRazorpayPayment({
         razorpay_order_id: response.razorpay_order_id,
@@ -238,9 +243,13 @@ export async function startRazorpayCheckout(
         clientTxnId,
         amount: Number(amount),
         customerId: customerId ?? null,
-      }).catch((err) => {
-        console.error("Razorpay success handler failed", err);
-      });
+      })
+        .then(async (confirmed) => {
+          if (input.onConfirmed) await input.onConfirmed(confirmed);
+        })
+        .catch((err) => {
+          console.error("Razorpay success handler failed", err);
+        });
     },
     prefill: {
       name: customerName,

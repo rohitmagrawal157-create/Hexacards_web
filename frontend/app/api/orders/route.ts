@@ -2,10 +2,13 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import {
   buildOrderInsertPayload,
-  mapOrder,
   type OrderRow,
   type OrderWriteBody,
 } from "@/lib/server/order-types";
+import {
+  mapOrderWithLinkedCard,
+  mapOrdersWithLinkedCards,
+} from "@/lib/server/order-live-url";
 
 async function resolveUserId(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -68,7 +71,8 @@ export async function GET(request: Request) {
     if (error) {
       return jsonError(500, "Failed to load orders", error.message);
     }
-    return jsonOk(((data as OrderRow[] | null) ?? []).map(mapOrder));
+    const rows = (data as OrderRow[] | null) ?? [];
+    return jsonOk(await mapOrdersWithLinkedCards(supabase, rows));
   } catch (err) {
     return jsonError(
       500,
@@ -167,7 +171,7 @@ export async function POST(request: Request) {
       order_id: row.order_id,
     });
 
-    return jsonOk(mapOrder(row), 201);
+    return jsonOk(await mapOrderWithLinkedCard(supabase, row), 201);
   } catch (err) {
     return jsonError(
       500,

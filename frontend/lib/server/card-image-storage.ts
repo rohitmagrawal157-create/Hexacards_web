@@ -36,6 +36,7 @@ export function sanitizeCardUsername(slug: string): string {
  */
 function extensionForContentType(contentType?: string): string {
   const t = (contentType || "").toLowerCase();
+  if (t.includes("pdf")) return "pdf";
   if (t.includes("png")) return "png";
   if (t.includes("webp")) return "webp";
   if (t.includes("gif")) return "gif";
@@ -132,9 +133,14 @@ export async function saveCardImage(opts: {
   if (!buffer && opts.dataUrl) {
     const parsed = dataUrlToBuffer(opts.dataUrl);
     buffer = parsed.buffer;
-    contentType = parsed.contentType.startsWith("image/")
-      ? parsed.contentType
-      : "image/jpeg";
+    const ct = (parsed.contentType || "").toLowerCase();
+    if (ct.startsWith("image/") || ct === "application/pdf") {
+      contentType = parsed.contentType;
+    } else if (opts.kind === "order-logo" && ct.includes("pdf")) {
+      contentType = "application/pdf";
+    } else {
+      contentType = "image/jpeg";
+    }
   }
 
   const filename = cardImageFilename(opts.username, opts.kind, contentType);

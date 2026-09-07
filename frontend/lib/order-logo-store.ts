@@ -14,7 +14,13 @@ export function isOrderLogoRef(src?: string | null): boolean {
 }
 
 export function cacheOrderLogo(orderId: string, src: string) {
-  if (!orderId || !src.startsWith("data:image/")) return;
+  if (!orderId || !src.startsWith("data:")) return;
+  if (
+    !src.startsWith("data:image/") &&
+    !src.startsWith("data:application/pdf")
+  ) {
+    return;
+  }
   memoryLogos.set(orderId, src);
 }
 
@@ -57,7 +63,9 @@ async function idbGetLogo(orderId: string): Promise<string | undefined> {
     const req = tx.objectStore(STORE_NAME).get(orderId);
     req.onsuccess = () => {
       const next = req.result;
-      resolve(typeof next === "string" && next.startsWith("data:image/") ? next : undefined);
+      resolve(
+        typeof next === "string" && next.startsWith("data:") ? next : undefined,
+      );
     };
     req.onerror = () => reject(req.error ?? new Error("IndexedDB read failed"));
   });
@@ -130,7 +138,11 @@ export async function loadOrderLogo(
   orderId: string,
   storedSrc?: string | null,
 ): Promise<string | undefined> {
-  if (storedSrc?.startsWith("data:image/") && storedSrc.length > 80) {
+  if (
+    (storedSrc?.startsWith("data:image/") ||
+      storedSrc?.startsWith("data:application/pdf")) &&
+    storedSrc.length > 80
+  ) {
     cacheOrderLogo(orderId, storedSrc);
     void persistOrderLogo(orderId, storedSrc);
     return storedSrc;
@@ -158,7 +170,7 @@ export function stripLogoForLocalStorage(
 ): string | undefined {
   if (!src) return undefined;
   if (isOrderLogoRef(src)) return src;
-  if (src.startsWith("data:image/")) {
+  if (src.startsWith("data:image/") || src.startsWith("data:application/pdf")) {
     cacheOrderLogo(orderId, src);
     void persistOrderLogo(orderId, src);
     return orderLogoRef(orderId);

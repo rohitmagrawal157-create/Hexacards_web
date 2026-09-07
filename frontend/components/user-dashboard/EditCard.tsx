@@ -5,10 +5,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
-  ArrowRight,
   Briefcase,
   Building2,
-  Check,
   CheckCircle2,
   Eye,
   FileText,
@@ -43,6 +41,7 @@ import { uploadCardImage } from "@/lib/card-image-upload";
 import {
   loadOrderCardProfile,
   persistOrderCardProfile,
+  saveOrderCardProfile,
 } from "@/lib/order-card-profile";
 import {
   cardPublicSlug,
@@ -108,7 +107,8 @@ export default function EditCard() {
   const [profile, setProfile] = useState<HexaCardProfile | null>(null);
   const [tab, setTab] = useState<EditTab>("contact");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [savedFlash, setSavedFlash] = useState(false);
+  const [viewingCard, setViewingCard] = useState(false);
+  const [savingStep, setSavingStep] = useState(false);
   const [serviceInput, setServiceInput] = useState("");
   const brochureRef = useRef<HTMLInputElement>(null);
   const accentPersistTimer = useRef<number | null>(null);
@@ -298,8 +298,6 @@ export default function EditCard() {
       if (pendingAccentRef.current === color) {
         pendingAccentRef.current = null;
       }
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 1800);
     } catch {
       window.alert(
         "Accent updated in the editor, but could not be saved. Please tap Save.",
@@ -328,7 +326,8 @@ export default function EditCard() {
   }
 
   async function handleViewCard() {
-    if (!profile) return;
+    if (!profile || viewingCard) return;
+    setViewingCard(true);
     if (accentPersistTimer.current) {
       window.clearTimeout(accentPersistTimer.current);
       accentPersistTimer.current = null;
@@ -341,14 +340,37 @@ export default function EditCard() {
         }
       : profile;
     pendingAccentRef.current = null;
-    const path = cardPublicPath(next);
+    const path = editingOrder
+      ? `/${resolveOrderLiveUrl(editingOrder).slug}`
+      : cardPublicPath(next);
+
+    // 1) Open tab in the same click — never wait on network first
+    const tab = window.open(path, "_blank", "noopener,noreferrer");
+
+    // 2) Sync local cache only (fast) so the public page can read latest edits
+    let saved = next;
     try {
-      const saved = await persistProfile(next);
+      saved = editingOrder
+        ? saveOrderCardProfile(editingOrder.id, next, locIds)
+        : saveCardProfile(next);
       setProfile(saved);
     } catch {
       setProfile(next);
     }
-    window.open(path, "_blank", "noopener,noreferrer");
+    setViewingCard(false);
+
+    // 3) Supabase upsert in the background (was blocking View card for seconds)
+    if (editingOrder) {
+      void persistOrderCardProfile(editingOrder, saved, locIds)
+        .then((dbSaved) => setProfile(dbSaved))
+        .catch((err) =>
+          console.warn("[edit-card] background save after view:", err),
+        );
+    }
+
+    if (!tab || tab.closed) {
+      window.open(path, "_blank", "noopener,noreferrer");
+    }
   }
 
   function requestDefaultImage(kind: "cover" | "logo") {
@@ -394,8 +416,6 @@ export default function EditCard() {
     try {
       const saved = await persistProfile(next);
       setProfile(saved);
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 1800);
     } catch {
       // Keep the UI on the chosen layout even if storage fails
       setProfile(next);
@@ -592,8 +612,6 @@ export default function EditCard() {
       const saved = await persistProfile(next);
       setProfile(saved);
       setBrochureJustUploaded(true);
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 1800);
       window.setTimeout(() => setBrochureJustUploaded(false), 3200);
     } catch (err) {
       setBrochureError(
@@ -652,8 +670,6 @@ export default function EditCard() {
     try {
       const next = await persistProfile(profile);
       setProfile(next);
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 1800);
       return true;
     } catch {
       // Last-resort: clear images and save contact/social data
@@ -669,8 +685,6 @@ export default function EditCard() {
       try {
         const next = await persistProfile(stripped);
         setProfile(next);
-        setSavedFlash(true);
-        window.setTimeout(() => setSavedFlash(false), 1800);
         window.alert(
           "Images were too large for browser storage. Profile details were saved without images — please re-upload smaller photos.",
         );
@@ -682,12 +696,30 @@ export default function EditCard() {
     }
   }
 
-  async function handleStepSave() {
-    const ok = await handleSave();
-    if (!ok) return;
-    if (tab === "contact") setTab("social");
-    else if (tab === "social") setTab("businessInfo");
-    else if (tab === "businessInfo") setTab("appearance");
+  /** Intermediate tabs: persist, then advance to the next section. */
+  async function handleSaveAndContinue() {
+    if (savingStep) return;
+    setSavingStep(true);
+    try {
+      const ok = await handleSave();
+      if (!ok) return;
+      if (tab === "contact") setTab("social");
+      else if (tab === "social") setTab("businessInfo");
+      else if (tab === "businessInfo") setTab("appearance");
+    } finally {
+      setSavingStep(false);
+    }
+  }
+
+  /** Last tab: persist and stay on the editor. */
+  async function handleSaveAndFinish() {
+    if (savingStep) return;
+    setSavingStep(true);
+    try {
+      await handleSave();
+    } finally {
+      setSavingStep(false);
+    }
   }
 
   if (!authReady || !user || !profile) {
@@ -735,18 +767,16 @@ export default function EditCard() {
             <button
               type="button"
               onClick={() => void handleViewCard()}
-              className="hidden items-center gap-1.5 rounded-lg border border-black/[0.08] px-3 py-2 text-[13px] font-semibold text-[#141414] hover:bg-[#FAFAF8] sm:inline-flex"
+              disabled={viewingCard}
+              aria-busy={viewingCard}
+              className="group relative inline-flex items-center gap-1.5 overflow-hidden rounded-lg border border-black/[0.1] bg-white px-3 py-2 text-[13px] font-semibold text-[#141414] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200 hover:-translate-y-px hover:border-[#BC7C10]/45 hover:bg-[#FFF8ED] hover:text-[#9a650d] hover:shadow-[0_6px_16px_-8px_rgba(188,124,16,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#BC7C10]/35 disabled:cursor-wait disabled:opacity-80"
             >
-              <Eye className="h-3.5 w-3.5" />
-              View card
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#BC7C10] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#9a650d]"
-            >
-              {savedFlash ? <Check className="h-3.5 w-3.5" /> : null}
-              {savedFlash ? "Saved" : "Save"}
+              {viewingCard ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#BC7C10]" />
+              ) : (
+                <Eye className="h-3.5 w-3.5 transition-transform duration-200 group-hover:scale-110" />
+              )}
+              <span>{viewingCard ? "Opening…" : "View card"}</span>
             </button>
           </div>
         </div>
@@ -1460,21 +1490,36 @@ export default function EditCard() {
                 {tab === "appearance" ? (
                   <button
                     type="button"
-                    onClick={() => void handleSave()}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#BC7C10] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#9a650d]"
+                    onClick={() => void handleSaveAndFinish()}
+                    disabled={savingStep}
+                    aria-busy={savingStep}
+                    className="inline-flex min-w-[9.5rem] items-center justify-center gap-1.5 rounded-lg bg-[#BC7C10] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#9a650d] disabled:cursor-wait disabled:opacity-80"
                   >
-                    {savedFlash ? <Check className="h-4 w-4" /> : null}
-                    {savedFlash ? "Saved" : "Save and finish"}
+                    {savingStep ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Updating…
+                      </>
+                    ) : (
+                      "Save and finish"
+                    )}
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => void handleStepSave()}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#BC7C10] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#9a650d]"
+                    onClick={() => void handleSaveAndContinue()}
+                    disabled={savingStep}
+                    aria-busy={savingStep}
+                    className="inline-flex min-w-[10.5rem] items-center justify-center gap-1.5 rounded-lg bg-[#BC7C10] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#9a650d] disabled:cursor-wait disabled:opacity-80"
                   >
-                    {savedFlash ? <Check className="h-4 w-4" /> : null}
-                    {savedFlash ? "Saved" : "Save"}
-                    {!savedFlash ? <ArrowRight className="h-4 w-4" /> : null}
+                    {savingStep ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving…
+                      </>
+                    ) : (
+                      "Save and continue"
+                    )}
                   </button>
                 )}
               </div>

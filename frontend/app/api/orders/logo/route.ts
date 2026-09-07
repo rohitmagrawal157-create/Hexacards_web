@@ -11,7 +11,7 @@ export const runtime = "nodejs";
  * Body: { orderId, dataUrl }
  *
  * Stores the NFC studio logo in the card-images bucket as
- * `{orderId}-order-logo.png` so Super Admin / PDFs can load it.
+ * `{orderId}-order-logo.{png|jpg|pdf}` so Super Admin / PDFs can load it.
  */
 export async function POST(request: Request) {
   try {

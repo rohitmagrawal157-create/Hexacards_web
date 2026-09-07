@@ -12,6 +12,7 @@ import {
   fetchOrders,
   getOrders,
   isOrderDashboardHidden,
+  isOrderPaymentPaid,
   prependOrderToLocalCache,
   type HexaOrder,
 } from "@/lib/orders";
@@ -24,6 +25,7 @@ import {
   isCardProductOrder,
   orderToDashboardCard,
 } from "@/lib/user-cards";
+import { buildPublicCardUrl } from "@/lib/site-url";
 
 export type AdminUserRecord = {
   id: string;
@@ -202,7 +204,7 @@ function cardDtoToAdmin(card: CardDto): AdminCardRecord {
     id: `card-${card.cardId}`,
     srNo: 0,
     name: card.cardName || slug,
-    liveUrl: `https://hexacards.com/${slug}`,
+    liveUrl: buildPublicCardUrl(slug, "canonical"),
     email: card.email?.trim() || "",
     mobile: (card.mobile || "").replace(/\D/g, "").slice(-10),
     startDate: card.startDate
@@ -405,21 +407,21 @@ export function getAdminUsers(): AdminUserRecord[] {
 
 /** Load users from Supabase + order-only rows; re-number newest as highest No. */
 export async function fetchAdminUsers(): Promise<AdminUserRecord[]> {
-  await fetchOrders();
   const store = readJson<UsersStore>(USERS_KEY, emptyUsersStore());
-  const res = await apiFetch<UserDto[]>("/api/users");
+  // Fetch users + orders in parallel so the UI is not stuck on order compile first.
+  const [res] = await Promise.all([
+    apiFetch<UserDto[]>("/api/users"),
+    fetchOrders().catch(() => [] as HexaOrder[]),
+  ]);
 
-  const dbRows =
-    res.ok && Array.isArray(res.data)
-      ? res.data
-          .map(userDtoToAdmin)
-          .filter((u) => !store.deletedIds.includes(u.id))
-          .map((u) => ({ ...u, ...store.overrides[u.id] }))
-      : [];
-
-  if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
+  if (!res.ok || !Array.isArray(res.data)) {
     return getAdminUsers();
   }
+
+  const dbRows = res.data
+    .map(userDtoToAdmin)
+    .filter((u) => !store.deletedIds.includes(u.id))
+    .map((u) => ({ ...u, ...store.overrides[u.id] }));
 
   return assignSrNos(sortAdminUsers(mergeAdminUserRows(dbRows, store)));
 }
@@ -665,6 +667,7 @@ export function toggleAdminUser(id: string, active: boolean) {
 export function getAdminCards(): AdminCardRecord[] {
   const store = readCardsStore();
   const orders = getOrders()
+    .filter(isOrderPaymentPaid)
     .filter(isCardProductOrder)
     .filter((o) => !isOrderDashboardHidden(o));
   const orderRows = orders
@@ -696,21 +699,35 @@ export function getAdminCards(): AdminCardRecord[] {
   );
 
   return assignSrNos(
-    mergeAdminCards([], [...orderRows, ...cachedExtras]).map((c) => ({
-      ...c,
-      ...store.overrides[c.id],
-    })),
+    sortAdminCards(
+      mergeAdminCards([], [...orderRows, ...cachedExtras]).map((c) => ({
+        ...c,
+        ...store.overrides[c.id],
+      })),
+    ),
   );
 }
 
+function parseAdminCardDate(value: string): number {
+  if (!value?.trim()) return 0;
+  const spaced = new Date(value.replace(/-/g, " ")).getTime();
+  if (!Number.isNaN(spaced)) return spaced;
+  const raw = new Date(value).getTime();
+  return Number.isNaN(raw) ? 0 : raw;
+}
+
+/** Newest cards first — by DB card_id, then start date. Never alphabetical by name. */
 function sortAdminCards(rows: AdminCardRecord[]): AdminCardRecord[] {
   return [...rows].sort((a, b) => {
-    const aTime = new Date(a.startDate.replace(/-/g, " ")).getTime();
-    const bTime = new Date(b.startDate.replace(/-/g, " ")).getTime();
-    if (bTime !== aTime) return bTime - aTime;
-    return slugFromLiveUrl(a.liveUrl).localeCompare(
-      slugFromLiveUrl(b.liveUrl),
-    );
+    const aId = adminCardIdNumeric(a.id) ?? 0;
+    const bId = adminCardIdNumeric(b.id) ?? 0;
+    if (aId !== bId) return bId - aId;
+
+    const aTime = parseAdminCardDate(a.startDate);
+    const bTime = parseAdminCardDate(b.startDate);
+    if (aTime !== bTime) return bTime - aTime;
+
+    return b.id.localeCompare(a.id);
   });
 }
 
@@ -771,6 +788,7 @@ export async function fetchAdminCards(): Promise<AdminCardRecord[]> {
   );
 
   const orderRows = orders
+    .filter(isOrderPaymentPaid)
     .filter(isCardProductOrder)
     .filter((o) => {
       const dbId = o.cardId && o.cardId > 0 ? `card-${o.cardId}` : null;

@@ -395,6 +395,8 @@ export default function CardCustomizer() {
   const [subTitle, setSubTitle] = useState("");
   const [moreDetails, setMoreDetails] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoFileName, setLogoFileName] = useState<string | null>(null);
+  const [logoMime, setLogoMime] = useState<string | null>(null);
   const [displayLogo, setDisplayLogo] = useState<string | null>(null);
   const [frontLogo, setFrontLogo] = useState<LogoLayout>(FRONT_LOGO_DEFAULT);
   const [backLogo, setBackLogo] = useState<LogoLayout>(BACK_LOGO_DEFAULT);
@@ -460,6 +462,13 @@ export default function CardCustomizer() {
   });
 
   const hasExtraLine = moreDetails.trim().length > 0;
+  const logoIsPng =
+    Boolean(logoUrl) &&
+    (logoMime === "image/png" ||
+      (logoFileName || "").toLowerCase().endsWith(".png") ||
+      (logoUrl || "").startsWith("data:image/png"));
+  /** Only PNG is rendered on the live card preview. */
+  const logoShowsOnCard = logoIsPng;
 
   const progress =
     (title.trim() ? 1 : 0) +
@@ -476,7 +485,7 @@ export default function CardCustomizer() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!logoUrl) {
+    if (!logoUrl || !logoShowsOnCard) {
       setDisplayLogo(null);
       return;
     }
@@ -490,7 +499,7 @@ export default function CardCustomizer() {
     return () => {
       cancelled = true;
     };
-  }, [logoUrl, logoFinish]);
+  }, [logoUrl, logoFinish, logoShowsOnCard]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -536,10 +545,23 @@ export default function CardCustomizer() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const isPng =
-      file.type === "image/png" || file.name.toLowerCase().endsWith(".png");
-    if (!isPng) {
-      setLogoError("Only PNG files are accepted. Please upload a .png logo.");
+    const name = file.name.toLowerCase();
+    const isPng = file.type === "image/png" || name.endsWith(".png");
+    const isJpg =
+      file.type === "image/jpeg" ||
+      file.type === "image/jpg" ||
+      name.endsWith(".jpg") ||
+      name.endsWith(".jpeg");
+    const isPdf = file.type === "application/pdf" || name.endsWith(".pdf");
+
+    if (!isPng && !isJpg && !isPdf) {
+      setLogoError("Use PNG, JPG, or PDF only.");
+      if (logoInputRef.current) logoInputRef.current.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoError("Logo must be 5 MB or smaller.");
       if (logoInputRef.current) logoInputRef.current.value = "";
       return;
     }
@@ -551,21 +573,68 @@ export default function CardCustomizer() {
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = typeof reader.result === "string" ? reader.result : "";
-      if (!dataUrl.startsWith("data:image/")) {
+      if (!dataUrl) {
+        setLogoError("Could not read that file. Please try another.");
+        return;
+      }
+
+      // PNG → show on card preview. JPG / PDF → stored for print, not on preview.
+      if (isPng && !dataUrl.startsWith("data:image/png")) {
         setLogoError("Could not read that PNG. Please try another file.");
         return;
       }
-      setLogoUrl(dataUrl);
+      if (isJpg && !dataUrl.startsWith("data:image/")) {
+        setLogoError("Could not read that JPG. Please try another file.");
+        return;
+      }
+      let nextUrl = dataUrl;
+      if (isPdf) {
+        if (
+          !dataUrl.startsWith("data:application/pdf") &&
+          !dataUrl.startsWith("data:application/octet-stream") &&
+          !dataUrl.startsWith("data:")
+        ) {
+          setLogoError("Could not read that PDF. Please try another file.");
+          return;
+        }
+        // Normalize so checkout / Super Admin persistence always sees application/pdf.
+        if (dataUrl.startsWith("data:application/octet-stream")) {
+          nextUrl = dataUrl.replace(
+            /^data:application\/octet-stream/i,
+            "data:application/pdf",
+          );
+        } else if (
+          dataUrl.startsWith("data:") &&
+          !dataUrl.startsWith("data:application/pdf")
+        ) {
+          nextUrl = dataUrl.replace(/^data:[^;]+/i, "data:application/pdf");
+        }
+      }
+
+      setLogoUrl(nextUrl);
+      setLogoFileName(file.name);
+      setLogoMime(
+        isPng
+          ? "image/png"
+          : isJpg
+            ? "image/jpeg"
+            : "application/pdf",
+      );
       setFrontLogo(FRONT_LOGO_DEFAULT);
       setBackLogo(BACK_LOGO_DEFAULT);
-      setSide("back");
-      setLogoEditing(true);
       setLogoConfirmed(false);
-      setFlipPulse(true);
-      window.setTimeout(() => setFlipPulse(false), 4500);
+
+      if (isPng) {
+        setSide("back");
+        setLogoEditing(true);
+        setFlipPulse(true);
+        window.setTimeout(() => setFlipPulse(false), 4500);
+      } else {
+        setLogoEditing(false);
+      }
     };
     reader.onerror = () => {
-      setLogoError("Could not read that PNG. Please try another file.");
+      setLogoError("Could not read that file. Please try another.");
     };
     reader.readAsDataURL(file);
   }
@@ -579,6 +648,8 @@ export default function CardCustomizer() {
     if (logoObjectUrl.current) URL.revokeObjectURL(logoObjectUrl.current);
     logoObjectUrl.current = null;
     setLogoUrl(null);
+    setLogoFileName(null);
+    setLogoMime(null);
     setLogoError(null);
     setFrontLogo(FRONT_LOGO_DEFAULT);
     setBackLogo(BACK_LOGO_DEFAULT);
@@ -947,7 +1018,7 @@ export default function CardCustomizer() {
                               dangerouslySetInnerHTML={{ __html: previewQrSvg }}
                             />
                           </>
-                        ) : logoUrl ? (
+                        ) : logoShowsOnCard ? (
                           <PlacedLogo
                             src={displayLogo ?? logoUrl}
                             layout={backLogo}
@@ -955,6 +1026,18 @@ export default function CardCustomizer() {
                             onSelect={() => setLogoEditing(true)}
                             centered
                           />
+                        ) : logoUrl ? (
+                          <div className="absolute inset-0 z-10 flex items-center justify-center px-6 text-center">
+                            <p
+                              className="rounded-lg px-3 py-2 text-[10px] leading-snug font-semibold tracking-wide uppercase opacity-80"
+                              style={{ color: displayTextColor }}
+                            >
+                              Print file uploaded
+                              <span className="mt-1 block text-[9px] font-medium normal-case opacity-80">
+                                Not shown on card preview
+                              </span>
+                            </p>
+                          </div>
                         ) : (
                           <BackLogoPlaceholder
                             fill={metalGradient ?? displayAccentColor}
@@ -972,7 +1055,7 @@ export default function CardCustomizer() {
 
             {/* Back logo adjust toolbar — under preview */}
             <AnimatePresence>
-              {logoUrl && side === "back" ? (
+              {logoShowsOnCard && side === "back" ? (
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1363,13 +1446,17 @@ export default function CardCustomizer() {
             <input
               ref={logoInputRef}
               type="file"
-              accept="image/png,.png"
+              accept="image/png,.png,image/jpeg,.jpg,.jpeg,application/pdf,.pdf"
               onChange={handleLogoChange}
               className="sr-only"
             />
             <div className="mb-1 rounded-lg border border-[#BC7C10]/20 bg-[#FFFCF7] px-1.5 py-1 text-[10px] leading-relaxed text-[#5c5346] sm:mb-3 sm:rounded-xl sm:px-3.5 sm:py-3 sm:text-xs">
               <p className="font-semibold text-[#141414]">
-                PNG only · transparent background recommended
+                PNG · transparent background recommended for preview
+              </p>
+              <p className="mt-0.5 text-[#5c5346]">
+                JPG and PDF allowed for print · they will not show on the card
+                preview
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -1383,20 +1470,22 @@ export default function CardCustomizer() {
                 }`}
               >
                 <Upload className="h-3.5 w-3.5 text-[#BC7C10] sm:h-4 sm:w-4" />
-                {logoUrl ? "Change logo" : "Upload PNG logo"}
+                {logoUrl ? "Change file" : "Upload logo"}
               </button>
               {logoUrl ? (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSide("back");
-                      setLogoEditing(true);
-                    }}
-                    className="text-xs font-semibold text-[#BC7C10] underline-offset-2 hover:underline sm:text-sm"
-                  >
-                    Adjust on back
-                  </button>
+                  {logoShowsOnCard ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSide("back");
+                        setLogoEditing(true);
+                      }}
+                      className="text-xs font-semibold text-[#BC7C10] underline-offset-2 hover:underline sm:text-sm"
+                    >
+                      Adjust on back
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={removeLogo}
@@ -1404,9 +1493,13 @@ export default function CardCustomizer() {
                   >
                     Remove
                   </button>
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700">
-                    <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                    Logo added
+                  <span className="inline-flex max-w-full items-center gap-1 text-xs font-medium text-green-700">
+                    <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={3} />
+                    <span className="truncate">
+                      {logoShowsOnCard
+                        ? `PNG on preview${logoFileName ? ` · ${logoFileName}` : ""}`
+                        : `${logoFileName || "File"} uploaded · print only`}
+                    </span>
                   </span>
                 </>
               ) : null}

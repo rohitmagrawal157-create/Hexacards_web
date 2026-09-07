@@ -6,7 +6,8 @@ function stripTrailingSlash(url: string): string {
   return url.replace(/\/$/, "");
 }
 
-function isLocalHost(hostnameOrUrl: string): boolean {
+/** True for localhost / 127.0.0.1 (hostname or full URL). */
+export function isLocalHost(hostnameOrUrl: string): boolean {
   const value = hostnameOrUrl
     .replace(/^https?:\/\//i, "")
     .split("/")[0]
@@ -15,12 +16,17 @@ function isLocalHost(hostnameOrUrl: string): boolean {
   return value === "localhost" || value === "127.0.0.1";
 }
 
-/** Production share link base (QR, NFC, SMS, DB). */
+/** Production print / QR / NFC base — never localhost, even if SITE_URL is local. */
 export function getCanonicalSiteOrigin(): string {
-  const fromEnv =
-    process.env.NEXT_PUBLIC_CANONICAL_SITE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  return stripTrailingSlash(fromEnv || DEFAULT_CANONICAL);
+  const canonical = process.env.NEXT_PUBLIC_CANONICAL_SITE_URL?.trim();
+  if (canonical && !isLocalHost(canonical)) {
+    return stripTrailingSlash(canonical);
+  }
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (site && !isLocalHost(site)) {
+    return stripTrailingSlash(site);
+  }
+  return DEFAULT_CANONICAL;
 }
 
 /** Current deployment origin — Vercel preview or browser. */
@@ -130,4 +136,29 @@ export function buildOwnerDisplayCardUrl(slug: string): string {
  */
 export function buildShareCardUrl(slug: string): string {
   return buildPublicCardUrl(slug, "share");
+}
+
+/**
+ * Rewrite a stored card URL that may contain localhost (from local checkout)
+ * into a public URL. Prefer the known slug when provided.
+ */
+export function normalizeStoredCardUrl(
+  storedUrl: string | null | undefined,
+  slug?: string | null,
+  mode: PublicCardUrlMode = "canonical",
+): string {
+  const fromSlug = (slug || "").trim().replace(/^\/+/, "");
+  let fromUrl = "";
+  const raw = (storedUrl || "").trim();
+  if (raw) {
+    try {
+      const parsed = new URL(raw, DEFAULT_CANONICAL);
+      fromUrl = parsed.pathname.replace(/^\/+|\/+$/g, "").split("/")[0] || "";
+    } catch {
+      fromUrl = raw.replace(/^\/+|\/+$/g, "").split("/")[0] || "";
+    }
+  }
+  const cleanSlug = fromSlug || fromUrl;
+  if (!cleanSlug) return getCanonicalSiteOrigin();
+  return buildPublicCardUrl(cleanSlug, mode);
 }

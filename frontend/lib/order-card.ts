@@ -4,7 +4,7 @@ import { resolveCardImageSrc } from "@/lib/card-images";
 import { blobUrlToDataUrl } from "@/lib/user-cards";
 import { getCachedOrderLogo, isOrderLogoRef, loadOrderLogo } from "@/lib/order-logo-store";
 import { styledQrDataUri } from "@/lib/styled-qr";
-import { buildPublicCardUrl } from "@/lib/site-url";
+import { normalizeStoredCardUrl, buildPublicCardUrl } from "@/lib/site-url";
 
 export type CardBodyType = "black" | "white";
 export type CardMetalFinish = "gold" | "silver";
@@ -76,12 +76,23 @@ export function clampLogoLayout(
   return { size, x, y };
 }
 
+/** PDF logos are print/download assets — browsers cannot show them in <img>. */
+export function isPdfLogoSrc(src?: string | null): boolean {
+  if (!src?.trim()) return false;
+  const t = src.trim().toLowerCase();
+  if (t.startsWith("data:application/pdf")) return true;
+  if (t.includes("application/pdf")) return true;
+  const path = t.split("?")[0].split("#")[0];
+  return path.endsWith(".pdf");
+}
+
 function isUsableLogoSrc(src?: string | null): boolean {
   if (!src?.trim()) return false;
   if (src.startsWith("blob:")) return false;
   if (isOrderLogoRef(src)) return false;
   if (isDefaultLogoImage(src)) return false;
   if (src.startsWith("data:image/")) return src.length > 80;
+  if (src.startsWith("data:application/pdf")) return src.length > 80;
   return (
     src.startsWith("http://") ||
     src.startsWith("https://") ||
@@ -785,6 +796,8 @@ export async function prepareCardLogoDataUrl(
   src: string,
 ): Promise<string | undefined> {
   if (typeof window === "undefined") return src;
+  // PDF cannot be drawn to canvas / shown as a card face image.
+  if (isPdfLogoSrc(src)) return undefined;
   if (!src.startsWith("data:image/") && !src.startsWith("blob:") && !src.startsWith("http")) {
     return src;
   }
@@ -1061,6 +1074,55 @@ export async function allocateOrderCardSlug(name: string): Promise<string> {
   return json.data.slug;
 }
 
+/**
+ * Attach a public card slug/URL only after payment is paid.
+ * Never call this for pending / failed checkouts.
+ */
+export async function attachOrderCardLinkAfterPayment(
+  order: HexaOrder,
+  cardName: string,
+): Promise<HexaOrder> {
+  if (order.paymentStatus !== "paid") {
+    throw new Error("Card link is only created after successful payment.");
+  }
+  if (order.cardSlug?.trim() && order.cardUrl?.trim()) {
+    return order;
+  }
+  const finalSlug = await allocateOrderCardSlug(cardName);
+  const liveUrl = buildPublicCardUrl(finalSlug, "canonical");
+  const baseDesign = order.cardDesign;
+  const updated = await updateOrder(order.id, {
+    cardSlug: finalSlug,
+    cardUrl: liveUrl,
+    cardDesign: baseDesign ? { ...baseDesign, liveUrl } : undefined,
+  });
+  return (
+    updated ?? {
+      ...order,
+      cardSlug: finalSlug,
+      cardUrl: liveUrl,
+      cardDesign: baseDesign ? { ...baseDesign, liveUrl } : undefined,
+    }
+  );
+}
+
+/** Strip card link fields when payment fails or is cancelled. */
+export async function clearOrderCardLinkOnFailedPayment(
+  orderId: string,
+): Promise<void> {
+  const order = getOrderById(orderId);
+  const design = order?.cardDesign
+    ? { ...order.cardDesign, liveUrl: undefined }
+    : undefined;
+  await updateOrder(orderId, {
+    paymentStatus: "failed",
+    cardId: null,
+    cardSlug: "",
+    cardUrl: "",
+    cardDesign: design,
+  });
+}
+
 function slugFromUrl(url?: string | null): string {
   if (!url?.trim()) return "";
   const raw = url.trim();
@@ -1077,8 +1139,12 @@ function orderName(order: HexaOrder): string {
 }
 
 function orderPublicSlug(order: HexaOrder): string {
+  // Prefer DB-linked slug, then slug embedded in stored URLs, then name fallback.
+  // Never invent a base name when cardUrl already has a unique suffix (e.g. rohit-agrawal3).
   return (
-    order.cardSlug?.trim() ||
+    order.cardSlug?.trim().toLowerCase() ||
+    slugFromUrl(order.cardUrl) ||
+    slugFromUrl(order.cardDesign?.liveUrl) ||
     buildOrderCardSlug(orderName(order), order.phone, order.id)
   );
 }
@@ -1130,12 +1196,10 @@ export function resolveOrderLiveUrl(order: HexaOrder): {
   slug: string;
   liveUrl: string;
 } {
-  const name = orderName(order);
   const slug = orderPublicSlug(order);
-  const liveUrl =
-    order.cardUrl?.trim() ||
-    order.cardDesign?.liveUrl?.trim() ||
-    buildPublicCardUrl(slug, "canonical");
+  // Always rebuild from the authoritative slug — never keep a stale host/path
+  // (e.g. order card_url still on /rohit-agrawal while cards.unic is /rohit-agrawal3).
+  const liveUrl = normalizeStoredCardUrl(null, slug, "canonical");
   return { slug, liveUrl };
 }
 

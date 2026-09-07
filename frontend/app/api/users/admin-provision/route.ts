@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import { mapCard } from "@/lib/server/card-types";
 import { allocateCardSlugForName } from "@/lib/server/card-slug";
+import { buildPublicCardUrl } from "@/lib/site-url";
 import {
   computeCardEndDateIso,
   toIsoDateOnly,
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
     const cardSlug = await allocateCardSlugForName(supabase, customerName);
     const startDate = toIsoDateOnly(new Date());
     const endDate = computeCardEndDateIso(startDate, "digital-profile-qr");
-    const cardUrl = `https://hexacards.com/${cardSlug}`;
+    const cardUrl = buildPublicCardUrl(cardSlug, "canonical");
 
     const { data: productRow } = await supabase
       .from("products")

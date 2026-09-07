@@ -3,7 +3,6 @@ import { saveCardImage, sanitizeCardUsername } from "@/lib/server/card-image-sto
 import { jsonError, jsonOk, toNumber } from "@/lib/admin-catalog-db";
 import type { OrderCardDesignData } from "@/lib/order-card";
 import {
-  mapOrder,
   mergeCardDesignForDb,
   orderLogoColumnValue,
   paymentToDb,
@@ -12,6 +11,7 @@ import {
   type OrderRow,
   type OrderWriteBody,
 } from "@/lib/server/order-types";
+import { mapOrderWithLinkedCard } from "@/lib/server/order-live-url";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -85,7 +85,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const supabase = getSupabaseAdmin();
     const row = await findOrder(supabase, id);
     if (!row) return jsonError(404, "Order not found");
-    return jsonOk(mapOrder(row));
+    return jsonOk(await mapOrderWithLinkedCard(supabase, row));
   } catch (err) {
     return jsonError(
       500,
@@ -244,7 +244,11 @@ export async function PUT(request: Request, context: RouteContext) {
     if (body.cardDesign !== undefined) {
       let incoming: OrderCardDesignData | null = body.cardDesign;
       const logo = incoming?.logoSrc?.trim();
-      if (incoming && logo?.startsWith("data:image/")) {
+      if (
+        incoming &&
+        (logo?.startsWith("data:image/") ||
+          logo?.startsWith("data:application/pdf"))
+      ) {
         try {
           const saved = await saveCardImage({
             username: sanitizeCardUsername(
@@ -318,7 +322,7 @@ export async function PUT(request: Request, context: RouteContext) {
       await syncOrderItems(supabase, updated);
     }
 
-    return jsonOk(mapOrder(updated));
+    return jsonOk(await mapOrderWithLinkedCard(supabase, updated));
   } catch (err) {
     return jsonError(
       500,

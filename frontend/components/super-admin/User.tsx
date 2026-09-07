@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import {
   fetchAdminUsers,
-  getAdminUsers,
   provisionAdminUserWithCard,
   toggleAdminUser,
   updateAdminUser,
@@ -200,7 +199,8 @@ export default function UsersPanel({
   onAddUser?: (user: AdminUserRow) => void;
   onUpdateUser?: (user: AdminUserRow) => void;
 }) {
-  const [rows, setRows] = useState<AdminUserRow[]>(() => users ?? getAdminUsers());
+  const [rows, setRows] = useState<AdminUserRow[]>(() => users ?? []);
+  const [loading, setLoading] = useState(() => !users);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -215,19 +215,32 @@ export default function UsersPanel({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    function sync() {
-      void fetchAdminUsers().then(setRows);
+    if (users) {
+      setRows(users);
+      setLoading(false);
+      return;
     }
-    sync();
+
+    let cancelled = false;
+    async function sync() {
+      try {
+        const next = await fetchAdminUsers();
+        if (!cancelled) setRows(next);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void sync();
     window.addEventListener("hexa-orders-change", sync);
     window.addEventListener("hexa-admin-directory-change", sync);
     window.addEventListener("focus", sync);
     return () => {
+      cancelled = true;
       window.removeEventListener("hexa-orders-change", sync);
       window.removeEventListener("hexa-admin-directory-change", sync);
       window.removeEventListener("focus", sync);
     };
-  }, []);
+  }, [users]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -376,7 +389,12 @@ export default function UsersPanel({
       return;
     }
 
-    setAuthUser(phone, fullName(user) || "User");
+    const userId = id.startsWith("db-") ? Number(id.slice(3)) : undefined;
+    setAuthUser(
+      phone,
+      fullName(user) || "User",
+      Number.isInteger(userId) && (userId as number) > 0 ? userId : undefined,
+    );
     const dashboard = window.open("/dashboard", "_blank", "noopener,noreferrer");
     if (!dashboard) {
       // window.alert("Please allow pop-ups to open this user’s dashboard in a new tab.");
@@ -605,6 +623,17 @@ export default function UsersPanel({
               </tr>
             </thead>
             <tbody>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-5 py-10 text-center text-sm text-[#8a8174]"
+                  >
+                    Loading users…
+                  </td>
+                </tr>
+              ) : (
+                <>
               {pageRows.map((user) => (
                 <tr
                   key={user.id}
@@ -697,6 +726,8 @@ export default function UsersPanel({
                   </td>
                 </tr>
               ) : null}
+                </>
+              )}
             </tbody>
           </table>
         </div>
