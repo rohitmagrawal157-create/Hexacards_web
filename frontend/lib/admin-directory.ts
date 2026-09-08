@@ -206,7 +206,7 @@ function cardDtoToAdmin(card: CardDto): AdminCardRecord {
     name: card.cardName || slug,
     liveUrl: buildPublicCardUrl(slug, "canonical"),
     email: card.email?.trim() || "",
-    mobile: (card.mobile || "").replace(/\D/g, "").slice(-10),
+    mobile: card.mobile || "",
     startDate: card.startDate
       ? formatShortDateDashed(card.startDate)
       : formatShortDateDashed(card.dateTime),

@@ -35,6 +35,8 @@ export type CardRow = {
   date_time: string;
   update_time: string;
   status: number;
+  /** Comma-separated extra 10-digit mobiles (last column) */
+  extra_mobiles?: string | null;
 };
 
 export type CardDto = {
@@ -51,6 +53,8 @@ export type CardDto = {
   /** Dashboard Appearance accent (e.g. #141414) */
   accentColor?: string | null;
   mobile: string;
+  /** Extra contact numbers stored in cards.extra_mobiles */
+  extraMobiles?: string[];
   email: string | null;
   website: string | null;
   code: string;
@@ -106,6 +110,9 @@ export type CardCreateBody = {
   accentColor?: string | null;
   accent_color?: string | null;
   mobile?: string;
+  /** Extra mobiles — array or comma-separated string */
+  extraMobiles?: string[] | string | null;
+  extra_mobiles?: string[] | string | null;
   email?: string | null;
   website?: string | null;
   code?: string;
@@ -149,7 +156,82 @@ export type CardCreateBody = {
 
 export type CardUpdateBody = CardCreateBody;
 
+const MAX_EXTRA_MOBILES_DB = 4;
+
+/** Normalize DB / API extra_mobiles into unique 10-digit numbers. */
+export function parseExtraMobilesDb(
+  value: string | string[] | null | undefined,
+): string[] {
+  const parts: string[] = [];
+  if (Array.isArray(value)) {
+    for (const item of value) parts.push(String(item ?? ""));
+  } else if (typeof value === "string" && value.trim()) {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) parts.push(String(item ?? ""));
+        }
+      } catch {
+        parts.push(...trimmed.split(/[,|;]+/));
+      }
+    } else {
+      parts.push(...trimmed.split(/[,|;]+/));
+    }
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of parts) {
+    const digits = raw.replace(/\D/g, "").slice(-10);
+    if (!digits || seen.has(digits)) continue;
+    seen.add(digits);
+    out.push(digits);
+    if (out.length >= MAX_EXTRA_MOBILES_DB) break;
+  }
+  return out;
+}
+
+export function serializeExtraMobilesDb(
+  value: string | string[] | null | undefined,
+): string {
+  return parseExtraMobilesDb(value).join(",");
+}
+
+/**
+ * Primary stays in `mobile`; extras in `extra_mobiles`.
+ * Also migrates legacy `primary|extra` packed into mobile.
+ */
+export function resolveCardMobiles(
+  mobileRaw: string | null | undefined,
+  extraRaw?: string | string[] | null,
+): { mobile: string; extraMobiles: string[] } {
+  const fromCol = parseExtraMobilesDb(extraRaw);
+  const text = String(mobileRaw ?? "").trim();
+  if (text.includes("|")) {
+    const parts = text
+      .split("|")
+      .map((p) => p.replace(/\D/g, "").slice(-10))
+      .filter(Boolean);
+    const primary = parts[0] || "";
+    const legacyExtras = parts.slice(1);
+    const extras =
+      fromCol.length > 0
+        ? fromCol
+        : parseExtraMobilesDb(legacyExtras);
+    return { mobile: primary, extraMobiles: extras };
+  }
+  return {
+    mobile: text.replace(/\D/g, "").slice(-10) || text,
+    extraMobiles: fromCol,
+  };
+}
+
 export function mapCard(row: CardRow): CardDto {
+  const { mobile, extraMobiles } = resolveCardMobiles(
+    row.mobile,
+    row.extra_mobiles,
+  );
   return {
     cardId: Number(row.card_id),
     unicCardName: row.unic_card_name,
@@ -162,7 +244,8 @@ export function mapCard(row: CardRow): CardDto {
     bgUrl: row.bg_url ?? null,
     themeId: Number(row.theme_id),
     accentColor: row.accent_color?.trim() || null,
-    mobile: row.mobile,
+    mobile,
+    extraMobiles,
     email: row.email ?? null,
     website: row.website ?? null,
     code: row.code || "91",
@@ -189,14 +272,26 @@ export function mapCard(row: CardRow): CardDto {
   };
 }
 
+/** Oldest shape: no accent_color, no extra_mobiles */
 export const CARD_COLS_LEGACY =
   "card_id, unic_card_name, card_name, job_name, business_name, user_id, logo, bg_img, bg_url, theme_id, mobile, email, website, code, whatsapp, state_id, city_id, address, about, facebook_url, instagram_url, linkedin_url, twitter_url, youtube_url, google_url, about_company, services, brochure, page_view, start_date, end_date, date_time, update_time, status" as const;
 
-export const CARD_COLS =
+/** Has accent_color, no extra_mobiles */
+export const CARD_COLS_NO_EXTRA =
   "card_id, unic_card_name, card_name, job_name, business_name, user_id, logo, bg_img, bg_url, theme_id, accent_color, mobile, email, website, code, whatsapp, state_id, city_id, address, about, facebook_url, instagram_url, linkedin_url, twitter_url, youtube_url, google_url, about_company, services, brochure, page_view, start_date, end_date, date_time, update_time, status" as const;
+
+/** Full production columns — extra_mobiles last */
+export const CARD_COLS =
+  "card_id, unic_card_name, card_name, job_name, business_name, user_id, logo, bg_img, bg_url, theme_id, accent_color, mobile, email, website, code, whatsapp, state_id, city_id, address, about, facebook_url, instagram_url, linkedin_url, twitter_url, youtube_url, google_url, about_company, services, brochure, page_view, start_date, end_date, date_time, update_time, status, extra_mobiles" as const;
 
 export function isAccentColumnMissingError(message: string | undefined | null) {
   return Boolean(message && /accent_color/i.test(message));
+}
+
+export function isExtraMobilesColumnMissingError(
+  message: string | undefined | null,
+) {
+  return Boolean(message && /extra_mobiles/i.test(message));
 }
 
 export function stripAccentFromPayload<T extends Record<string, unknown>>(
@@ -205,6 +300,15 @@ export function stripAccentFromPayload<T extends Record<string, unknown>>(
   if (!("accent_color" in payload)) return payload;
   const next = { ...payload };
   delete next.accent_color;
+  return next;
+}
+
+export function stripExtraMobilesFromPayload<T extends Record<string, unknown>>(
+  payload: T,
+): T {
+  if (!("extra_mobiles" in payload)) return payload;
+  const next = { ...payload };
+  delete next.extra_mobiles;
   return next;
 }
 

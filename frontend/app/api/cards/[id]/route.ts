@@ -4,9 +4,13 @@ import { deleteCardForAdmin } from "@/lib/server/card-admin-delete";
 import {
   CARD_COLS,
   CARD_COLS_LEGACY,
+  CARD_COLS_NO_EXTRA,
   isAccentColumnMissingError,
+  isExtraMobilesColumnMissingError,
   mapCard,
+  serializeExtraMobilesDb,
   stripAccentFromPayload,
+  stripExtraMobilesFromPayload,
   type CardRow,
   type CardUpdateBody,
 } from "@/lib/server/card-types";
@@ -38,6 +42,14 @@ export async function GET(_request: Request, context: RouteContext) {
       .select(CARD_COLS)
       .eq("card_id", cardId)
       .maybeSingle();
+
+    if (error && isExtraMobilesColumnMissingError(error.message)) {
+      ({ data, error } = await supabase
+        .from("cards")
+        .select(CARD_COLS_NO_EXTRA)
+        .eq("card_id", cardId)
+        .maybeSingle());
+    }
 
     if (error && isAccentColumnMissingError(error.message)) {
       ({ data, error } = await supabase
@@ -101,7 +113,21 @@ export async function PATCH(request: Request, context: RouteContext) {
         .slice(0, 32);
       set("accent_color", accent || "#141414");
     }
-    if (body.mobile !== undefined) set("mobile", String(body.mobile ?? "").trim());
+    if (body.mobile !== undefined) {
+      const raw = String(body.mobile ?? "").trim();
+      set(
+        "mobile",
+        raw.includes("|")
+          ? raw.split("|")[0].replace(/\D/g, "").slice(-10)
+          : raw.replace(/\D/g, "").slice(-10) || raw,
+      );
+    }
+    if (body.extraMobiles !== undefined || body.extra_mobiles !== undefined) {
+      set(
+        "extra_mobiles",
+        serializeExtraMobilesDb(body.extraMobiles ?? body.extra_mobiles),
+      );
+    }
     if (body.email !== undefined) set("email", body.email ? String(body.email).trim() : null);
     if (body.code !== undefined) set("code", String(body.code || "91").trim() || "91");
     if (body.whatsapp !== undefined) {
@@ -149,10 +175,21 @@ export async function PATCH(request: Request, context: RouteContext) {
         .select(CARD_COLS)
         .maybeSingle();
 
+      if (error && isExtraMobilesColumnMissingError(error.message)) {
+        ({ data, error } = await supabase
+          .from("cards")
+          .update(stripExtraMobilesFromPayload(cardPayload))
+          .eq("card_id", cardId)
+          .select(CARD_COLS_NO_EXTRA)
+          .maybeSingle());
+      }
+
       if (error && isAccentColumnMissingError(error.message)) {
         ({ data, error } = await supabase
           .from("cards")
-          .update(stripAccentFromPayload(cardPayload))
+          .update(
+            stripAccentFromPayload(stripExtraMobilesFromPayload(cardPayload)),
+          )
           .eq("card_id", cardId)
           .select(CARD_COLS_LEGACY)
           .maybeSingle());
@@ -172,6 +209,13 @@ export async function PATCH(request: Request, context: RouteContext) {
         .select(CARD_COLS)
         .eq("card_id", cardId)
         .maybeSingle();
+      if (error && isExtraMobilesColumnMissingError(error.message)) {
+        ({ data, error } = await supabase
+          .from("cards")
+          .select(CARD_COLS_NO_EXTRA)
+          .eq("card_id", cardId)
+          .maybeSingle());
+      }
       if (error && isAccentColumnMissingError(error.message)) {
         ({ data, error } = await supabase
           .from("cards")

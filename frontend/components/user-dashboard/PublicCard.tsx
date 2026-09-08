@@ -66,9 +66,12 @@ export default function PublicCard() {
     cardMobile?: string | null,
     profileMobile?: string | null,
   ): string {
+    const fromCard = cardMobile?.includes("|")
+      ? cardMobile.split("|")[0]
+      : cardMobile;
     return (
       resolveOwnerAccountPhone(order) ||
-      normalizeIndianPhone(cardMobile ?? "") ||
+      normalizeIndianPhone(fromCard ?? "") ||
       normalizeIndianPhone(profileMobile ?? "")
     );
   }

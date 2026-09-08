@@ -31,6 +31,7 @@ import CardContactForm from "@/components/user-dashboard/CardContactForm";
 import CardLayoutFooter from "./CardLayoutFooter";
 import CardShareModal from "./CardShareModal";
 import {
+  allContactMobiles,
   formatDialNumber,
   openBrochureDownload,
   phoneDigitsForLink,
@@ -73,7 +74,7 @@ function ActionRow({
       href={href}
       target={href.startsWith("http") ? "_blank" : undefined}
       rel={href.startsWith("http") ? "noreferrer" : undefined}
-      className="flex items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-3.5 py-3 transition-colors hover:bg-[#FAFBFC]"
+      className="flex cursor-pointer items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-3.5 py-3 transition-colors hover:bg-[#FAFBFC]"
     >
       {/* Soft tinted icon — distinct from solid top quick-actions */}
       <span
@@ -107,7 +108,7 @@ function QuickIcon({
   accent: string;
 }) {
   const className =
-    "flex h-11 w-11 items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105 hover:opacity-90";
+    "flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105 hover:opacity-90";
 
   if (onClick) {
     return (
@@ -169,6 +170,7 @@ export default function Modern({
     .join(" - ");
   const country = profile.contact.countryCode || "IN";
   const mobile = profile.contact.mobile?.trim() || "";
+  const mobiles = allContactMobiles(profile.contact);
   const whatsapp = profile.contact.whatsapp?.trim() || mobile;
   const email = profile.contact.email?.trim() || "";
   const websiteRaw = profile.contact.website?.trim() || "";
@@ -284,7 +286,7 @@ export default function Modern({
                 onChangeBackground();
               }}
               aria-label="Change background image"
-              className="absolute right-3 bottom-3 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-sm"
+              className="absolute right-3 bottom-3 z-30 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-sm"
             >
               <Camera className="h-[15px] w-[15px]" strokeWidth={2.25} />
             </button>
@@ -308,7 +310,7 @@ export default function Modern({
                   type="button"
                   onClick={onChangeProfile}
                   aria-label="Change profile picture"
-                  className="absolute right-1 bottom-1 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-sm"
+                  className="absolute right-1 bottom-1 z-30 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-sm"
                 >
                   <Camera className="h-[15px] w-[15px]" strokeWidth={2.25} />
                 </button>
@@ -384,15 +386,19 @@ export default function Modern({
 
         {/* Stacked contact rows */}
         <div className="mt-6 space-y-2.5 px-4">
-          {mobile ? (
-            <ActionRow
-              icon={Phone}
-              label="Mobile"
-              value={formatDialNumber(country, mobile)}
-              href={`tel:+${mobileDigits}`}
-              accent={accent}
-            />
-          ) : null}
+          {mobiles.map((number, index) => {
+            const digits = phoneDigitsForLink(country, number);
+            return (
+              <ActionRow
+                key={`mobile-${index}-${digits}`}
+                icon={Phone}
+                label={index === 0 ? "Mobile" : `Mobile ${index + 1}`}
+                value={formatDialNumber(country, number)}
+                href={`tel:+${digits}`}
+                accent={accent}
+              />
+            );
+          })}
           {email ? (
             <ActionRow
               icon={Mail}
@@ -504,7 +510,7 @@ export default function Modern({
                 rel="noreferrer"
                 aria-label={label}
                 title={label}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105"
+                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105"
                 style={{ backgroundColor: bg }}
               >
                 <Icon className="h-4 w-4" />

@@ -3,6 +3,7 @@ import {
   DEFAULT_CARD_BANNER,
   defaultCardProfile,
   normalizeCoverImage,
+  normalizeExtraMobiles,
   normalizeLogoImage,
   type HexaCardProfile,
 } from "@/lib/card-profile";
@@ -131,6 +132,10 @@ export function getOrderCardProfile(
   if (!profile || typeof profile !== "object") return null;
   return {
     ...profile,
+    contact: {
+      ...profile.contact,
+      extraMobiles: normalizeExtraMobiles(profile.contact?.extraMobiles),
+    },
     appearance: {
       ...profile.appearance,
       coverImage: normalizeCoverImage(

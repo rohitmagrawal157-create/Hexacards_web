@@ -7,9 +7,10 @@ import {
 } from "@/lib/server/message-types";
 
 function digits10(value: string | null | undefined): string {
-  return String(value ?? "")
-    .replace(/\D/g, "")
-    .slice(-10);
+  const text = String(value ?? "").trim();
+  // cards.mobile may be primary|extra1|extra2
+  const primary = text.includes("|") ? text.split("|")[0] : text;
+  return primary.replace(/\D/g, "").slice(-10);
 }
 
 async function resolveUserIdByPhone(

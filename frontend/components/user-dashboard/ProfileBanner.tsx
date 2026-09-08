@@ -24,6 +24,7 @@ import {
 } from "react-icons/fa";
 import { SiTripadvisor } from "react-icons/si";
 import {
+  allContactMobiles,
   cardPublicUrl,
   formatDialNumber,
   normalizeCardLayout,
@@ -105,9 +106,9 @@ export default function ProfileBanner({
   const vcardHref = slug ? cardVcardHref(slug) : "";
 
   const ctaClass =
-    "flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-semibold text-white transition-opacity hover:opacity-90";
+    "flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-semibold text-white transition-opacity hover:opacity-90";
   const infoCardClass =
-    "min-w-0 rounded-xl border p-3 text-left transition-colors";
+    "min-w-0 cursor-pointer rounded-xl border p-3 text-left transition-colors";
 
   function handleSaveContactClick(
     e?: MouseEvent<HTMLAnchorElement | HTMLButtonElement>,
@@ -613,24 +614,24 @@ export default function ProfileBanner({
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 px-4 pb-4">
-        {profile.contact.mobile ? (
+        {allContactMobiles(profile.contact).map((number, index) => (
           <a
-            href={`tel:+${phoneDigitsForLink(profile.contact.countryCode, profile.contact.mobile)}`}
+            key={`mobile-${index}-${number}`}
+            href={`tel:+${phoneDigitsForLink(profile.contact.countryCode, number)}`}
             className={infoCardClass}
             style={{ borderColor: accentMuted }}
           >
             <div className="flex items-center gap-2" style={{ color: accent }}>
               <Phone className="h-3.5 w-3.5" strokeWidth={2} />
-              <span className="text-xs text-[#a0a0a8]">Mobile</span>
+              <span className="text-xs text-[#a0a0a8]">
+                {index === 0 ? "Mobile" : `Mobile ${index + 1}`}
+              </span>
             </div>
             <p className="mt-1 break-words text-[13px] leading-snug font-semibold text-[#0f0f12]">
-              {formatDialNumber(
-                profile.contact.countryCode,
-                profile.contact.mobile,
-              )}
+              {formatDialNumber(profile.contact.countryCode, number)}
             </p>
           </a>
-        ) : null}
+        ))}
 
         {profile.contact.email ? (
           <a

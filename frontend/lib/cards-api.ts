@@ -7,9 +7,12 @@ import { getAuthUser, normalizeIndianPhone } from "@/lib/auth";
 import {
   DEFAULT_CARD_AVATAR,
   DEFAULT_CARD_BANNER,
+  decodeCardMobileField,
+  encodeExtraMobilesField,
   normalizeCardAccent,
   normalizeCardLayout,
   normalizeCoverImage,
+  normalizeExtraMobiles,
   normalizeLogoImage,
   type CardLayoutId,
   type HexaCardProfile,
@@ -80,8 +83,13 @@ export function profileToCardBody(
     cityId?: number | null;
   },
 ) {
-  const mobile = normalizeIndianPhone(profile.contact.mobile);
-  const whatsapp = normalizeIndianPhone(profile.contact.whatsapp) || mobile;
+  const primaryMobile = normalizeIndianPhone(profile.contact.mobile);
+  const extraMobiles = encodeExtraMobilesField(
+    profile.contact.extraMobiles,
+    primaryMobile,
+  );
+  const whatsapp =
+    normalizeIndianPhone(profile.contact.whatsapp) || primaryMobile;
   const logo = dbImagePath(profile.appearance.logoImage);
   const cover = dbImagePath(profile.appearance.coverImage);
   const accentColor =
@@ -93,13 +101,14 @@ export function profileToCardBody(
     jobName: profile.contact.title.trim(),
     businessName: profile.contact.businessName.trim(),
     userId: opts.userId ?? undefined,
-    ownerPhone: opts.ownerPhone || mobile,
+    ownerPhone: opts.ownerPhone || primaryMobile,
     logo,
     bgImg: cover,
     bgUrl: cover,
     themeId: themeIdFromLayout(profile.appearance.layout),
     accentColor,
-    mobile,
+    mobile: primaryMobile,
+    extraMobiles,
     email: profile.contact.email.trim() || null,
     website: profile.contact.website.trim(),
     code: profile.contact.countryCode?.replace(/\D/g, "") || "91",
@@ -138,6 +147,7 @@ export function cardDtoToProfile(
       businessName: "",
       countryCode: "IN",
       mobile: "",
+      extraMobiles: [],
       whatsapp: "",
       email: "",
       website: "",
@@ -180,8 +190,31 @@ export function cardDtoToProfile(
       title: card.jobName || fallback.contact.title,
       businessName: card.businessName || fallback.contact.businessName,
       countryCode: card.code === "91" ? "IN" : fallback.contact.countryCode,
-      mobile: card.mobile || fallback.contact.mobile,
-      whatsapp: card.whatsapp || card.mobile || fallback.contact.whatsapp,
+      mobile: (() => {
+        if (card.mobile?.includes("|")) {
+          return decodeCardMobileField(card.mobile).mobile || fallback.contact.mobile;
+        }
+        return (
+          normalizeIndianPhone(card.mobile) ||
+          card.mobile ||
+          fallback.contact.mobile
+        );
+      })(),
+      extraMobiles: (() => {
+        const fromCol = normalizeExtraMobiles(card.extraMobiles);
+        if (fromCol.length > 0) return fromCol;
+        if (card.mobile?.includes("|")) {
+          return decodeCardMobileField(card.mobile).extraMobiles;
+        }
+        return normalizeExtraMobiles(fallback.contact.extraMobiles);
+      })(),
+      whatsapp:
+        card.whatsapp ||
+        normalizeIndianPhone(card.mobile) ||
+        (card.mobile?.includes("|")
+          ? decodeCardMobileField(card.mobile).mobile
+          : "") ||
+        fallback.contact.whatsapp,
       email: card.email || fallback.contact.email,
       website: card.website || fallback.contact.website,
       address: card.address || fallback.contact.address,

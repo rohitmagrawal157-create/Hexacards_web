@@ -32,6 +32,7 @@ import CardContactForm from "@/components/user-dashboard/CardContactForm";
 import CardLayoutFooter from "./CardLayoutFooter";
 import CardShareModal from "./CardShareModal";
 import {
+  allContactMobiles,
   formatDialNumber,
   openBrochureDownload,
   phoneDigitsForLink,
@@ -76,7 +77,7 @@ function ActionRow({
       href={href}
       target={href.startsWith("http") ? "_blank" : undefined}
       rel={href.startsWith("http") ? "noreferrer" : undefined}
-      className="flex items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-3.5 py-3 transition-colors hover:bg-[#FAFBFC]"
+      className="flex cursor-pointer items-center gap-3 rounded-xl border border-black/[0.06] bg-white px-3.5 py-3 transition-colors hover:bg-[#FAFBFC]"
     >
       <span
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
@@ -110,7 +111,7 @@ function QuickIcon({
   accent: string;
 }) {
   const className =
-    "flex h-11 w-11 items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105 hover:opacity-90";
+    "flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105 hover:opacity-90";
 
   if (onClick) {
     return (
@@ -168,7 +169,7 @@ function TabSwitcher({
             key={tab.key}
             type="button"
             onClick={() => onChange(tab.key)}
-            className={`flex-1 rounded-lg py-2.5 text-center text-xs font-bold transition-all duration-200 ${
+            className={`flex-1 cursor-pointer rounded-lg py-2.5 text-center text-xs font-bold transition-all duration-200 ${
               isActive ? "text-white shadow-md" : "text-[#8a8a92] hover:text-[#141414]"
             }`}
             style={isActive ? { backgroundColor: accent } : undefined}
@@ -211,6 +212,7 @@ export default function Compact({
     .join(" - ");
   const country = profile.contact.countryCode || "IN";
   const mobile = profile.contact.mobile?.trim() || "";
+  const mobiles = allContactMobiles(profile.contact);
   const whatsapp = profile.contact.whatsapp?.trim() || mobile;
   const email = profile.contact.email?.trim() || "";
   const websiteRaw = profile.contact.website?.trim() || "";
@@ -326,7 +328,7 @@ export default function Compact({
                 onChangeBackground();
               }}
               aria-label="Change background image"
-              className="absolute right-3 bottom-3 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-sm"
+              className="absolute right-3 bottom-3 z-30 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-sm"
             >
               <Camera className="h-[15px] w-[15px]" strokeWidth={2.25} />
             </button>
@@ -349,7 +351,7 @@ export default function Compact({
                   type="button"
                   onClick={onChangeProfile}
                   aria-label="Change profile picture"
-                  className="absolute right-1 bottom-1 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-sm"
+                  className="absolute right-1 bottom-1 z-30 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-sm"
                 >
                   <Camera className="h-[15px] w-[15px]" strokeWidth={2.25} />
                 </button>
@@ -430,15 +432,19 @@ export default function Compact({
           {/* Contact Info tab */}
           {activeTab === "contact" ? (
             <div className="flex flex-col gap-2.5">
-              {mobile ? (
-                <ActionRow
-                  icon={Phone}
-                  label="Mobile"
-                  value={formatDialNumber(country, mobile)}
-                  href={`tel:+${mobileDigits}`}
-                  accent={accent}
-                />
-              ) : null}
+              {mobiles.map((number, index) => {
+                const digits = phoneDigitsForLink(country, number);
+                return (
+                  <ActionRow
+                    key={`mobile-${index}-${digits}`}
+                    icon={Phone}
+                    label={index === 0 ? "Mobile" : `Mobile ${index + 1}`}
+                    value={formatDialNumber(country, number)}
+                    href={`tel:+${digits}`}
+                    accent={accent}
+                  />
+                );
+              })}
               {email ? (
                 <ActionRow
                   icon={Mail}
@@ -475,7 +481,7 @@ export default function Compact({
                   accent={accent}
                 />
               ) : null}
-              {!mobile && !email && !websiteRaw && !whatsapp && !fullAddress ? (
+              {!mobiles.length && !email && !websiteRaw && !whatsapp && !fullAddress ? (
                 publicView ? null : (
                 <p className="py-6 text-center text-sm text-[#8a8a92]">
                   Add contact details in Edit card.
@@ -534,7 +540,7 @@ export default function Compact({
           type="button"
           onClick={() => setBusinessOpen((v) => !v)}
           aria-expanded={businessOpen}
-          className={`flex w-full items-center justify-between px-4 py-3 text-white transition-opacity hover:opacity-90 ${
+          className={`flex w-full cursor-pointer items-center justify-between px-4 py-3 text-white transition-opacity hover:opacity-90 ${
             businessOpen ? "rounded-t-xl" : "rounded-xl"
           }`}
           style={{ backgroundColor: accent }}

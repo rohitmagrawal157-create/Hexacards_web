@@ -1,7 +1,9 @@
 import {
   CARD_COLS,
   CARD_COLS_LEGACY,
+  CARD_COLS_NO_EXTRA,
   isAccentColumnMissingError,
+  isExtraMobilesColumnMissingError,
   mapCard,
   type CardDto,
   type CardRow,
@@ -80,6 +82,15 @@ export async function fetchCardBySlugForOg(
     .eq("unic_card_name", slug)
     .eq("status", 1)
     .maybeSingle();
+
+  if (error && isExtraMobilesColumnMissingError(error.message)) {
+    ({ data, error } = await supabase
+      .from("cards")
+      .select(CARD_COLS_NO_EXTRA)
+      .eq("unic_card_name", slug)
+      .eq("status", 1)
+      .maybeSingle());
+  }
 
   if (error && isAccentColumnMissingError(error.message)) {
     ({ data, error } = await supabase

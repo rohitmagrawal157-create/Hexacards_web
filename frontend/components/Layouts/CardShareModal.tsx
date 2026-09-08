@@ -91,7 +91,7 @@ export default function CardShareModal({
   ];
 
   const iconClass =
-    "group flex h-11 w-11 items-center justify-center rounded-full text-white shadow-sm transition-colors";
+    "group flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-colors";
 
   return createPortal(
     <div
@@ -108,7 +108,7 @@ export default function CardShareModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>

@@ -38,12 +38,18 @@ export function normalizeCardLayout(
   return "classic";
 }
 
+/** Extra mobiles beyond the primary `mobile` field (stored in profile + DB). */
+export const MAX_EXTRA_MOBILES = 4;
+
 export type CardContactInfo = {
   cardName: string;
   title: string;
   businessName: string;
   countryCode: string;
+  /** Primary mobile shown first on the card */
   mobile: string;
+  /** Additional contact numbers (call links on the card) */
+  extraMobiles: string[];
   whatsapp: string;
   email: string;
   website: string;
@@ -242,6 +248,106 @@ export function phoneDigitsForLink(countryCode: string, number: string) {
   return formatDialNumber(countryCode, number).replace(/\D/g, "");
 }
 
+export function normalizeExtraMobiles(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v): v is string => typeof v === "string")
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .slice(0, MAX_EXTRA_MOBILES);
+}
+
+/** Primary + extras, de-duplicated by last 10 digits. */
+export function allContactMobiles(contact: CardContactInfo): string[] {
+  const primary = contact.mobile?.trim() || "";
+  const extras = normalizeExtraMobiles(contact.extraMobiles);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of [primary, ...extras]) {
+    if (!m) continue;
+    const key = m.replace(/\D/g, "").slice(-10) || m;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+  }
+  return out;
+}
+
+/**
+ * Serialize extra mobiles for cards.extra_mobiles (comma-separated 10-digit).
+ * Primary number stays in cards.mobile only.
+ */
+export function encodeExtraMobilesField(
+  extras: string[] | undefined,
+  primary?: string,
+): string {
+  const primaryDigits = (primary || "").replace(/\D/g, "").slice(-10);
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  if (primaryDigits) seen.add(primaryDigits);
+  for (const raw of normalizeExtraMobiles(extras)) {
+    const digits = raw.replace(/\D/g, "").slice(-10);
+    if (!digits || seen.has(digits)) continue;
+    seen.add(digits);
+    parts.push(digits);
+  }
+  return parts.join(",");
+}
+
+export function decodeExtraMobilesField(
+  raw: string | string[] | null | undefined,
+): string[] {
+  if (Array.isArray(raw)) return normalizeExtraMobiles(raw);
+  if (!raw || typeof raw !== "string") return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("[")) {
+    try {
+      return normalizeExtraMobiles(JSON.parse(trimmed));
+    } catch {
+      /* fall through */
+    }
+  }
+  return normalizeExtraMobiles(
+    trimmed.split(/[,|;]+/).map((p) => p.trim()).filter(Boolean),
+  );
+}
+
+/**
+ * @deprecated Prefer encodeExtraMobilesField + primary-only mobile.
+ * Kept to migrate legacy `primary|extra` rows packed into mobile.
+ */
+export function encodeCardMobileField(
+  primary: string,
+  extras: string[] | undefined,
+): string {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of [primary, ...normalizeExtraMobiles(extras)]) {
+    const digits = raw.replace(/\D/g, "").slice(-10);
+    if (!digits || seen.has(digits)) continue;
+    seen.add(digits);
+    parts.push(digits);
+  }
+  return parts.join("|");
+}
+
+export function decodeCardMobileField(raw: string | null | undefined): {
+  mobile: string;
+  extraMobiles: string[];
+} {
+  const text = (raw || "").trim();
+  if (!text) return { mobile: "", extraMobiles: [] };
+  const parts = text
+    .split("|")
+    .map((p) => p.replace(/\D/g, "").slice(-10))
+    .filter(Boolean);
+  return {
+    mobile: parts[0] || "",
+    extraMobiles: parts.slice(1, 1 + MAX_EXTRA_MOBILES),
+  };
+}
+
 export const BROCHURE_MAX_BYTES = 5 * 1024 * 1024;
 
 const PROFILE_KEY = "hexaCardProfile";
@@ -257,6 +363,7 @@ export function defaultCardProfile(name = "User", phone = ""): HexaCardProfile {
       businessName: "",
       countryCode: "IN",
       mobile: phone,
+      extraMobiles: [],
       whatsapp: phone,
       email: "",
       website: "",
@@ -315,6 +422,7 @@ export function getCardProfile(
       contact: {
         ...base.contact,
         ...parsed.contact,
+        extraMobiles: normalizeExtraMobiles(parsed.contact?.extraMobiles),
         brochureName: parsed.contact?.brochureName ?? null,
         brochureDisplayName: parsed.contact?.brochureDisplayName ?? null,
         brochureMime: parsed.contact?.brochureMime ?? null,

@@ -3,7 +3,9 @@ import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import {
   CARD_COLS,
   CARD_COLS_LEGACY,
+  CARD_COLS_NO_EXTRA,
   isAccentColumnMissingError,
+  isExtraMobilesColumnMissingError,
   mapCard,
   type CardRow,
 } from "@/lib/server/card-types";
@@ -49,6 +51,15 @@ async function updateCardBrochure(
   }
 
   let { data, error } = await query.select(CARD_COLS).maybeSingle();
+  if (error && isExtraMobilesColumnMissingError(error.message)) {
+    let retry = supabase.from("cards").update(payload);
+    if (match.cardId && match.cardId > 0) {
+      retry = retry.eq("card_id", match.cardId);
+    } else if (match.username) {
+      retry = retry.eq("unic_card_name", match.username);
+    }
+    ({ data, error } = await retry.select(CARD_COLS_NO_EXTRA).maybeSingle());
+  }
   if (error && isAccentColumnMissingError(error.message)) {
     let retry = supabase.from("cards").update(payload);
     if (match.cardId && match.cardId > 0) {

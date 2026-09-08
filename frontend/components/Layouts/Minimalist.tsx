@@ -75,8 +75,8 @@ function CircleIcon({
   iconClassName?: string;
 }) {
   const className = bg
-    ? "flex h-11 w-11 items-center justify-center rounded-full shadow-md ring-1 ring-black/5 transition-transform hover:scale-105"
-    : "flex h-11 w-11 items-center justify-center rounded-full border border-[#CED0D4] bg-white shadow-md ring-1 ring-black/5 transition-transform hover:scale-105";
+    ? "flex h-11 w-11 cursor-pointer items-center justify-center rounded-full shadow-md ring-1 ring-black/5 transition-transform hover:scale-105"
+    : "flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[#CED0D4] bg-white shadow-md ring-1 ring-black/5 transition-transform hover:scale-105";
   const style = bg
     ? { backgroundColor: bg, color: "#fff" }
     : { color: accent };
@@ -156,7 +156,7 @@ function ActionBar({
         type="button"
         onClick={onClick}
         aria-expanded={expanded}
-        className="block w-full"
+        className="block w-full cursor-pointer"
       >
         {content}
       </button>
@@ -164,7 +164,7 @@ function ActionBar({
   }
 
   return (
-    <a href={href || "#"} className="block w-full">
+    <a href={href || "#"} className="block w-full cursor-pointer">
       {content}
     </a>
   );
@@ -329,7 +329,7 @@ export default function Minimalist({
                 onChangeBackground();
               }}
               aria-label="Change background image"
-              className="absolute right-3 bottom-3 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-md ring-1 ring-black/5"
+              className="absolute right-3 bottom-3 z-20 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-[#CED0D4] bg-white text-[#050505] shadow-md ring-1 ring-black/5"
             >
               <Camera className="h-4 w-4" strokeWidth={2.25} />
             </button>
@@ -342,7 +342,7 @@ export default function Minimalist({
           onClick={() => setShareModalOpen(true)}
           aria-label="Share"
           title="Share"
-          className="absolute right-3 top-full z-30 mt-2 flex h-9 w-9 items-center justify-center rounded-full border border-[#CED0D4] bg-white shadow-md ring-1 ring-black/5"
+          className="absolute right-3 top-full z-30 mt-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-[#CED0D4] bg-white shadow-md ring-1 ring-black/5"
           style={{ color: accent }}
         >
           <Share2 className="h-4 w-4" strokeWidth={2.25} />
@@ -460,7 +460,7 @@ export default function Minimalist({
               resolvedSlug || undefined,
             )
           }
-          className="min-w-0 flex-1 rounded-full py-2.5 text-center text-[11px] font-bold tracking-wide text-white uppercase shadow-sm transition-transform hover:scale-[1.02]"
+          className="min-w-0 flex-1 cursor-pointer rounded-full py-2.5 text-center text-[11px] font-bold tracking-wide text-white uppercase shadow-sm transition-transform hover:scale-[1.02]"
           style={{ backgroundColor: accent }}
         >
           Save Contact
@@ -469,7 +469,7 @@ export default function Minimalist({
           <button
             type="button"
             onClick={() => void handleBrochure()}
-            className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-center text-[11px] font-bold tracking-wide text-white uppercase shadow-sm transition-transform hover:scale-[1.02]"
+            className="flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full py-2.5 text-center text-[11px] font-bold tracking-wide text-white uppercase shadow-sm transition-transform hover:scale-[1.02]"
             style={{ backgroundColor: accent }}
           >
             <FileText className="h-3.5 w-3.5 shrink-0" />
@@ -489,7 +489,7 @@ export default function Minimalist({
               rel="noreferrer"
               aria-label={label}
               title={label}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105"
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105"
               style={{ backgroundColor: accent }}
             >
               <Icon className="h-4 w-4" />

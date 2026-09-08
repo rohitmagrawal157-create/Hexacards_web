@@ -102,7 +102,7 @@ export default function CardLayoutBottom({
                 target="_blank"
                 rel="noreferrer"
                 aria-label={label}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-transform hover:scale-105"
+                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-white transition-transform hover:scale-105"
                 style={{ backgroundColor: accent }}
               >
                 <Icon className="h-4 w-4" />

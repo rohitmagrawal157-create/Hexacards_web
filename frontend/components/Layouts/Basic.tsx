@@ -33,6 +33,7 @@ import CardLayoutFooter from "./CardLayoutFooter";
 import CardShareModal from "./CardShareModal";
 import {
   openBrochureDownload,
+  allContactMobiles,
   formatDialNumber,
   phoneDigitsForLink,
   resolveCardAccent,
@@ -52,6 +53,7 @@ export type BasicProfile = {
     cardName?: string;
     title?: string;
     mobile?: string;
+    extraMobiles?: string[];
     email?: string;
     website?: string;
     address?: string;
@@ -103,6 +105,7 @@ function normalizeProfile(profile: BasicProfile | HexaCardProfile): BasicProfile
           .filter(Boolean)
           .join(" - "),
         mobile: p.contact.mobile,
+        extraMobiles: p.contact.extraMobiles ?? [],
         email: p.contact.email,
         website: p.contact.website,
         address: [p.contact.address, p.contact.city, p.contact.state]
@@ -167,6 +170,24 @@ export default function Basic({
     profile.appearance.avatarImage || profile.appearance.logoImage,
   );
   const mobile = profile.contact.mobile?.trim() || "";
+  const mobiles = allContactMobiles({
+    cardName: "",
+    title: "",
+    businessName: "",
+    countryCode: country,
+    mobile,
+    extraMobiles: profile.contact.extraMobiles ?? [],
+    whatsapp: "",
+    email: "",
+    website: "",
+    state: "",
+    city: "",
+    address: "",
+    brochureName: null,
+    brochureDisplayName: null,
+    brochureMime: null,
+    brochureSize: null,
+  });
   const whatsapp = profile.contact.whatsapp?.trim() || mobile;
   const websiteRaw = profile.contact.website?.trim() || "";
   const websiteHref = websiteRaw
@@ -313,7 +334,7 @@ export default function Basic({
   ].filter((s) => s.href && s.href.trim());
 
   const infoCardClass =
-    "rounded-xl border bg-white p-3 text-left transition-colors hover:bg-[#FAFAF8]";
+    "cursor-pointer rounded-xl border bg-white p-3 text-left transition-colors hover:bg-[#FAFAF8]";
 
   return (
     <div
@@ -362,7 +383,7 @@ export default function Basic({
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3 px-4 sm:gap-3.5">
         {actionIcons.map(({ label, Icon, href, onClick }) => {
           const className =
-            "flex h-12 w-12 items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105 hover:opacity-90";
+            "flex h-12 w-12 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105 hover:opacity-90";
           if (onClick) {
             return (
               <button
@@ -398,21 +419,27 @@ export default function Basic({
 
       {/* Contact grid */}
       <div className="mt-6 grid grid-cols-2 gap-3 px-4">
-        {mobile ? (
-          <a
-            href={`tel:+${mobileDigits}`}
-            className={infoCardClass}
-            style={{ borderColor: accentMuted }}
-          >
-            <div className="flex items-center gap-2" style={{ color: accent }}>
-              <Smartphone className="h-3.5 w-3.5" strokeWidth={2} />
-              <span className="text-xs text-[#a0a0a8]">Mobile</span>
-            </div>
-            <p className="mt-1.5 break-words text-[13px] leading-snug font-semibold text-[#0f0f12]">
-              {formatDialNumber(country, mobile)}
-            </p>
-          </a>
-        ) : null}
+        {mobiles.map((number, index) => {
+          const digits = phoneDigitsForLink(country, number);
+          return (
+            <a
+              key={`mobile-${index}-${digits}`}
+              href={`tel:+${digits}`}
+              className={infoCardClass}
+              style={{ borderColor: accentMuted }}
+            >
+              <div className="flex items-center gap-2" style={{ color: accent }}>
+                <Smartphone className="h-3.5 w-3.5" strokeWidth={2} />
+                <span className="text-xs text-[#a0a0a8]">
+                  {index === 0 ? "Mobile" : `Mobile ${index + 1}`}
+                </span>
+              </div>
+              <p className="mt-1.5 break-words text-[13px] leading-snug font-semibold text-[#0f0f12]">
+                {formatDialNumber(country, number)}
+              </p>
+            </a>
+          );
+        })}
 
         {profile.contact.email ? (
           <a
@@ -455,7 +482,7 @@ export default function Basic({
           type="button"
           onClick={() => setBusinessOpen((v) => !v)}
           aria-expanded={businessOpen}
-          className={`flex w-full items-center justify-between px-4 py-3 text-white transition-opacity hover:opacity-90 ${
+          className={`flex w-full cursor-pointer items-center justify-between px-4 py-3 text-white transition-opacity hover:opacity-90 ${
             businessOpen ? "rounded-t-xl" : "rounded-xl"
           }`}
           style={{ backgroundColor: accent }}
@@ -529,7 +556,7 @@ export default function Basic({
                 rel="noreferrer"
                 aria-label={label}
                 title={label}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105"
+                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-105"
                 style={{ backgroundColor: bg }}
               >
                 <Icon className="h-4 w-4" />

@@ -56,6 +56,7 @@ import {
   CARD_ACCENT_COLORS,
   DEFAULT_CARD_AVATAR,
   DEFAULT_CARD_BANNER,
+  MAX_EXTRA_MOBILES,
   isDefaultCoverImage,
   isDefaultLogoImage,
   multicolorWheelStyle,
@@ -926,19 +927,76 @@ export default function EditCard() {
                   </Field>
 
                   <div className="relative z-30 grid gap-4 sm:col-span-2 sm:grid-cols-2">
-                    <PhoneNumberField
-                      label="Mobile number"
-                      value={normalizePhoneForInput(
-                        profile.contact.mobile,
-                        profile.contact.countryCode,
-                      )}
-                      defaultCountry={profile.contact.countryCode || "IN"}
-                      placeholder="Mobile number"
-                      onChange={(value) => updateContact("mobile", value)}
-                      onCountryChange={(country) =>
-                        updateContact("countryCode", country)
-                      }
-                    />
+                    <div className="space-y-3 sm:col-span-2">
+                      <PhoneNumberField
+                        label="Mobile number"
+                        value={normalizePhoneForInput(
+                          profile.contact.mobile,
+                          profile.contact.countryCode,
+                        )}
+                        defaultCountry={profile.contact.countryCode || "IN"}
+                        placeholder="Mobile number"
+                        onChange={(value) => updateContact("mobile", value)}
+                        onCountryChange={(country) =>
+                          updateContact("countryCode", country)
+                        }
+                      />
+                      {(profile.contact.extraMobiles ?? []).map((num, index) => (
+                        <div
+                          key={`extra-mobile-${index}`}
+                          className="flex items-end gap-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <PhoneNumberField
+                              label={`Mobile number ${index + 2}`}
+                              value={normalizePhoneForInput(
+                                num,
+                                profile.contact.countryCode,
+                              )}
+                              defaultCountry={
+                                profile.contact.countryCode || "IN"
+                              }
+                              placeholder="Additional mobile"
+                              onChange={(value) => {
+                                const next = [
+                                  ...(profile.contact.extraMobiles ?? []),
+                                ];
+                                next[index] = value;
+                                updateContact("extraMobiles", next);
+                              }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = (
+                                profile.contact.extraMobiles ?? []
+                              ).filter((_, i) => i !== index);
+                              updateContact("extraMobiles", next);
+                            }}
+                            className="mb-0.5 shrink-0 rounded-xl border border-black/10 bg-white px-3 py-3 text-xs font-semibold text-[#8a8174] transition hover:border-black/20 hover:text-[#0f0f12]"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      {(profile.contact.extraMobiles ?? []).length <
+                      MAX_EXTRA_MOBILES ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateContact("extraMobiles", [
+                              ...(profile.contact.extraMobiles ?? []),
+                              "",
+                            ])
+                          }
+                          className="inline-flex items-center gap-1 text-sm font-semibold text-[#0f0f12] transition hover:opacity-70"
+                        >
+                          <span className="text-base leading-none">+</span>
+                          Add number
+                        </button>
+                      ) : null}
+                    </div>
                     <PhoneNumberField
                       label="WhatsApp number"
                       value={normalizePhoneForInput(

@@ -1,5 +1,6 @@
 import {
   DEFAULT_CARD_AVATAR,
+  allContactMobiles,
   isDefaultLogoImage,
   phoneDigitsForLink,
   type HexaCardProfile,
@@ -184,7 +185,7 @@ export function buildVCard(profile: HexaCardProfile, cardUrl?: string): string {
     safeText(contact.businessName),
   );
   const country = safeText(contact.countryCode) || "IN";
-  const mobile = phoneDigitsForLink(country, safeText(contact.mobile));
+  const mobiles = allContactMobiles(contact as HexaCardProfile["contact"]);
   const whatsapp = phoneDigitsForLink(country, safeText(contact.whatsapp));
   const email = safeText(contact.email);
   const website = safeText(contact.website);
@@ -211,11 +212,23 @@ export function buildVCard(profile: HexaCardProfile, cardUrl?: string): string {
 
   if (org) lines.push(`ORG:${vcardEscape(org)}`);
   if (title) lines.push(`TITLE:${vcardEscape(title)}`);
-  if (mobile) {
-    const tel = mobile.startsWith("91") && mobile.length > 10 ? mobile : mobile;
-    lines.push(`TEL;TYPE=CELL,VOICE:+${tel.length === 10 ? `91${tel}` : tel}`);
-  }
-  if (whatsapp && whatsapp !== mobile) {
+  const mobileDigitsList = mobiles
+    .map((m) => phoneDigitsForLink(country, m))
+    .filter(Boolean);
+  const seenTel = new Set<string>();
+  mobileDigitsList.forEach((mobile, index) => {
+    if (seenTel.has(mobile)) return;
+    seenTel.add(mobile);
+    const tel =
+      mobile.length === 10
+        ? `91${mobile}`
+        : mobile.startsWith("91") && mobile.length > 10
+          ? mobile
+          : mobile;
+    const type = index === 0 ? "CELL,VOICE" : "CELL";
+    lines.push(`TEL;TYPE=${type}:+${tel}`);
+  });
+  if (whatsapp && !seenTel.has(whatsapp)) {
     const tel = whatsapp.length === 10 ? `91${whatsapp}` : whatsapp;
     lines.push(`TEL;TYPE=CELL:+${tel}`);
   }
@@ -328,10 +341,9 @@ export async function saveCardContactToDevice(
       return;
     }
 
-    const hasPhone = Boolean(
-      phoneDigitsForLink(
-        safeText(contact.countryCode) || "IN",
-        safeText(contact.mobile),
+    const hasPhone = allContactMobiles(contact).some((m) =>
+      Boolean(
+        phoneDigitsForLink(safeText(contact.countryCode) || "IN", m),
       ),
     );
     const hasEmail = Boolean(safeText(contact.email));

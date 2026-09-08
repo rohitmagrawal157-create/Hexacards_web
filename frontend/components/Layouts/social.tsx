@@ -124,7 +124,7 @@ function GridIconTile({
         onClick={onClick}
         aria-label={label}
         title={label}
-        className="group flex w-full min-w-0 flex-col items-center gap-1.5"
+        className="group flex w-full min-w-0 cursor-pointer flex-col items-center gap-1.5"
       >
         {inner}
       </button>
@@ -138,7 +138,7 @@ function GridIconTile({
       rel={href?.startsWith("http") ? "noreferrer" : undefined}
       aria-label={label}
       title={label}
-      className="group flex w-full min-w-0 flex-col items-center gap-1.5"
+      className="group flex w-full min-w-0 cursor-pointer flex-col items-center gap-1.5"
       onClick={(e) => {
         if (!href || href === "#") e.preventDefault();
       }}
@@ -365,7 +365,7 @@ export default function Social({
               type="button"
               onClick={onChangeBackground}
               aria-label="Change background image"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-white/90 text-[#141414] shadow-sm transition hover:bg-white"
+              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-white/90 text-[#141414] shadow-sm transition hover:bg-white"
             >
               <Camera className="h-4 w-4" strokeWidth={2.25} />
             </button>
@@ -388,7 +388,7 @@ export default function Social({
                 type="button"
                 onClick={onChangeProfile}
                 aria-label="Change profile picture"
-                className="absolute right-0 bottom-0 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white text-[#050505] shadow-sm"
+                className="absolute right-0 bottom-0 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-white text-[#050505] shadow-sm"
               >
                 <Camera className="h-[15px] w-[15px]" strokeWidth={2.25} />
               </button>
@@ -482,7 +482,7 @@ export default function Social({
                 resolvedSlug || undefined,
               )
             }
-            className="flex-1 rounded-full py-3 text-center text-sm font-bold text-white transition-opacity hover:opacity-90"
+            className="flex-1 cursor-pointer rounded-full py-3 text-center text-sm font-bold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: accent }}
           >
             Save Contact
@@ -491,7 +491,7 @@ export default function Social({
             type="button"
             onClick={() => setShareModalOpen(true)}
             aria-label="Share"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-white transition-colors hover:bg-[#FAFAF8]"
+            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border bg-white transition-colors hover:bg-[#FAFAF8]"
             style={{ borderColor: accentMuted, color: accent }}
           >
             <Share2 className="h-4 w-4" />

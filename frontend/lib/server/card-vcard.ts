@@ -48,6 +48,21 @@ function digitsPhone(raw: string | null | undefined): string {
   return d;
 }
 
+function allMobilesFromCard(card: CardDto): string[] {
+  const primary = digitsPhone(card.mobile);
+  const extras = (card.extraMobiles ?? [])
+    .map((m) => digitsPhone(m))
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const d of [primary, ...extras]) {
+    if (!d || seen.has(d)) continue;
+    seen.add(d);
+    out.push(d);
+  }
+  return out;
+}
+
 /** Build vCard 3.0 from a Supabase card row (PHP exportCard equivalent). */
 export function buildVCardFromCardDto(card: CardDto): {
   vcf: string;
@@ -61,7 +76,7 @@ export function buildVCardFromCardDto(card: CardDto): {
     nameRaw,
     card.businessName || undefined,
   );
-  const mobile = digitsPhone(card.mobile);
+  const mobiles = allMobilesFromCard(card);
   const whatsapp = digitsPhone(card.whatsapp);
   const email = (card.email || "").trim();
   const website = (card.website || "").trim();
@@ -86,8 +101,14 @@ export function buildVCardFromCardDto(card: CardDto): {
 
   if (org) lines.push(`ORG:${vcardEscape(org)}`);
   if (title) lines.push(`TITLE:${vcardEscape(title)}`);
-  if (mobile) lines.push(`TEL;TYPE=CELL,VOICE:+${code}${mobile}`);
-  if (whatsapp && whatsapp !== mobile) {
+  const seenTel = new Set<string>();
+  mobiles.forEach((mobile, index) => {
+    if (seenTel.has(mobile)) return;
+    seenTel.add(mobile);
+    const type = index === 0 ? "CELL,VOICE" : "CELL";
+    lines.push(`TEL;TYPE=${type}:+${code}${mobile}`);
+  });
+  if (whatsapp && !seenTel.has(whatsapp)) {
     lines.push(`TEL;TYPE=CELL:+${code}${whatsapp}`);
   }
   if (email) lines.push(`EMAIL;TYPE=INTERNET:${vcardEscape(email)}`);

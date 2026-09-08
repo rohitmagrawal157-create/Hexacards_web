@@ -3,10 +3,14 @@ import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 import {
   CARD_COLS,
   CARD_COLS_LEGACY,
+  CARD_COLS_NO_EXTRA,
   isAccentColumnMissingError,
+  isExtraMobilesColumnMissingError,
   mapCard,
+  serializeExtraMobilesDb,
   slugifyCardName,
   stripAccentFromPayload,
+  stripExtraMobilesFromPayload,
   type CardCreateBody,
   type CardRow,
 } from "@/lib/server/card-types";
@@ -105,7 +109,16 @@ function buildCardPayload(
     payload.accent_color = accent || "#141414";
   }
   if (body.mobile !== undefined) {
-    payload.mobile = String(body.mobile ?? "").trim();
+    // Primary only — never pack extras into mobile
+    const raw = String(body.mobile ?? "").trim();
+    payload.mobile = raw.includes("|")
+      ? raw.split("|")[0].replace(/\D/g, "").slice(-10)
+      : raw.replace(/\D/g, "").slice(-10) || raw;
+  }
+  if (body.extraMobiles !== undefined || body.extra_mobiles !== undefined) {
+    payload.extra_mobiles = serializeExtraMobilesDb(
+      body.extraMobiles ?? body.extra_mobiles,
+    );
   }
   if (body.email !== undefined) {
     payload.email = body.email ? String(body.email).trim() : null;
@@ -166,6 +179,20 @@ export async function GET(request: Request) {
     if (slug) query = query.eq("unic_card_name", slug);
 
     let { data, error } = await query;
+    if (error && isExtraMobilesColumnMissingError(error.message)) {
+      let noExtra = supabase
+        .from("cards")
+        .select(CARD_COLS_NO_EXTRA)
+        .order("card_id", { ascending: false });
+      if (userId) {
+        const id = Number(userId);
+        noExtra = noExtra.eq("user_id", id);
+      }
+      if (slug) noExtra = noExtra.eq("unic_card_name", slug);
+      const noExtraResult = await noExtra;
+      data = noExtraResult.data as typeof data;
+      error = noExtraResult.error;
+    }
     if (error && isAccentColumnMissingError(error.message)) {
       let legacy = supabase
         .from("cards")
@@ -232,10 +259,28 @@ export async function POST(request: Request) {
       .select(CARD_COLS)
       .single();
 
+    if (error && isExtraMobilesColumnMissingError(error.message)) {
+      ({ data, error } = await supabase
+        .from("cards")
+        .insert(
+          stripExtraMobilesFromPayload(
+            built.payload as Record<string, unknown>,
+          ),
+        )
+        .select(CARD_COLS_NO_EXTRA)
+        .single());
+    }
+
     if (error && isAccentColumnMissingError(error.message)) {
       ({ data, error } = await supabase
         .from("cards")
-        .insert(stripAccentFromPayload(built.payload as Record<string, unknown>))
+        .insert(
+          stripAccentFromPayload(
+            stripExtraMobilesFromPayload(
+              built.payload as Record<string, unknown>,
+            ),
+          ),
+        )
         .select(CARD_COLS_LEGACY)
         .single());
     }

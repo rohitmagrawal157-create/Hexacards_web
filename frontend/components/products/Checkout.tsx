@@ -44,6 +44,7 @@ import {
   savedDesignToCardDesign,
   type SavedCardDesign,
 } from "@/lib/user-cards";
+import { lookupCouponByCode } from "@/lib/coupons-api";
 
 type CartItem = {
   id: string;
@@ -90,10 +91,6 @@ const PACK_OPTIONS: PackOption[] = [
   },
 ];
 
-const PROMO_CODES: Record<string, { label: string; percentOff: number }> = {
-  WELCOME10: { label: "WELCOME10", percentOff: 10 },
-};
-
 function currency(amount: number) {
   return `₹${amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
 }
@@ -129,6 +126,7 @@ export default function Checkout() {
     text: string;
     ok: boolean;
   } | null>(null);
+  const [couponApplying, setCouponApplying] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   /** True once Razorpay result is known — hide checkout and leave immediately. */
@@ -277,23 +275,38 @@ export default function Checkout() {
 
   const total = Math.max(0, subtotal - discountAmount);
 
-  function handleApplyCoupon() {
+  async function handleApplyCoupon() {
     const code = couponInput.trim().toUpperCase();
-    if (!code) return;
+    if (!code || couponApplying) return;
 
-    const match = PROMO_CODES[code];
-    if (match) {
-      setAppliedCoupon(match);
-      setCouponMessage({
-        text: `"${match.label}" applied — ${match.percentOff}% off`,
-        ok: true,
-      });
-    } else {
+    setCouponApplying(true);
+    setCouponMessage(null);
+    try {
+      const match = await lookupCouponByCode(code);
+      if (match?.active) {
+        setAppliedCoupon({
+          label: match.code,
+          percentOff: match.percentOff,
+        });
+        setCouponMessage({
+          text: `"${match.code}" applied — ${match.percentOff}% off`,
+          ok: true,
+        });
+      } else {
+        setAppliedCoupon(null);
+        setCouponMessage({
+          text: "That code isn't valid or has expired.",
+          ok: false,
+        });
+      }
+    } catch {
       setAppliedCoupon(null);
       setCouponMessage({
-        text: "That code isn't valid or has expired.",
+        text: "Could not verify that coupon. Please try again.",
         ok: false,
       });
+    } finally {
+      setCouponApplying(false);
     }
   }
 
@@ -1009,10 +1022,11 @@ export default function Checkout() {
                   />
                   <button
                     type="button"
-                    onClick={handleApplyCoupon}
-                    className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#141414] transition-colors hover:border-[#BC7C10]/35 hover:text-[#BC7C10]"
+                    onClick={() => void handleApplyCoupon()}
+                    disabled={couponApplying}
+                    className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#141414] transition-colors hover:border-[#BC7C10]/35 hover:text-[#BC7C10] disabled:cursor-wait disabled:opacity-60"
                   >
-                    Apply
+                    {couponApplying ? "Checking…" : "Apply"}
                   </button>
                 </div>
                 {couponMessage ? (

@@ -256,6 +256,7 @@ create table if not exists public.cards (
   date_time       timestamptz  not null default now(),
   update_time     timestamptz  not null default now(),
   status          smallint     not null default 1 check (status in (0, 1)),
+  extra_mobiles   text         not null default '',
 
   constraint cards_unic_card_name_unique unique (unic_card_name)
 );
