@@ -78,16 +78,16 @@ const PACK_OPTIONS: PackOption[] = [
     qty: 2,
     title: "2 Cards",
     subtitle: "Pack of 2 NFC Smart cards",
-    price: 1299,
-    badge: "Popular",
+    price: 1399,
+    badge: "12% OFF",
   },
   {
     id: "3",
     qty: 3,
     title: "3 Cards",
     subtitle: "Pack of 3 NFC Smart Cards",
-    price: 1499,
-    badge: "Best Value",
+    price: 1899,
+    badge: "21% OFF",
   },
 ];
 

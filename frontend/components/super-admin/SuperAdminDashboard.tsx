@@ -23,6 +23,7 @@ import {
   Users,
   CreditCard,
   TicketPercent,
+  Megaphone,
   X,
 } from "lucide-react";
 import { HoneycombPageStatus } from "@/components/ui/honeycomb-loader";
@@ -54,6 +55,7 @@ import UsersPanel from "@/components/super-admin/User";
 import CardsPanel from "@/components/super-admin/Cards";
 import OrdersPanel from "@/components/super-admin/Orders";
 import CouponsPanel from "@/components/super-admin/Coupons";
+import OffersPanel from "@/components/super-admin/Offers";
 import AdminToast from "@/components/super-admin/AdminToast";
 import { showAdminToast } from "@/lib/admin-toast";
 
@@ -63,7 +65,8 @@ type NavKey =
   | "products"
   | "users"
   | "cards"
-  | "coupons";
+  | "coupons"
+  | "offers";
 
 const MENU_ITEMS: { key: NavKey; label: string; icon: typeof LayoutGrid }[] = [
   { key: "overview", label: "Overview", icon: LayoutGrid },
@@ -72,6 +75,7 @@ const MENU_ITEMS: { key: NavKey; label: string; icon: typeof LayoutGrid }[] = [
   { key: "users", label: "Users", icon: Users },
   { key: "cards", label: "Cards", icon: CreditCard },
   { key: "coupons", label: "Coupons", icon: TicketPercent },
+  { key: "offers", label: "Offers", icon: Megaphone },
 ];
 
 function initials(name: string) {
@@ -112,6 +116,12 @@ function sectionMeta(key: NavKey) {
       return {
         title: "Coupons",
         subtitle: "Create discount codes with auto-generated coupon codes.",
+      };
+    case "offers":
+      return {
+        title: "Offers",
+        subtitle:
+          "Banners by page — set image, click link, and which pages show each offer.",
       };
   }
 }
@@ -308,7 +318,8 @@ export default function SuperAdminDashboard() {
       tab === "products" ||
       tab === "users" ||
       tab === "cards" ||
-      tab === "coupons"
+      tab === "coupons" ||
+      tab === "offers"
     ) {
       setActive(tab);
     } else if (tab === "messages") {
@@ -1416,6 +1427,7 @@ export default function SuperAdminDashboard() {
           {active === "users" ? <UsersPanel /> : null}
 
           {active === "coupons" ? <CouponsPanel /> : null}
+          {active === "offers" ? <OffersPanel /> : null}
 
           <div className={active === "cards" ? "contents" : "hidden"}>
             <CardsPanel />

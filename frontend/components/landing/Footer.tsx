@@ -12,6 +12,12 @@ const navLinks = [
   { label: "Contact Us", href: "/contact" },
 ];
 
+const usefulLinks = [
+  { label: "Privacy Policy", href: "/privacy-policy" },
+  { label: "Shipping & Delivery Policy", href: "/shipping-delivery-policy" },
+  { label: "Return & Refund Policy", href: "/return-refund-policy" },
+];
+
 type IconProps = { className?: string };
 
 function FacebookIcon({ className }: IconProps) {
@@ -172,14 +178,50 @@ export default function Footer() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-6 border-t border-white/10 bg-white/[0.02] px-8 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-10">
-            <nav aria-label="Footer">
-              <ul className="flex flex-wrap gap-x-8 gap-y-3">
-                {navLinks.map((link) => (
-                  <li key={link.label}>
+          <div className="flex flex-col gap-6 border-t border-white/10 bg-white/[0.02] px-8 py-6 sm:px-10">
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+              <nav aria-label="Footer">
+                <ul className="flex flex-wrap gap-x-8 gap-y-3">
+                  {navLinks.map((link) => (
+                    <li key={link.label}>
+                      <Link
+                        href={link.href}
+                        className="text-sm font-semibold text-white transition-colors hover:text-[#BC7C10]"
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+
+              <div className="flex items-center gap-3">
+                {socials.map(({ Icon, href, label }) => (
+                  <a
+                    key={label}
+                    href={href}
+                    aria-label={label}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#171412] transition-transform hover:scale-105"
+                  >
+                    <Icon className="h-4 w-4" />
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            <nav
+              aria-label="Useful links"
+              className="border-t border-white/10 pt-5"
+            >
+              <p className="text-[10px] font-semibold tracking-[0.14em] text-[#BC7C10] uppercase">
+                Useful links
+              </p>
+              <ul className="mt-3 flex flex-wrap gap-x-8 gap-y-2">
+                {usefulLinks.map((link) => (
+                  <li key={link.href}>
                     <Link
                       href={link.href}
-                      className="text-sm font-semibold text-white transition-colors hover:text-[#BC7C10]"
+                      className="text-sm text-white/70 transition-colors hover:text-[#BC7C10]"
                     >
                       {link.label}
                     </Link>
@@ -187,19 +229,6 @@ export default function Footer() {
                 ))}
               </ul>
             </nav>
-
-            <div className="flex items-center gap-3">
-              {socials.map(({ Icon, href, label }) => (
-                <a
-                  key={label}
-                  href={href}
-                  aria-label={label}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#171412] transition-transform hover:scale-105"
-                >
-                  <Icon className="h-4 w-4" />
-                </a>
-              ))}
-            </div>
           </div>
         </div>
 

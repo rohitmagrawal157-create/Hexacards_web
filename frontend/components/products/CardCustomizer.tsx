@@ -47,6 +47,9 @@ type LogoLayout = {
 
 type CardBody = "black" | "white";
 
+/** Design Your Card — logo / image / PDF upload limit */
+const LOGO_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+
 const CARD_BODY = {
   black: "#141414",
   white: "#FFFFFF",
@@ -560,8 +563,8 @@ export default function CardCustomizer() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setLogoError("Logo must be 5 MB or smaller.");
+    if (file.size > LOGO_UPLOAD_MAX_BYTES) {
+      setLogoError("Logo must be 5 MB or smaller. Choose a smaller PNG, JPG, or PDF.");
       if (logoInputRef.current) logoInputRef.current.value = "";
       return;
     }
@@ -1456,7 +1459,7 @@ export default function CardCustomizer() {
               </p>
               <p className="mt-0.5 text-[#5c5346]">
                 JPG and PDF allowed for print · they will not show on the card
-                preview
+                preview · max 5 MB
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">

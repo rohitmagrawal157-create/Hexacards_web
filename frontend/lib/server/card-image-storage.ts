@@ -3,7 +3,7 @@ import path from "path";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getSupabaseCardImagePublicUrl, DEFAULT_CARD_IMAGES_BUCKET } from "@/lib/card-images";
 
-export type CardImageKind = "profile" | "background" | "order-logo";
+export type CardImageKind = "profile" | "background" | "order-logo" | "offer-banner";
 
 const BUCKET =
   process.env.CARD_IMAGES_BUCKET?.trim() || DEFAULT_CARD_IMAGES_BUCKET;
@@ -52,6 +52,9 @@ export function cardImageFilename(
   if (kind === "order-logo") {
     return `${base}-order-logo.${extensionForContentType(contentType)}`;
   }
+  if (kind === "offer-banner") {
+    return `${base}-banner.${extensionForContentType(contentType)}`;
+  }
   return kind === "profile"
     ? `${base}-profile.jpg`
     : `${base}-background.jpg`;
@@ -63,13 +66,25 @@ function withCacheBust(url: string): string {
 }
 
 function dataUrlToBuffer(dataUrl: string): { buffer: Buffer; contentType: string } {
-  const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl.trim());
-  if (!match) {
+  const trimmed = dataUrl.trim();
+  if (!trimmed.startsWith("data:")) {
     throw new Error("Invalid image data URL");
   }
+  const comma = trimmed.indexOf(",");
+  if (comma < 0) {
+    throw new Error("Invalid image data URL");
+  }
+  const meta = trimmed.slice(5, comma); // after "data:"
+  const payload = trimmed.slice(comma + 1);
+  const isBase64 = /;base64/i.test(meta);
+  const contentType = (meta.split(";")[0] || "image/jpeg").trim() || "image/jpeg";
+  if (!isBase64) {
+    throw new Error("Invalid image data URL");
+  }
+  // Avoid regex capture of multi-MB base64 (can throw "Maximum call stack size exceeded")
   return {
-    contentType: match[1] || "image/jpeg",
-    buffer: Buffer.from(match[2], "base64"),
+    contentType,
+    buffer: Buffer.from(payload.replace(/\s/g, ""), "base64"),
   };
 }
 
@@ -149,9 +164,9 @@ export async function saveCardImage(opts: {
     throw new Error("No image data provided");
   }
 
-  // Cap ~2.5 MB after crop
-  if (buffer.length > 2.5 * 1024 * 1024) {
-    throw new Error("Image is too large (max 2.5 MB)");
+  // Cap uploads (design-card logo PNG/JPG/PDF + profile/cover)
+  if (buffer.length > 5 * 1024 * 1024) {
+    throw new Error("File must be 5 MB or smaller");
   }
 
   try {
@@ -193,6 +208,9 @@ export function cardImageDbFields(
     return { logo: name };
   }
   if (kind === "order-logo") {
+    return {};
+  }
+  if (kind === "offer-banner") {
     return {};
   }
   return { bg_img: name, bg_url: name };
