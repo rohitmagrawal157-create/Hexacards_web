@@ -84,24 +84,28 @@ export async function PATCH(request: Request, context: RouteContext) {
       return jsonError(400, "No fields to update");
     }
 
-    let { data, error } = await supabase
+    let data: HomeOfferRow | null = null;
+    let { data: updated, error } = await supabase
       .from("home_offers")
       .update(payload)
       .eq("offer_id", id)
       .select(HOME_OFFER_COLS)
       .maybeSingle();
+    data = (updated as HomeOfferRow | null) ?? null;
 
     if (error && isMissingColumnError(error.message)) {
       const legacyPayload = { ...payload };
       delete legacyPayload.title;
       delete legacyPayload.sort_order;
       delete legacyPayload.show_on_pages;
-      ({ data, error } = await supabase
+      const legacy = await supabase
         .from("home_offers")
         .update(legacyPayload)
         .eq("offer_id", id)
         .select(HOME_OFFER_COLS_LEGACY)
-        .maybeSingle());
+        .maybeSingle();
+      error = legacy.error;
+      data = (legacy.data as HomeOfferRow | null) ?? null;
     }
 
     if (error) {
@@ -115,7 +119,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     if (!data) return jsonError(404, "Offer not found");
 
-    return jsonOk(mapHomeOffer(data as HomeOfferRow));
+    return jsonOk(mapHomeOffer(data));
   } catch (err) {
     return jsonError(
       500,

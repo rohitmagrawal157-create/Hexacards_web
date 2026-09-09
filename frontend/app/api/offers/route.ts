@@ -33,17 +33,24 @@ async function listOfferRows(
 
   if (activeOnly) query = query.eq("active", 1);
 
-  let { data, error } = await query;
-  if (error && isMissingColumnError(error.message)) {
-    let legacy = supabase
-      .from("home_offers")
-      .select(HOME_OFFER_COLS_LEGACY)
-      .order("offer_id", { ascending: true });
-    if (activeOnly) legacy = legacy.eq("active", 1);
-    ({ data, error } = await legacy);
+  const primary = await query;
+  if (!primary.error) {
+    return (primary.data as HomeOfferRow[] | null) ?? [];
   }
-  if (error) throw error;
-  return (data as HomeOfferRow[] | null) ?? [];
+
+  if (!isMissingColumnError(primary.error.message)) {
+    throw primary.error;
+  }
+
+  let legacy = supabase
+    .from("home_offers")
+    .select(HOME_OFFER_COLS_LEGACY)
+    .order("offer_id", { ascending: true });
+  if (activeOnly) legacy = legacy.eq("active", 1);
+
+  const fallback = await legacy;
+  if (fallback.error) throw fallback.error;
+  return (fallback.data as HomeOfferRow[] | null) ?? [];
 }
 
 async function uploadOfferImage(dataUrl: string, offerId: number) {
@@ -166,22 +173,26 @@ export async function POST(request: Request) {
     const supabase = getSupabaseAdmin();
     const payload = buildPayload(body, true);
 
-    let { data, error } = await supabase
+    let data: HomeOfferRow | null = null;
+    let { data: inserted, error } = await supabase
       .from("home_offers")
       .insert(payload)
       .select(HOME_OFFER_COLS)
       .single();
+    data = (inserted as HomeOfferRow | null) ?? null;
 
     if (error && isMissingColumnError(error.message)) {
       const legacyPayload = { ...payload };
       delete legacyPayload.title;
       delete legacyPayload.sort_order;
       delete legacyPayload.show_on_pages;
-      ({ data, error } = await supabase
+      const legacy = await supabase
         .from("home_offers")
         .insert(legacyPayload)
         .select(HOME_OFFER_COLS_LEGACY)
-        .single());
+        .single();
+      error = legacy.error;
+      data = (legacy.data as HomeOfferRow | null) ?? null;
     }
 
     if (error) {
@@ -194,7 +205,9 @@ export async function POST(request: Request) {
       return jsonError(500, "Failed to create offer", error.message);
     }
 
-    let offer = mapHomeOffer(data as HomeOfferRow);
+    if (!data) return jsonError(500, "Failed to create offer");
+
+    let offer = mapHomeOffer(data);
     const dataUrl = body.imageDataUrl || body.image_data_url;
     if (typeof dataUrl === "string" && dataUrl.startsWith("data:")) {
       try {

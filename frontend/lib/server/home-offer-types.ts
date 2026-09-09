@@ -67,8 +67,8 @@ export const DEFAULT_HOME_OFFER: HomeOfferDto = {
   updatedAt: new Date(0).toISOString(),
 };
 
-const PRESET_BY_ID = new Map(
-  OFFER_PAGE_OPTIONS.map((p) => [p.id, p.path] as const),
+const PRESET_BY_ID: Map<string, string> = new Map(
+  OFFER_PAGE_OPTIONS.map((p) => [p.id, p.path]),
 );
 
 /**
