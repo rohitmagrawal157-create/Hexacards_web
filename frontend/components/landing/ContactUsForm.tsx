@@ -101,35 +101,41 @@ export default function ContactUsForm() {
     setServerMessage(null);
 
     try {
-      const res = await fetch("/contact_enquiry.php", {
+      const res = await fetch("/api/enquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
-          site_url: "https://hexacards.com/contact",
+          type: "contact",
+          name: form.name.trim(),
+          phone: form.phone.trim(),
+          email: form.email.trim(),
+          subject: form.subject.trim(),
+          message: form.message.trim(),
+          siteUrl: "https://hexacards.com/contact",
         }),
       });
 
-      if (!res.ok) throw new Error("Request failed");
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
+
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Request failed");
+      }
 
       setStatus("success");
       setServerMessage(
-        "Thanks! Your message has been sent — our team will get back to you soon.",
+        "Thanks! Your message has been sent to info@hexacards.com — our team will get back to you soon.",
       );
       setForm(initialForm);
-    } catch {
-      // Fallback: open email client if PHP endpoint is unavailable locally
-      const mailto = `mailto:info@hexacards.com?subject=${encodeURIComponent(
-        form.subject || "Contact enquiry",
-      )}&body=${encodeURIComponent(
-        `Name: ${form.name}\nPhone: ${form.phone}\nEmail: ${form.email}\n\n${form.message}`,
-      )}`;
-      window.location.href = mailto;
-      setStatus("success");
+    } catch (err) {
+      setStatus("error");
       setServerMessage(
-        "Opening your email app to finish sending. You can also reach us on WhatsApp.",
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again, or email info@hexacards.com.",
       );
-      setForm(initialForm);
     }
   }
 

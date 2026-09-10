@@ -127,26 +127,42 @@ export default function FranchiseEnquiry() {
     setServerMessage(null);
 
     try {
-      const res = await fetch("/franchise_enqyuiry.php", {
+      const res = await fetch("/api/enquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
-          site_url: "https://hexacards.com/franchise",
+          type: "franchise",
+          name: form.name.trim(),
+          phone: form.phone.trim(),
+          email: form.email.trim(),
+          country: form.country.trim(),
+          state: form.state.trim(),
+          city: form.city.trim(),
+          message: form.message.trim(),
+          siteUrl: "https://hexacards.com/franchise",
         }),
       });
 
-      if (!res.ok) throw new Error("Request failed");
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
+
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Request failed");
+      }
 
       setStatus("success");
       setServerMessage(
-        "Thanks! Your enquiry has been submitted — our team will reach out shortly.",
+        "Thanks! Your enquiry has been sent to info@hexacards.com — our team will reach out shortly.",
       );
       setForm(initialForm);
-    } catch {
+    } catch (err) {
       setStatus("error");
       setServerMessage(
-        "Something went wrong submitting your enquiry. Please try again, or email info@hexacards.com.",
+        err instanceof Error
+          ? err.message
+          : "Something went wrong submitting your enquiry. Please try again, or email info@hexacards.com.",
       );
     }
   }

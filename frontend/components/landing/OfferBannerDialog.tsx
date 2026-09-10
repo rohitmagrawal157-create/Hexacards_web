@@ -123,7 +123,7 @@ export default function OfferBannerDialog({
             role="dialog"
             aria-modal="true"
             aria-label="HexaCards offer"
-            className="relative z-[1] w-full max-w-[min(960px,94vw)] overflow-hidden rounded-2xl bg-[#0b0b0b] shadow-[0_24px_80px_rgba(20,20,20,0.4)] sm:rounded-3xl"
+            className="relative z-[1] w-[min(480px,86vw,72vh)] overflow-hidden rounded-2xl bg-[#0b0b0b] shadow-[0_24px_80px_rgba(20,20,20,0.4)] sm:w-[min(520px,78vw,70vh)] sm:rounded-3xl"
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.97 }}
@@ -133,10 +133,10 @@ export default function OfferBannerDialog({
             <button
               type="button"
               onClick={close}
-              className="absolute top-3 right-3 z-20 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-white/95 text-[#141414] shadow-md ring-1 ring-black/10 transition hover:bg-white sm:top-4 sm:right-4 sm:h-12 sm:w-12"
+              className="absolute top-2.5 right-2.5 z-20 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-white/95 text-[#141414] shadow-md ring-1 ring-black/10 transition hover:bg-white sm:top-3 sm:right-3 sm:h-11 sm:w-11"
               aria-label="Close"
             >
-              <X className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2.5} />
+              <X className="h-5 w-5" strokeWidth={2.5} />
             </button>
 
             <a
@@ -148,13 +148,15 @@ export default function OfferBannerDialog({
                 setOpen(false);
                 document.body.style.overflow = "";
               }}
-              className="relative block w-full cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#BC7C10]"
+              className="relative block aspect-square w-full cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#BC7C10]"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={safeImage}
                 alt="HexaCards offer"
-                className="block h-auto w-full max-h-[min(88vh,920px)]"
+                width={1080}
+                height={1080}
+                className="block h-full w-full object-contain"
               />
             </a>
           </motion.div>

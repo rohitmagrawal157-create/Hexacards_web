@@ -14,4 +14,6 @@ export { default as Franchise } from "./Franchise";
 export { default as FranchiseEnquiry } from "./franchise_from";
 export { default as ContactUsForm } from "./ContactUsForm";
 export { default as Services } from "./services";
+export { default as Compatibility } from "./compatibility";
 export { default as OfferBannerDialog } from "./OfferBannerDialog";
+export { default as FloatingWhatsApp } from "./FloatingWhatsApp";

@@ -553,7 +553,8 @@ export default function OffersPanel() {
                   />
                 </a>
                 <p className="mt-1.5 text-[11px] text-[#8a8174]">
-                  Click preview to test the link · PNG/JPG/WebP · max 5 MB
+                  Click preview to test the link · PNG/JPG/WebP · max 5 MB ·
+                  best at 1080×1080
                 </p>
               </div>
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Plus_Jakarta_Sans, Syne } from "next/font/google";
 import OfferBannerDialog from "@/components/landing/OfferBannerDialog";
+import FloatingWhatsApp from "@/components/landing/FloatingWhatsApp";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -60,6 +61,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <OfferBannerDialog />
+        <FloatingWhatsApp />
         {children}
       </body>
     </html>

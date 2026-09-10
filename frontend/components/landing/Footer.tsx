@@ -16,6 +16,7 @@ const usefulLinks = [
   { label: "Privacy Policy", href: "/privacy-policy" },
   { label: "Shipping & Delivery Policy", href: "/shipping-delivery-policy" },
   { label: "Return & Refund Policy", href: "/return-refund-policy" },
+  { label: "Compatibility", href: "/compatibility" },
 ];
 
 type IconProps = { className?: string };
@@ -62,11 +63,37 @@ function YoutubeIcon({ className }: IconProps) {
 }
 
 const socials = [
-  { Icon: FacebookIcon, href: "#", label: "Facebook" },
-  { Icon: LinkedinIcon, href: "#", label: "LinkedIn" },
-  { Icon: InstagramIcon, href: "#", label: "Instagram" },
-  { Icon: XIcon, href: "#", label: "X" },
-  { Icon: YoutubeIcon, href: "#", label: "YouTube" },
+  {
+    Icon: FacebookIcon,
+    href: "https://www.facebook.com/hexacardsnfc",
+    label: "Facebook",
+    hoverClass: "hover:bg-[#1877F2] hover:text-white hover:shadow-[0_8px_20px_rgba(24,119,242,0.45)]",
+  },
+  {
+    Icon: LinkedinIcon,
+    href: "https://www.linkedin.com/company/hexa-cards",
+    label: "LinkedIn",
+    hoverClass: "hover:bg-[#0A66C2] hover:text-white hover:shadow-[0_8px_20px_rgba(10,102,194,0.45)]",
+  },
+  {
+    Icon: InstagramIcon,
+    href: "https://www.instagram.com/hexacards_nfc/",
+    label: "Instagram",
+    hoverClass:
+      "hover:bg-gradient-to-br hover:from-[#f58529] hover:via-[#dd2a7b] hover:to-[#8134af] hover:text-white hover:shadow-[0_8px_20px_rgba(221,42,123,0.4)]",
+  },
+  {
+    Icon: XIcon,
+    href: "https://x.com/HexaCards",
+    label: "X",
+    hoverClass: "hover:bg-[#000000] hover:text-white hover:shadow-[0_8px_20px_rgba(0,0,0,0.45)]",
+  },
+  {
+    Icon: YoutubeIcon,
+    href: "https://www.youtube.com/@HexaCards",
+    label: "YouTube",
+    hoverClass: "hover:bg-[#FF0000] hover:text-white hover:shadow-[0_8px_20px_rgba(255,0,0,0.4)]",
+  },
 ];
 
 export default function Footer() {
@@ -146,8 +173,6 @@ export default function Footer() {
               </p>
               <p className="mt-1 text-lg text-white">
               +91 9226286898
-                <br />
-                +91 91234 56789
               </p>
             </div>
           </div>
@@ -196,12 +221,14 @@ export default function Footer() {
               </nav>
 
               <div className="flex items-center gap-3">
-                {socials.map(({ Icon, href, label }) => (
+                {socials.map(({ Icon, href, label, hoverClass }) => (
                   <a
                     key={label}
                     href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     aria-label={label}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#171412] transition-transform hover:scale-105"
+                    className={`flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#171412] transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-110 active:scale-95 ${hoverClass}`}
                   >
                     <Icon className="h-4 w-4" />
                   </a>
