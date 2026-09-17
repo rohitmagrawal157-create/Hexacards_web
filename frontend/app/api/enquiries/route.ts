@@ -1,3 +1,4 @@
+import { Resend } from "resend";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
 
@@ -6,8 +7,7 @@ export const runtime = "nodejs";
 const TO_EMAIL =
   process.env.ENQUIRY_TO_EMAIL?.trim() || "info@hexacards.com";
 const FROM_EMAIL =
-  process.env.ENQUIRY_FROM_EMAIL?.trim() ||
-  "Hexa Cards <onboarding@resend.dev>";
+  process.env.ENQUIRY_FROM_EMAIL?.trim() || "onboarding@resend.dev";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type EnquiryType = "contact" | "franchise";
@@ -103,32 +103,45 @@ async function sendEnquiryEmail(opts: {
     </div>
   `;
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  try {
+    const resend = new Resend(apiKey);
+    const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: [TO_EMAIL],
-      reply_to: opts.email,
+      replyTo: opts.email,
       subject: mailSubject,
       text: textLines.join("\n"),
       html,
-    }),
-  });
+    });
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    console.error("[enquiries] Resend failed:", res.status, detail);
+    if (error) {
+      console.error("[enquiries] Resend failed:", error);
+      const msg = error.message || "";
+      if (msg.includes("verify a domain") || msg.includes("own email address")) {
+        return {
+          ok: false,
+          error:
+            "Resend testing mode can only email the account owner until a domain is verified. Verify hexacards.com, or keep ENQUIRY_TO_EMAIL as your Resend account email.",
+        };
+      }
+      return {
+        ok: false,
+        error: msg || "Failed to send email. Please try again shortly.",
+      };
+    }
+
+    if (!data?.id) {
+      return { ok: false, error: "Failed to send email. Please try again shortly." };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error("[enquiries] Resend exception:", err);
     return {
       ok: false,
-      error: "Failed to send email. Please try again shortly.",
+      error: err instanceof Error ? err.message : "Failed to send email",
     };
   }
-
-  return { ok: true };
 }
 
 async function saveEnquiryRow(row: {
@@ -161,7 +174,7 @@ async function saveEnquiryRow(row: {
 /**
  * POST /api/enquiries
  * Body: { type: "contact" | "franchise", name, phone, email, message, ... }
- * Emails info@hexacards.com (ENQUIRY_TO_EMAIL) via Resend.
+ * Emails info@hexacards.com via Resend (requires verified hexacards.com domain).
  */
 export async function POST(request: Request) {
   try {

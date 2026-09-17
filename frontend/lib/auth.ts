@@ -58,6 +58,16 @@ export function clearAuthUser() {
   window.dispatchEvent(new Event("hexa-auth-change"));
 }
 
+/** Drop a stale numeric userId after users table wipe / 404, keep phone session. */
+export function clearAuthUserId() {
+  const current = getAuthUser();
+  if (!current?.userId) return;
+  const next: HexaAuthUser = { ...current };
+  delete next.userId;
+  localStorage.setItem(AUTH_KEY, JSON.stringify(next));
+  window.dispatchEvent(new Event("hexa-auth-change"));
+}
+
 export function normalizeIndianPhone(input: string): string {
   return input.replace(/\D/g, "").slice(-10);
 }

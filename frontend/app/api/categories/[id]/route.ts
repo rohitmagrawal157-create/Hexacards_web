@@ -12,6 +12,7 @@ import {
   toCategoryImgFilename,
   toNumber,
 } from "@/lib/admin-catalog-db";
+import { materializeCategoryImageSrc } from "@/lib/server/catalog-image-persist";
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string } };
 
@@ -56,15 +57,21 @@ export async function PUT(request: Request, context: RouteContext) {
     }
 
     if (body.imageSrc !== undefined) {
-      patch.category_img = toCategoryImgFilename(body.imageSrc);
+      const materialized = await materializeCategoryImageSrc(
+        body.imageSrc,
+        String(existing.slug ?? id),
+      );
+      patch.category_img = toCategoryImgFilename(materialized);
     } else if (
       body.categoryImg !== undefined ||
       body.category_img !== undefined
     ) {
       const img = body.categoryImg ?? body.category_img;
-      patch.category_img = toCategoryImgFilename(
+      const materialized = await materializeCategoryImageSrc(
         img == null ? null : String(img),
+        String(existing.slug ?? id),
       );
+      patch.category_img = toCategoryImgFilename(materialized);
     }
 
     if (body.sortOrder !== undefined) {

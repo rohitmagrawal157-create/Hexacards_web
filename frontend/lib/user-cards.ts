@@ -2,8 +2,17 @@ import type { OrderCardDesignData } from "@/lib/order-card";
 import { clampLogoLayout, resolveOrderLiveUrl } from "@/lib/order-card";
 import { compressCardLogoDataUrl } from "@/lib/order-logo-store";
 import { getOrderCardProfile } from "@/lib/order-card-profile";
-import { getOrdersForPhone, isOrderDashboardHidden, isOrderPaymentPaid, type HexaOrder } from "@/lib/orders";
-import { buildOwnerDisplayCardUrl } from "@/lib/site-url";
+import { apiFetch } from "@/lib/api-config";
+import { normalizeIndianPhone } from "@/lib/auth";
+import {
+  fetchOrdersForPhone,
+  getOrdersForPhone,
+  isOrderDashboardHidden,
+  isOrderPaymentPaid,
+  type HexaOrder,
+} from "@/lib/orders";
+import type { CardDto } from "@/lib/server/card-types";
+import { buildOwnerDisplayCardUrl, buildPublicCardUrl } from "@/lib/site-url";
 
 export type SavedCardDesign = {
   title?: string;
@@ -283,6 +292,95 @@ export function getUserDashboardCardsFromOrders(
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
     .map((order, index) => orderToDashboardCard(order, index === 0));
+}
+
+/** Active DB cards → paid HexaOrder stubs so My Cards works without a phone match. */
+function cardDtoToPaidOrder(card: CardDto, fallbackPhone: string): HexaOrder {
+  const phone =
+    normalizeIndianPhone(card.mobile) ||
+    normalizeIndianPhone(fallbackPhone) ||
+    "";
+  const slug = String(card.unicCardName || "").trim().toLowerCase();
+  const createdAt = card.dateTime || card.updateTime || new Date().toISOString();
+
+  return {
+    id: `card-${card.cardId}`,
+    createdAt,
+    status: "placed",
+    paymentStatus: "paid",
+    ownerPhone: phone,
+    customerName: card.cardName?.trim() || "Your Name",
+    phone,
+    email: card.email?.trim() || "",
+    address: card.address?.trim() || "",
+    city: "",
+    postalCode: "",
+    country: "IN",
+    stateId: card.stateId,
+    cityId: card.cityId,
+    packTitle: "Digital Card",
+    qty: 1,
+    subtotal: 0,
+    discount: 0,
+    total: 0,
+    productTitle: "Hexa NFC Card",
+    productId: "nfc-business-card",
+    userId: card.userId,
+    cardId: card.cardId,
+    cardSlug: slug || undefined,
+    cardUrl: slug ? buildPublicCardUrl(slug, "canonical") : undefined,
+    businessName: card.businessName?.trim() || undefined,
+    jobTitle: card.jobName?.trim() || undefined,
+  };
+}
+
+async function fetchActiveCardsForUser(userId: number): Promise<CardDto[]> {
+  if (!Number.isInteger(userId) || userId <= 0) return [];
+  const res = await apiFetch<CardDto[]>(`/api/cards?user_id=${userId}`);
+  if (!res.ok || !Array.isArray(res.data)) return [];
+  return res.data.filter((c) => c.status !== false && c.cardId > 0);
+}
+
+/**
+ * Orders for dashboard / admin login-as-user.
+ * Loads by phone + user_id, then fills gaps from the cards table.
+ */
+export async function fetchUserDashboardOrders(
+  phone: string,
+  userId?: number | null,
+): Promise<HexaOrder[]> {
+  const orders = await fetchOrdersForPhone(phone, userId);
+  const uid = userId && userId > 0 ? userId : null;
+  if (!uid) return orders;
+
+  const cards = await fetchActiveCardsForUser(uid);
+  if (cards.length === 0) return orders;
+
+  const byCardId = new Set(
+    orders
+      .map((o) => (o.cardId && o.cardId > 0 ? o.cardId : null))
+      .filter((id): id is number => id != null),
+  );
+  const bySlug = new Set(
+    orders
+      .map((o) => String(o.cardSlug ?? "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  const extras: HexaOrder[] = [];
+  for (const card of cards) {
+    const slug = String(card.unicCardName || "").trim().toLowerCase();
+    if (byCardId.has(card.cardId)) continue;
+    if (slug && bySlug.has(slug)) continue;
+    extras.push(cardDtoToPaidOrder(card, phone));
+  }
+
+  if (extras.length === 0) return orders;
+
+  return [...orders, ...extras].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
 }
 
 /** @deprecated use initOrderCardProfile — each order keeps its own profile */

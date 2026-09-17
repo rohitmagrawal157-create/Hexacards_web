@@ -26,6 +26,7 @@ export type ApiProductShape = {
 
 export function mergeApiProductToCatalog(row: ApiProductShape): CatalogProduct {
   const base = productCatalog[row.id];
+  // Prefer Super Admin / DB media so detail pages match admin galleries.
   const media =
     Array.isArray(row.media) && row.media.length > 0
       ? row.media

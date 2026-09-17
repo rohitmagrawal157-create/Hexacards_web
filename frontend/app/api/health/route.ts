@@ -1,84 +1,191 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
+const CORE_TABLES = [
+  "categories",
+  "products",
+  "users",
+  "user_session",
+  "country",
+  "state",
+  "city",
+  "admin",
+  "card_theme",
+  "cards",
+  "links",
+  "orders",
+  "order_items",
+  "payments",
+  "reviews",
+  "messages",
+] as const;
+
+const EXTRA_TABLES = ["coupons", "home_offers", "site_enquiries"] as const;
+
+const ORDERS_REQUIRED_COLUMNS = [
+  "order_id",
+  "order_code",
+  "status",
+  "payment_status",
+  "mobile_number",
+  "name",
+  "amount",
+  "ord_date",
+] as const;
+
+function hasServiceRoleKey(): boolean {
+  return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+}
+
+function supabaseUrlConfigured(): boolean {
+  return Boolean(
+    process.env.SUPABASE_URL?.trim() ||
+      process.env.NEXT_PUBLIC_SUPABASE_URL?.trim(),
+  );
+}
+
 export async function GET() {
   try {
+    if (!supabaseUrlConfigured() || !hasServiceRoleKey()) {
+      return NextResponse.json(
+        {
+          ok: false,
+          backend: "nextjs-app-router",
+          database: "supabase",
+          connected: false,
+          config: {
+            supabaseUrl: supabaseUrlConfigured(),
+            serviceRoleKey: hasServiceRoleKey(),
+          },
+          error: "Missing Supabase URL or SUPABASE_SERVICE_ROLE_KEY",
+          hint:
+            "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in frontend/.env.local (and Vercel), then restart.",
+          time: new Date().toISOString(),
+        },
+        { status: 500 },
+      );
+    }
+
     const supabase = getSupabaseAdmin();
 
-    const [catRes, prodRes, userRes, sessionRes, countryRes, stateRes, cityRes, adminRes, themeRes, cardsRes, linksRes, ordersRes, orderItemsRes, paymentsRes, reviewsRes, messagesRes] =
-      await Promise.all([
-        supabase.from("categories").select("category_id").limit(1),
-        supabase.from("products").select("product_id").limit(1),
-        supabase.from("users").select("user_id").limit(1),
-        supabase.from("user_session").select("id").limit(1),
-        supabase.from("country").select("country_id").limit(1),
-        supabase.from("state").select("state_id").limit(1),
-        supabase.from("city").select("city_id").limit(1),
-        supabase.from("admin").select("aid").limit(1),
-        supabase.from("card_theme").select("theme_id").limit(1),
-        supabase.from("cards").select("card_id").limit(1),
-        supabase.from("links").select("link_id").limit(1),
-        supabase.from("orders").select("order_id").limit(1),
-        supabase.from("order_items").select("order_item_id").limit(1),
-        supabase.from("payments").select("id").limit(1),
-        supabase.from("reviews").select("review_id").limit(1),
-        supabase.from("messages").select("message_id").limit(1),
-      ]);
-
-    const checksMeta = [
-      ["categories", catRes],
-      ["products", prodRes],
-      ["users", userRes],
-      ["user_session", sessionRes],
-      ["country", countryRes],
-      ["state", stateRes],
-      ["city", cityRes],
-      ["admin", adminRes],
-      ["card_theme", themeRes],
-      ["cards", cardsRes],
-      ["links", linksRes],
-      ["orders", ordersRes],
-      ["order_items", orderItemsRes],
-      ["payments", paymentsRes],
-      ["reviews", reviewsRes],
-      ["messages", messagesRes],
-    ] as const;
-
-    const missingTable = checksMeta.some(
-      ([, r]) =>
-        r.error?.message?.includes("schema cache") ||
-        r.error?.message?.includes("does not exist"),
-    );
-
-    const countQueries = await Promise.all(
-      checksMeta.map(async ([table, res]) => {
-        if (res.error) return { table, ok: false, count: 0, error: res.error.message };
+    const allTables = [...CORE_TABLES, ...EXTRA_TABLES];
+    const probes = await Promise.all(
+      allTables.map(async (table) => {
+        const { error } = await supabase.from(table).select("*").limit(1);
+        if (error) {
+          return {
+            table,
+            ok: false,
+            count: 0,
+            error: error.message,
+            optional: (EXTRA_TABLES as readonly string[]).includes(table),
+          };
+        }
         const { count } = await supabase
           .from(table)
           .select("*", { count: "exact", head: true });
-        return { table, ok: true, count: count ?? 0, error: null as string | null };
+        return {
+          table,
+          ok: true,
+          count: count ?? 0,
+          error: null as string | null,
+          optional: (EXTRA_TABLES as readonly string[]).includes(table),
+        };
       }),
     );
 
-    const ok = countQueries.every((c) => c.ok);
+    // Column-level probe for orders (schema drift breaks checkout)
+    const { data: sampleOrder, error: orderColErr } = await supabase
+      .from("orders")
+      .select(ORDERS_REQUIRED_COLUMNS.join(","))
+      .limit(1)
+      .maybeSingle();
+
+    const missingOrderColumns: string[] = [];
+    if (orderColErr?.message) {
+      const m = orderColErr.message.match(/'([^']+)' column/i);
+      if (m?.[1]) missingOrderColumns.push(m[1]);
+      else missingOrderColumns.push(orderColErr.message);
+    }
+
+    // Detect mistaken PK column named `orders` (legacy broken schema)
+    const { error: badPkProbe } = await supabase
+      .from("orders")
+      .select("orders")
+      .limit(1);
+    const hasLegacyOrdersPkColumn = !badPkProbe;
+
+    const coreOk = probes
+      .filter((p) => !p.optional)
+      .every((p) => p.ok);
+    const ok =
+      coreOk &&
+      missingOrderColumns.length === 0 &&
+      !hasLegacyOrdersPkColumn;
+
     const checks = Object.fromEntries(
-      countQueries.map((c) => [
+      probes.map((c) => [
         c.table,
-        { ok: c.ok, count: c.count, error: c.error },
+        {
+          ok: c.ok,
+          count: c.count,
+          error: c.error,
+          ...(c.optional ? { optional: true } : {}),
+        },
       ]),
     );
+
+    const hints: string[] = [];
+    if (missingOrderColumns.length) {
+      hints.push(
+        `orders missing columns: ${missingOrderColumns.join(", ")}. Run frontend/sql/orders-fix-live-schema.sql`,
+      );
+    }
+    if (hasLegacyOrdersPkColumn) {
+      hints.push(
+        "orders still has legacy `orders` column (broken PK). Run frontend/sql/orders-fix-live-schema.sql",
+      );
+    }
+    if ((checks.order_items as { count?: number })?.count === 0) {
+      hints.push(
+        "order_items is empty — new order line-items may be failing FK to orders.order_id",
+      );
+    }
+    const optionalFail = probes.filter((p) => p.optional && !p.ok);
+    if (optionalFail.length) {
+      hints.push(
+        `optional tables missing: ${optionalFail.map((p) => p.table).join(", ")}`,
+      );
+    }
 
     return NextResponse.json({
       ok,
       backend: "nextjs-app-router",
       database: "supabase",
       connected: true,
+      config: {
+        supabaseUrl: true,
+        serviceRoleKey: true,
+      },
+      flow: {
+        frontend: "browser → /api/* (same-origin)",
+        backend: "Next.js App Router route handlers",
+        database: "Supabase Postgres via service role",
+      },
       checks,
-      hint: missingTable
-        ? "Tables missing. Run schema.sql then country-seed.sql → state-seed.sql → city-seed.sql in Supabase."
-        : ok
+      ordersSchema: {
+        ok: missingOrderColumns.length === 0 && !hasLegacyOrdersPkColumn,
+        requiredColumns: ORDERS_REQUIRED_COLUMNS,
+        missingColumns: missingOrderColumns,
+        hasLegacyOrdersPkColumn,
+        sampleHasRow: Boolean(sampleOrder),
+      },
+      hint:
+        hints[0] ||
+        (ok
           ? "Backend → Database → Frontend connected."
-          : "Supabase reachable but queries failed. Check keys in frontend/.env.local.",
+          : "Supabase reachable but some checks failed."),
+      hints,
       time: new Date().toISOString(),
     });
   } catch (err) {
@@ -93,6 +200,7 @@ export async function GET() {
           process.env.VERCEL === "1"
             ? "Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, and SUPABASE_SERVICE_ROLE_KEY in Vercel → Settings → Environment Variables, then redeploy."
             : "Check frontend/.env.local and restart npm run dev in the frontend folder.",
+        time: new Date().toISOString(),
       },
       { status: 500 },
     );

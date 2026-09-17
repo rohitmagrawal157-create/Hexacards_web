@@ -38,7 +38,6 @@ import {
 } from "@/lib/auth";
 import {
   formatOrderDate,
-  fetchOrdersForPhone,
   isOrderDashboardHidden,
   isOrderPaymentPaid,
   statusLabel,
@@ -46,6 +45,7 @@ import {
   type HexaOrderStatus,
 } from "@/lib/orders";
 import {
+  fetchUserDashboardOrders,
   getUserDashboardCardsFromOrders,
   isEditableCardOrder,
   orderCardImage,
@@ -224,7 +224,7 @@ export default function Dashboard() {
         return;
       }
       setUser(auth);
-      setOrders(await fetchOrdersForPhone(auth.phone));
+      setOrders(await fetchUserDashboardOrders(auth.phone, auth.userId));
       setMessages(
         await fetchCardMessages({
           ownerPhone: auth.phone,
@@ -246,7 +246,7 @@ export default function Dashboard() {
         setOrders([]);
         return;
       }
-      void fetchOrdersForPhone(current.phone).then(setOrders);
+      void fetchUserDashboardOrders(current.phone, current.userId).then(setOrders);
     }
 
     function onMessagesChange() {
@@ -282,7 +282,7 @@ export default function Dashboard() {
         setOrders([]);
         return;
       }
-      void fetchOrdersForPhone(current.phone).then(setOrders);
+      void fetchUserDashboardOrders(current.phone, current.userId).then(setOrders);
     }
 
     window.addEventListener("hexa-auth-change", onAuthChange);
@@ -311,7 +311,7 @@ export default function Dashboard() {
     if (!authReady) return;
     const auth = getAuthUser();
     if (!auth) return;
-    void fetchOrdersForPhone(auth.phone).then(setOrders);
+    void fetchUserDashboardOrders(auth.phone, auth.userId).then(setOrders);
   }, [authReady, active, searchParams]);
 
   const avatar = useMemo(() => (user ? initials(user.name) : "HC"), [user]);
@@ -327,7 +327,9 @@ export default function Dashboard() {
     const next = getAuthUser();
     setUser(next);
     void Promise.all([
-      next ? fetchOrdersForPhone(next.phone) : Promise.resolve([] as HexaOrder[]),
+      next
+        ? fetchUserDashboardOrders(next.phone, next.userId)
+        : Promise.resolve([] as HexaOrder[]),
       next
         ? fetchCardMessages({
             ownerPhone: next.phone,

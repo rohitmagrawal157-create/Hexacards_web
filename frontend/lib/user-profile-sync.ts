@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api-config";
+import { clearAuthUserId } from "@/lib/auth";
 
 /** Sync checkout contact details to the logged-in user row. */
 export async function syncUserProfileFromCheckout(opts: {
@@ -19,6 +20,10 @@ export async function syncUserProfileFromCheckout(opts: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
+    // After a users wipe, localStorage still holds the old userId.
+    if (/not found/i.test(String(res.error ?? ""))) {
+      clearAuthUserId();
+    }
     console.warn("[users] profile sync after checkout:", res.error);
   }
 }

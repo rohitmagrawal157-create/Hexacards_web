@@ -555,10 +555,16 @@ export default function Checkout() {
       return;
     } catch (err) {
       console.error("Failed to place order", err);
+      const raw = err instanceof Error ? err.message : "";
       const message =
-        err instanceof Error && /storage|quota|Razorpay|verification|checkout/i.test(err.message)
-          ? err.message
-          : "Could not place your order. Please sign in again and retry.";
+        raw &&
+        /Failed to create order|Could not save order|storage|quota|Razorpay|verification|checkout|sign in|log in|OTP|schema|column/i.test(
+          raw,
+        )
+          ? raw
+          : raw
+            ? `Could not place your order: ${raw}`
+            : "Could not place your order. Please try again.";
       window.alert(message);
       setIsSubmitting(false);
     }

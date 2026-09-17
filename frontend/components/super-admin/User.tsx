@@ -395,9 +395,11 @@ export default function UsersPanel({
       fullName(user) || "User",
       Number.isInteger(userId) && (userId as number) > 0 ? userId : undefined,
     );
-    const dashboard = window.open("/dashboard", "_blank", "noopener,noreferrer");
+    // Same-origin tab so hexaAuthUser (localStorage) is readable immediately.
+    // Avoid noopener — some browsers delay shared storage visibility for isolated contexts.
+    const dashboard = window.open("/dashboard", "_blank");
     if (!dashboard) {
-      // window.alert("Please allow pop-ups to open this user’s dashboard in a new tab.");
+      window.location.assign("/dashboard");
     }
   }
 

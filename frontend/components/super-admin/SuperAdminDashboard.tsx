@@ -36,7 +36,7 @@ import {
   type SuperAdminUser,
 } from "@/lib/super-admin-auth";
 import { formatOrderDate, fetchOrders, getOrders, isOrderPaymentPaid, paymentStatusLabel, statusLabel, type HexaOrder } from "@/lib/orders";
-import { fetchAdminCards, fetchAdminUsers, getAdminUsers } from "@/lib/admin-directory";
+import { fetchAdminCards, fetchAdminUsers, fetchAdminUsersCount, getAdminUsers } from "@/lib/admin-directory";
 import {
   addAdminProduct,
   addAdminSection,
@@ -292,6 +292,9 @@ export default function SuperAdminDashboard() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AdminProductDraft>(emptyDraft());
   const [editError, setEditError] = useState("");
+  const [editSaveStatus, setEditSaveStatus] = useState<
+    "idle" | "saving" | "updated"
+  >("idle");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteSectionId, setDeleteSectionId] = useState<string | null>(null);
   const [addingProduct, setAddingProduct] = useState(false);
@@ -299,6 +302,9 @@ export default function SuperAdminDashboard() {
   const [addProductDraft, setAddProductDraft] =
     useState<AdminProductDraft>(emptyDraft());
   const [addProductError, setAddProductError] = useState("");
+  const [addProductSaveStatus, setAddProductSaveStatus] = useState<
+    "idle" | "saving" | "updated"
+  >("idle");
   const [addBulletText, setAddBulletText] = useState("");
   const [editBulletText, setEditBulletText] = useState("");
   const [addExtraImageUrl, setAddExtraImageUrl] = useState("");
@@ -309,6 +315,9 @@ export default function SuperAdminDashboard() {
   const [sectionSubtitle, setSectionSubtitle] = useState("");
   const [sectionImageSrc, setSectionImageSrc] = useState("");
   const [sectionError, setSectionError] = useState("");
+  const [sectionSaveStatus, setSectionSaveStatus] = useState<
+    "idle" | "saving" | "updated"
+  >("idle");
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -365,11 +374,12 @@ export default function SuperAdminDashboard() {
       const touched = touchSuperAdminSession() ?? auth;
       setUser(touched);
       setOrders(await fetchOrders());
-      const [adminUsers, adminCards] = await Promise.all([
+      const [adminUsers, adminCards, usersTotal] = await Promise.all([
         fetchAdminUsers(),
         fetchAdminCards(),
+        fetchAdminUsersCount(),
       ]);
-      setUsersCount(adminUsers.length);
+      setUsersCount(Math.max(usersTotal, adminUsers.length));
       setCardsCount(adminCards.length);
       const nextSections = await getAdminSections();
       const bySection = await getAdminProductsBySection();
@@ -393,11 +403,12 @@ export default function SuperAdminDashboard() {
       }
       touchSuperAdminSession();
       setOrders(await fetchOrders());
-      const [adminUsers, adminCards] = await Promise.all([
+      const [adminUsers, adminCards, usersTotal] = await Promise.all([
         fetchAdminUsers(),
         fetchAdminCards(),
+        fetchAdminUsersCount(),
       ]);
-      setUsersCount(adminUsers.length);
+      setUsersCount(Math.max(usersTotal, adminUsers.length));
       setCardsCount(adminCards.length);
       const nextSections = await getAdminSections();
       const bySection = await getAdminProductsBySection();
@@ -484,11 +495,16 @@ export default function SuperAdminDashboard() {
 
   function handleRefresh() {
     setRefreshing(true);
-    void Promise.all([fetchOrders(), fetchAdminCards(), fetchAdminUsers()])
-      .then(([list, cards, users]) => {
+    void Promise.all([
+      fetchOrders(),
+      fetchAdminCards(),
+      fetchAdminUsers(),
+      fetchAdminUsersCount(),
+    ])
+      .then(([list, cards, users, usersTotal]) => {
         setOrders(list);
         setCardsCount(cards.length);
-        setUsersCount(users.length);
+        setUsersCount(Math.max(usersTotal, users.length));
       })
       .finally(() => {
         void syncProducts().finally(() => {
@@ -509,6 +525,7 @@ export default function SuperAdminDashboard() {
     setEditBulletText("");
     setEditExtraImageUrl("");
     setEditError("");
+    setEditSaveStatus("idle");
   }
 
   function closeEdit() {
@@ -517,11 +534,12 @@ export default function SuperAdminDashboard() {
     setEditBulletText("");
     setEditExtraImageUrl("");
     setEditError("");
+    setEditSaveStatus("idle");
   }
 
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editingId) return;
+    if (!editingId || editSaveStatus === "saving") return;
     if (!draft.title.trim()) {
       setEditError("Title is required.");
       return;
@@ -534,13 +552,26 @@ export default function SuperAdminDashboard() {
       setEditError("Price cannot be negative.");
       return;
     }
-    const updated = await updateAdminProduct(editingId, draft);
-    if (!updated) {
-      setEditError("Product not found.");
-      return;
+    setEditError("");
+    setEditSaveStatus("saving");
+    try {
+      const updated = await updateAdminProduct(editingId, draft);
+      if (!updated) {
+        setEditError("Product not found.");
+        setEditSaveStatus("idle");
+        return;
+      }
+      await syncProducts();
+      setEditSaveStatus("updated");
+      window.setTimeout(() => {
+        closeEdit();
+      }, 700);
+    } catch (err) {
+      setEditSaveStatus("idle");
+      setEditError(
+        err instanceof Error ? err.message : "Could not save product image.",
+      );
     }
-    await syncProducts();
-    closeEdit();
   }
 
   function openAddProduct(sectionId?: string) {
@@ -550,6 +581,7 @@ export default function SuperAdminDashboard() {
     setAddBulletText("");
     setAddExtraImageUrl("");
     setAddProductError("");
+    setAddProductSaveStatus("idle");
     setAddingProduct(true);
   }
 
@@ -559,6 +591,7 @@ export default function SuperAdminDashboard() {
     setAddBulletText("");
     setAddExtraImageUrl("");
     setAddProductError("");
+    setAddProductSaveStatus("idle");
   }
 
   function addBulletToDraft(
@@ -782,6 +815,7 @@ export default function SuperAdminDashboard() {
 
   async function saveAddProduct(e: React.FormEvent) {
     e.preventDefault();
+    if (addProductSaveStatus === "saving") return;
     if (!addProductSectionId) {
       setAddProductError("Choose a category.");
       return;
@@ -794,19 +828,32 @@ export default function SuperAdminDashboard() {
       setAddProductError("Price cannot be negative.");
       return;
     }
-    const created = await addAdminProduct(addProductSectionId, {
-      ...addProductDraft,
-      shortTitle:
-        addProductDraft.shortTitle.trim() || addProductDraft.title.trim(),
-      category: addProductDraft.category.trim() || "General",
-      ctaLabel: addProductDraft.ctaLabel.trim() || "Order now",
-    });
-    if (!created) {
-      setAddProductError("Could not add product.");
-      return;
+    setAddProductError("");
+    setAddProductSaveStatus("saving");
+    try {
+      const created = await addAdminProduct(addProductSectionId, {
+        ...addProductDraft,
+        shortTitle:
+          addProductDraft.shortTitle.trim() || addProductDraft.title.trim(),
+        category: addProductDraft.category.trim() || "General",
+        ctaLabel: addProductDraft.ctaLabel.trim() || "Order now",
+      });
+      if (!created) {
+        setAddProductError("Could not add product.");
+        setAddProductSaveStatus("idle");
+        return;
+      }
+      await syncProducts();
+      setAddProductSaveStatus("updated");
+      window.setTimeout(() => {
+        closeAddProduct();
+      }, 700);
+    } catch (err) {
+      setAddProductSaveStatus("idle");
+      setAddProductError(
+        err instanceof Error ? err.message : "Could not add product.",
+      );
     }
-    await syncProducts();
-    closeAddProduct();
   }
 
   function openAddSection() {
@@ -815,6 +862,7 @@ export default function SuperAdminDashboard() {
     setSectionSubtitle("");
     setSectionImageSrc("");
     setSectionError("");
+    setSectionSaveStatus("idle");
     setAddingSection(true);
   }
 
@@ -824,6 +872,7 @@ export default function SuperAdminDashboard() {
     setSectionSubtitle(section.subtitle);
     setSectionImageSrc(section.imageSrc ?? "");
     setSectionError("");
+    setSectionSaveStatus("idle");
     setAddingSection(true);
   }
 
@@ -834,6 +883,7 @@ export default function SuperAdminDashboard() {
     setSectionSubtitle("");
     setSectionImageSrc("");
     setSectionError("");
+    setSectionSaveStatus("idle");
   }
 
   async function handleSectionImageFile(file: File | undefined) {
@@ -853,35 +903,50 @@ export default function SuperAdminDashboard() {
 
   async function saveAddSection(e: React.FormEvent) {
     e.preventDefault();
+    if (sectionSaveStatus === "saving") return;
     if (!sectionTitle.trim()) {
       setSectionError("Category name is required.");
       return;
     }
 
-    if (editingSectionId) {
-      const updated = await updateAdminSection(editingSectionId, {
-        title: sectionTitle,
-        subtitle: sectionSubtitle,
-        imageSrc: sectionImageSrc,
-      });
-      if (!updated) {
-        setSectionError("Could not update category.");
-        return;
+    setSectionError("");
+    setSectionSaveStatus("saving");
+    try {
+      if (editingSectionId) {
+        const updated = await updateAdminSection(editingSectionId, {
+          title: sectionTitle,
+          subtitle: sectionSubtitle,
+          imageSrc: sectionImageSrc,
+        });
+        if (!updated) {
+          setSectionError("Could not update category.");
+          setSectionSaveStatus("idle");
+          return;
+        }
+      } else {
+        const created = await addAdminSection({
+          title: sectionTitle,
+          subtitle: sectionSubtitle,
+          imageSrc: sectionImageSrc,
+        });
+        if (!created) {
+          setSectionError("Could not create category.");
+          setSectionSaveStatus("idle");
+          return;
+        }
       }
-    } else {
-      const created = await addAdminSection({
-        title: sectionTitle,
-        subtitle: sectionSubtitle,
-        imageSrc: sectionImageSrc,
-      });
-      if (!created) {
-        setSectionError("Could not create category.");
-        return;
-      }
-    }
 
-    await syncProducts();
-    closeAddSection();
+      await syncProducts();
+      setSectionSaveStatus("updated");
+      window.setTimeout(() => {
+        closeAddSection();
+      }, 700);
+    } catch (err) {
+      setSectionSaveStatus("idle");
+      setSectionError(
+        err instanceof Error ? err.message : "Could not update category image.",
+      );
+    }
   }
 
   function confirmDelete(id: string) {
@@ -1274,13 +1339,23 @@ export default function SuperAdminDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {overviewStats.recentOrders.map((order) => (
+                        {overviewStats.recentOrders.map((order, index) => (
                           <tr
-                            key={order.id}
+                            key={
+                              order.id ||
+                              (order.orderId
+                                ? `order-${order.orderId}`
+                                : `recent-${index}`)
+                            }
                             className="border-b border-black/[0.04] last:border-0"
                           >
                             <td className="px-5 py-3">
-                              <p className="font-medium text-[#141414]">{order.id}</p>
+                              <p className="font-medium text-[#141414]">
+                                {order.id ||
+                                  (order.orderId
+                                    ? `ORD-${order.orderId}`
+                                    : "—")}
+                              </p>
                               <p className="text-xs text-[#8a8174]">
                                 {formatOrderDate(order.createdAt)}
                               </p>
@@ -1639,15 +1714,25 @@ export default function SuperAdminDashboard() {
                 <button
                   type="button"
                   onClick={closeEdit}
-                  className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#5c5346] hover:bg-black/[0.03]"
+                  disabled={editSaveStatus === "saving"}
+                  className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#5c5346] hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-[#BC7C10] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#9a650d]"
+                  disabled={editSaveStatus !== "idle"}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:cursor-wait ${
+                    editSaveStatus === "updated"
+                      ? "bg-emerald-600 hover:bg-emerald-600"
+                      : "bg-[#BC7C10] hover:bg-[#9a650d] disabled:opacity-70"
+                  }`}
                 >
-                  Save changes
+                  {editSaveStatus === "saving"
+                    ? "Saving…"
+                    : editSaveStatus === "updated"
+                      ? "Updated"
+                      : "Save changes"}
                 </button>
               </div>
             </form>
@@ -1835,15 +1920,27 @@ export default function SuperAdminDashboard() {
                 <button
                   type="button"
                   onClick={closeAddSection}
-                  className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#5c5346] hover:bg-black/[0.03]"
+                  disabled={sectionSaveStatus === "saving"}
+                  className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#5c5346] hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-[#BC7C10] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#9a650d]"
+                  disabled={sectionSaveStatus !== "idle"}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:cursor-wait ${
+                    sectionSaveStatus === "updated"
+                      ? "bg-emerald-600 hover:bg-emerald-600"
+                      : "bg-[#BC7C10] hover:bg-[#9a650d] disabled:opacity-70"
+                  }`}
                 >
-                  {editingSectionId ? "Save changes" : "Create category"}
+                  {sectionSaveStatus === "saving"
+                    ? "Saving…"
+                    : sectionSaveStatus === "updated"
+                      ? "Updated"
+                      : editingSectionId
+                        ? "Save changes"
+                        : "Create category"}
                 </button>
               </div>
             </form>
@@ -2089,15 +2186,25 @@ export default function SuperAdminDashboard() {
                 <button
                   type="button"
                   onClick={closeAddProduct}
-                  className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#5c5346] hover:bg-black/[0.03]"
+                  disabled={addProductSaveStatus === "saving"}
+                  className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-[#5c5346] hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-[#BC7C10] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#9a650d]"
+                  disabled={addProductSaveStatus !== "idle"}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:cursor-wait ${
+                    addProductSaveStatus === "updated"
+                      ? "bg-emerald-600 hover:bg-emerald-600"
+                      : "bg-[#BC7C10] hover:bg-[#9a650d] disabled:opacity-70"
+                  }`}
                 >
-                  Add product
+                  {addProductSaveStatus === "saving"
+                    ? "Saving…"
+                    : addProductSaveStatus === "updated"
+                      ? "Updated"
+                      : "Add product"}
                 </button>
               </div>
             </form>

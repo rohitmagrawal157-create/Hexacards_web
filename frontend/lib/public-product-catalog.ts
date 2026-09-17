@@ -10,7 +10,7 @@ import {
   type CatalogProduct,
 } from "@/lib/product-catalog";
 
-const CACHE_KEY = "hexaPublicProducts.v1";
+const CACHE_KEY = "hexaPublicProducts.v5";
 export const PUBLIC_PRODUCTS_CHANGE = "hexa-public-products-change";
 
 let memoryCatalog: Record<string, CatalogProduct> | null = null;
@@ -147,7 +147,10 @@ export function usePublicProduct(
     }
 
     if (productProp) {
-      // Server already sent DB price — only refresh after admin edits
+      // Prefer live Super Admin media/prices over SSR snapshot once available
+      void ensurePublicProducts(true).then((catalog) =>
+        apply(catalog[productId]),
+      );
       window.addEventListener(PUBLIC_PRODUCTS_CHANGE, refresh);
       window.addEventListener("hexa-admin-products-change", refresh);
       return () => {

@@ -1,0 +1,91 @@
+-- phpMyAdmin SQL Dump
+-- version 5.2.3
+-- https://www.phpmyadmin.net/
+--
+-- Host: localhost:3306
+-- Generation Time: Sep 11, 2026 at 05:22 PM
+-- Server version: 5.7.23-23
+-- PHP Version: 8.1.34
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+START TRANSACTION;
+SET time_zone = "+00:00";
+
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
+
+--
+-- Database: `hexacuao_hexacard_ecom`
+--
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `product`
+--
+
+CREATE TABLE `product` (
+  `product_id` int(100) NOT NULL,
+  `product_name` varchar(100) NOT NULL,
+  `product_category` varchar(100) NOT NULL,
+  `product_desc` varchar(2000) NOT NULL,
+  `product_img` varchar(100) NOT NULL,
+  `product_price` varchar(100) NOT NULL,
+  `regular_price` varchar(10) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Dumping data for table `product`
+--
+
+INSERT INTO `product` (`product_id`, `product_name`, `product_category`, `product_desc`, `product_img`, `product_price`, `regular_price`) VALUES
+(3, 'HexaVtag (Diesel/Petrol/CNG)', '48', '<p>HexaVtag is a smart sticker</p>', 'hexa_Web_img-27.jpg', '499', '699'),
+(5, 'Instagram Card', '46', 'An Instagram follower Card (often called an \"Instagram follower NFC Card\") is a promotional display used by businesses, events, or influencers to encourage people to follow their Instagram account. ', 'instgram-card.jpg', '499', '899'),
+(6, 'Youtube Card', '46', 'With an NFC YouTube card, users only need to tap their card on a compatible device to instantly share their YouTube  profile with others. Connecting with new individuals is made easier by doing away with the need to manually search or type usernames.', 'youtubecard.jpg', '499', '899'),
+(7, 'Social Media Standy Wooden', '39', 'With an NFC Social Media Standy, users only need to tap their card on a compatible device to share their Facebook and Instagram profiles with others instantly. This eliminates the need to manually search for or type usernames, making connecting with new individuals easier.', 'instagram-standee.jpg', '799', '999'),
+(8, 'Google Review Standy Both Side', '38', 'This Google Standy stand helps boost your business\'s reviews on Google by displaying a QR code for easy customer review submission.', 'google-revew-bothside.jpg', '599', '799'),
+(16, 'Google Review Card', '46', '<p>Our NFC-enabled Google review card, made of sturdy PVC, can help you improve your online visibility. Gather genuine reviews with ease to raise your Google rating.</p>', '11-Free_Credit_Card_Mockup.jpg', '499', '899'),
+(17, 'Black Matt Golden Print', '37', '<p>A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links</p>', '1-Free_Credit_Card_Mockup.jpg', '499', '899'),
+(20, 'Black Matt with Logo Golden Print', '37', '<p class=\"MsoNormal\"><span style=\"font-size: 11.5pt; line-height: 107%; font-family: \"Josefin Sans\"; color: rgb(102, 102, 102); background-image: initial; background-position: initial; background-size: initial; background-repeat: initial; background-attachment: initial; background-origin: initial; background-clip: initial;\">A digital visiting card, also\r\nknown as a virtual business card or electronic business card, is a modern\r\nalternative to traditional paper business cards. It is a digital version of a\r\nbusiness card that can be shared electronically via email, text, social media,\r\nor QR codes. These cards often contain the same information as traditional\r\nbusiness cards—such as name, job title, company, contact details, and social\r\nmedia links—but they can also include interactive elements like clickable links</span>.<o:p></o:p></p>', '2-Free_Credit_Card_Mockup.jpg', '599', '899'),
+(21, 'Black Card Fancy Text Golden Print', '37', '<p><span josefin=\"\" sans\";=\"\" color:=\"\" rgb(102,=\"\" 102,=\"\" 102);=\"\" background-image:=\"\" initial;=\"\" background-position:=\"\" background-size:=\"\" background-repeat:=\"\" background-attachment:=\"\" background-origin:=\"\" background-clip:=\"\" initial;\"=\"\" style=\"transition: 0.5s; color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 11.5pt; line-height: 16.4067px;\">A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links</span><span style=\"color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 15px;\">.</span><br></p>', '3-Free_Credit_Card_Mockup.jpg', '649', '899'),
+(22, 'Black Matt with Logo Silver Print', '37', '<p><span josefin=\"\" sans\";=\"\" color:=\"\" rgb(102,=\"\" 102,=\"\" 102);=\"\" background-image:=\"\" initial;=\"\" background-position:=\"\" background-size:=\"\" background-repeat:=\"\" background-attachment:=\"\" background-origin:=\"\" background-clip:=\"\" initial;\"=\"\" style=\"transition: 0.5s; color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 11.5pt; line-height: 16.4067px;\">A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links</span><span style=\"color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 15px;\">.</span><br></p>', '4-Free_Credit_Card_Mockup.jpg', '599', '899'),
+(23, 'Black Card Fancy Text Silver Print', '37', '<p><span josefin=\"\" sans\";=\"\" color:=\"\" rgb(102,=\"\" 102,=\"\" 102);=\"\" background-image:=\"\" initial;=\"\" background-position:=\"\" background-size:=\"\" background-repeat:=\"\" background-attachment:=\"\" background-origin:=\"\" background-clip:=\"\" initial;\"=\"\" style=\"transition: 0.5s; color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 11.5pt; line-height: 16.4067px;\">A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links</span><span style=\"color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 15px;\">.</span><br></p>', '5-Free_Credit_Card_Mockup.jpg', '649', '899'),
+(24, 'Black Matt Silver Print', '37', '<p><span josefin=\"\" sans\";=\"\" color:=\"\" rgb(102,=\"\" 102,=\"\" 102);=\"\" background-image:=\"\" initial;=\"\" background-position:=\"\" background-size:=\"\" background-repeat:=\"\" background-attachment:=\"\" background-origin:=\"\" background-clip:=\"\" initial;\"=\"\" style=\"transition: 0.5s; color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 11.5pt; line-height: 16.4067px;\">A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links</span><span style=\"color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 15px;\">.</span><br></p>', '6-Free_Credit_Card_Mockup.jpg', '499', '899'),
+(25, 'White Matt Golden Print', '37', '<p><span josefin=\"\" sans\";=\"\" color:=\"\" rgb(102,=\"\" 102,=\"\" 102);=\"\" background-image:=\"\" initial;=\"\" background-position:=\"\" background-size:=\"\" background-repeat:=\"\" background-attachment:=\"\" background-origin:=\"\" background-clip:=\"\" initial;\"=\"\" sans\",=\"\" sans-serif;=\"\" font-size:=\"\" 11.5pt;=\"\" line-height:=\"\" 16.4067px;\"=\"\" style=\"transition: 0.5s; color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 15px;\">A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links</span><span josefin=\"\" sans\",=\"\" sans-serif;=\"\" font-size:=\"\" 15px;\"=\"\" style=\"transition: 0.5s; color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 15px;\">.</span><br></p>', 'golden-white-card1.jpg', '499', '899'),
+(26, 'White Matt with Logo Golden Print', '37', '<p><span josefin=\"\" sans\";=\"\" color:=\"\" rgb(102,=\"\" 102,=\"\" 102);=\"\" background-image:=\"\" initial;=\"\" background-position:=\"\" background-size:=\"\" background-repeat:=\"\" background-attachment:=\"\" background-origin:=\"\" background-clip:=\"\" initial;\"=\"\" style=\"transition: 0.5s; color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 11.5pt; line-height: 16.4067px;\">A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links</span><span style=\"color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 15px;\">.</span><br></p>', 'golden-white-card2.jpg', '599', '899'),
+(27, 'White Card Fancy Text Golden Print', '37', '<p><span style=\"color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 15px;\">A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links.</span><br></p>', 'golden-white-card3.jpg', '649', '899'),
+(28, 'Google Review Standy Wooden', '38', '<p>This Google Standy stand helps boost your business\'s reviews on Google by displaying a QR code for easy customer review submission.</p>', 'smart-standee.jpg', '699', '999'),
+(29, 'Social Media Standy Both Side', '39', '<p><span style=\"color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif;\">With an NFC Social Media Standy, users only need to tap their card on a compatible device to share their Facebook and Instagram profiles with others instantly. This eliminates the need to manually search for or type usernames, making connecting with new individuals easier.</span></p>', 'social-media-revew-bothside.jpg', '499', '799'),
+(30, 'White Matt Black Print', '37', '<p>A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links.</p>', 'black-white-card1.jpg', '499', '899'),
+(32, 'White Matt with Logo Black Print', '37', '<p>A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links.</p>', 'black-white-card2.jpg', '599', '899'),
+(33, 'Custom Card - Black / White', '37', '<p>A digital visiting card, also known as a virtual business card or electronic business card, is a modern alternative to traditional paper business cards. It is a digital version of a business card that can be shared electronically via email, text, social media, or QR codes. These cards often contain the same information as traditional business cards—such as name, job title, company, contact details, and social media links—but they can also include interactive elements like clickable links.</p>', '57e_de5_48.jpg', '999', '1599'),
+(35, 'Google Review Card', '38', '<p><span style=\"color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif; font-size: 15px;\">Our NFC-enabled Google review card, made of sturdy PVC, can help you improve your online visibility. Gather genuine reviews with ease to raise your Google rating.</span></p>', '11-Free_Credit_Card_Mockup.jpg', '499', '799'),
+(36, 'Google Review Card + Standy', '38', '<p><span style=\"color: rgb(102, 102, 102); font-family: \"Josefin Sans\", sans-serif;\">This Google Standy & Card helps boost your business\'s reviews on Google by displaying a QR code for easy customer review submission.</span></p>', 'social-media-revew-bothside-combo.jpg', '884', '1198');
+
+--
+-- Indexes for dumped tables
+--
+
+--
+-- Indexes for table `product`
+--
+ALTER TABLE `product`
+  ADD PRIMARY KEY (`product_id`);
+
+--
+-- AUTO_INCREMENT for dumped tables
+--
+
+--
+-- AUTO_INCREMENT for table `product`
+--
+ALTER TABLE `product`
+  MODIFY `product_id` int(100) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=37;
+COMMIT;
+
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;

@@ -247,14 +247,18 @@ export function mapOrder(row: OrderRow): OrderDto {
     [row.bungalow, row.street_name, row.landmark].filter(Boolean).join(", ");
 
   return {
-    id: row.order_code,
-    orderId: Number(row.order_id),
+    id:
+      String(row.order_code ?? "").trim() ||
+      (row.order_id != null ? `ORD-${row.order_id}` : `order-${Date.now()}`),
+    orderId: Number(row.order_id) || 0,
     userId: row.user_id == null ? null : Number(row.user_id),
     createdAt: row.ord_date || row.created_at,
     ordDate: row.ord_date || row.created_at,
     date: row.date,
     status: statusFromDb(Number(row.status) || 0),
-    paymentStatus: paymentFromDb(Number(row.payment_status) || 0),
+    paymentStatus: paymentFromDb(
+      row.payment_status == null ? 0 : Number(row.payment_status),
+    ),
     paymentMethod: row.payment_method ?? "",
     deliveryCharges: Number(row.delivery_charges) || 0,
     nimbusPushed: Number(row.nimbus_pushed) === 1,
@@ -422,6 +426,7 @@ export function buildOrderInsertPayload(
     delivery_charges: Number(
       body.deliveryCharges ?? body.delivery_charges ?? 0,
     ) || 0,
+    // date-only string is valid for both `date` and `timestamptz` columns
     ord_date: now.toISOString(),
     nimbus_pushed:
       body.nimbusPushed === true || Number(body.nimbusPushed) === 1 ? 1 : 0,

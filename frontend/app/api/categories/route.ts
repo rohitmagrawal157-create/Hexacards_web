@@ -9,6 +9,7 @@ import {
   toNumber,
   uniqueId,
 } from "@/lib/admin-catalog-db";
+import { materializeCategoryImageSrc } from "@/lib/server/catalog-image-persist";
 
 export async function GET() {
   try {
@@ -50,14 +51,20 @@ export async function POST(request: Request) {
       return jsonError(409, `Category slug "${slug}" already exists`);
     }
 
-    const image =
+    const imageRaw =
       body.imageSrc !== undefined
-        ? toCategoryImgFilename(body.imageSrc)
+        ? body.imageSrc
         : body.categoryImg !== undefined || body.category_img !== undefined
-          ? toCategoryImgFilename(
-              String(body.categoryImg ?? body.category_img ?? ""),
-            )
+          ? String(body.categoryImg ?? body.category_img ?? "")
           : null;
+    const materialized =
+      imageRaw === null
+        ? null
+        : await materializeCategoryImageSrc(imageRaw, slug);
+    const image =
+      materialized === null || materialized === undefined
+        ? null
+        : toCategoryImgFilename(materialized);
 
     const desc = String(
       body.subtitle ?? body.categoryDesc ?? body.category_desc ?? "",

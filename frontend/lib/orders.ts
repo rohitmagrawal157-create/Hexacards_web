@@ -311,11 +311,13 @@ export async function fetchOrders(opts?: {
   phone?: string;
   ownerPhone?: string;
   cardSlug?: string;
+  userId?: number | null;
 }): Promise<HexaOrder[]> {
   const params = new URLSearchParams();
   if (opts?.ownerPhone) params.set("ownerPhone", opts.ownerPhone);
   if (opts?.phone) params.set("phone", opts.phone);
   if (opts?.cardSlug) params.set("cardSlug", opts.cardSlug);
+  if (opts?.userId && opts.userId > 0) params.set("userId", String(opts.userId));
   const qs = params.toString();
   const res = await apiFetch<HexaOrder[]>(
     `/api/orders${qs ? `?${qs}` : ""}`,
@@ -324,14 +326,19 @@ export async function fetchOrders(opts?: {
     const mapped = res.data.map((d) => dtoToHexaOrder(d as HexaOrder & Record<string, unknown>));
     if (typeof window !== "undefined") {
       try {
-        if (!opts?.phone && !opts?.ownerPhone && !opts?.cardSlug) {
+        const scoped = Boolean(
+          opts?.phone ||
+            opts?.ownerPhone ||
+            opts?.cardSlug ||
+            (opts?.userId && opts.userId > 0),
+        );
+        if (!scoped) {
           writeOrders(mapped);
-        } else if (opts?.ownerPhone) {
-          mergeOrdersIntoLocalCache(mapped, opts.ownerPhone);
-        } else if (opts?.cardSlug) {
-          mergeOrdersIntoLocalCache(mapped);
-        } else if (opts?.phone) {
-          mergeOrdersIntoLocalCache(mapped);
+        } else {
+          mergeOrdersIntoLocalCache(
+            mapped,
+            opts?.ownerPhone || opts?.phone || undefined,
+          );
         }
       } catch {
         // ignore quota
@@ -348,6 +355,9 @@ export async function fetchOrders(opts?: {
     return getOrders().filter(
       (o) => String(o.cardSlug ?? "").trim().toLowerCase() === slug,
     );
+  }
+  if (opts?.userId && opts.userId > 0) {
+    return getOrders().filter((o) => o.userId === opts.userId);
   }
   if (opts?.phone) {
     const digits = phoneKey(opts.phone);
@@ -369,17 +379,44 @@ export function getPaidOrdersForPhone(phone: string): HexaOrder[] {
   return getOrdersForPhone(phone).filter(isOrderPaymentPaid);
 }
 
-export async function fetchOrdersForPhone(phone: string): Promise<HexaOrder[]> {
+/** Load this user's orders by phone and/or DB user_id (admin login-as-user). */
+export async function fetchOrdersForPhone(
+  phone: string,
+  userId?: number | null,
+): Promise<HexaOrder[]> {
   const digits = phoneKey(phone);
-  if (!digits) return [];
-  return fetchOrders({ ownerPhone: digits });
+  const uid = userId && userId > 0 ? userId : null;
+
+  const [byPhone, byUser] = await Promise.all([
+    digits
+      ? fetchOrders({ ownerPhone: digits })
+      : Promise.resolve([] as HexaOrder[]),
+    uid ? fetchOrders({ userId: uid }) : Promise.resolve([] as HexaOrder[]),
+  ]);
+
+  const byId = new Map<string, HexaOrder>();
+  for (const order of [...byPhone, ...byUser]) {
+    const key =
+      (order.orderId && order.orderId > 0
+        ? `id:${order.orderId}`
+        : null) ||
+      order.id ||
+      `${order.phone}-${order.createdAt}`;
+    byId.set(key, order);
+  }
+
+  return [...byId.values()].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
 }
 
 /** Dashboard-safe list: successful payments only. */
 export async function fetchPaidOrdersForPhone(
   phone: string,
+  userId?: number | null,
 ): Promise<HexaOrder[]> {
-  const orders = await fetchOrdersForPhone(phone);
+  const orders = await fetchOrdersForPhone(phone, userId);
   return orders.filter(isOrderPaymentPaid);
 }
 
@@ -546,24 +583,27 @@ export async function saveOrder(
     body: JSON.stringify(orderToApiBody(next)),
   });
 
-  let saved = next;
-  if (apiRes.ok && apiRes.data) {
-    const mapped = dtoToHexaOrder(
-      apiRes.data as HexaOrder & Record<string, unknown>,
-    );
-    saved = {
-      ...next,
-      ...mapped,
-      orderId: mapped.orderId ?? next.orderId,
-      cardDesign: next.cardDesign ?? mapped.cardDesign,
-    };
-  } else {
+  if (!apiRes.ok || !apiRes.data) {
     console.error(
-      "[orders] Supabase save failed — stored in browser only:",
+      "[orders] Supabase save failed:",
       apiRes.error,
       apiRes.details,
     );
+    throw new Error(
+      [apiRes.error, apiRes.details].filter(Boolean).join(" — ") ||
+        "Could not save order to the database. Please try again.",
+    );
   }
+
+  const mapped = dtoToHexaOrder(
+    apiRes.data as HexaOrder & Record<string, unknown>,
+  );
+  const saved: HexaOrder = {
+    ...next,
+    ...mapped,
+    orderId: mapped.orderId ?? next.orderId,
+    cardDesign: next.cardDesign ?? mapped.cardDesign,
+  };
 
   const all = readOrders();
   all.unshift(compactOrderForStorage(saved));

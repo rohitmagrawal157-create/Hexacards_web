@@ -6,36 +6,72 @@ import {
   type PaymentRow,
   type PaymentWriteBody,
 } from "@/lib/server/payment-types";
+import { resolveExistingUserId } from "@/lib/server/resolve-user-id";
+import { fetchAllSupabaseRows } from "@/lib/server/supabase-fetch-all";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const orderId = searchParams.get("order_id");
     const customerId = searchParams.get("customer_id");
+    const countOnly =
+      searchParams.get("countOnly") === "1" ||
+      searchParams.get("count") === "1";
 
     const supabase = getSupabaseAdmin();
-    let query = supabase
-      .from("payments")
-      .select(PAYMENT_COLS)
-      .order("id", { ascending: false });
 
-    if (orderId) {
-      const id = Number(orderId);
-      if (!Number.isInteger(id) || id <= 0) {
-        return jsonError(400, "order_id must be a positive integer");
+    if (countOnly && !orderId && !customerId) {
+      const { count, error } = await supabase
+        .from("payments")
+        .select("id", { count: "exact", head: true });
+      if (error) {
+        return jsonError(500, "Failed to count payments", error.message);
       }
-      query = query.eq("order_id", id);
-    }
-    if (customerId) {
-      const id = Number(customerId);
-      if (!Number.isInteger(id) || id <= 0) {
-        return jsonError(400, "customer_id must be a positive integer");
-      }
-      query = query.eq("customer_id", id);
+      return jsonOk({ count: count ?? 0 });
     }
 
-    const { data, error } = await query;
+    const { data, error } = await fetchAllSupabaseRows<PaymentRow>(
+      async (from, to) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let query: any = supabase
+          .from("payments")
+          .select(PAYMENT_COLS)
+          .order("id", { ascending: false })
+          .range(from, to);
+
+        if (orderId) {
+          const id = Number(orderId);
+          if (!Number.isInteger(id) || id <= 0) {
+            return {
+              data: null,
+              error: { message: "order_id must be a positive integer" },
+            };
+          }
+          query = query.eq("order_id", id);
+        }
+        if (customerId) {
+          const id = Number(customerId);
+          if (!Number.isInteger(id) || id <= 0) {
+            return {
+              data: null,
+              error: { message: "customer_id must be a positive integer" },
+            };
+          }
+          query = query.eq("customer_id", id);
+        }
+
+        const res = await query;
+        return {
+          data: (res.data as PaymentRow[] | null) ?? null,
+          error: res.error ? { message: res.error.message } : null,
+        };
+      },
+    );
+
     if (error) {
+      if (error.message.includes("must be a positive integer")) {
+        return jsonError(400, error.message);
+      }
       if (
         error.message.includes("does not exist") ||
         error.message.includes("schema cache")
@@ -48,7 +84,7 @@ export async function GET(request: Request) {
       return jsonError(500, "Failed to load payments", error.message);
     }
 
-    return jsonOk((data as PaymentRow[] | null ?? []).map(mapPayment));
+    return jsonOk(data.map(mapPayment));
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }
@@ -63,17 +99,23 @@ export async function POST(request: Request) {
     const amount = Number(body.amount) || 0;
     const status = String(body.status ?? "pending").trim() || "pending";
 
-    const payload = {
-      client_txn_id: clientTxnId.slice(0, 64),
-      amount,
-      customer_id:
+    const supabase = getSupabaseAdmin();
+    const customerId = await resolveExistingUserId(supabase, {
+      explicit:
         body.customerId != null || body.customer_id != null
           ? Number(body.customerId ?? body.customer_id) || null
           : null,
+    });
+
+    const payload = {
+      client_txn_id: clientTxnId.slice(0, 64),
+      amount,
+      customer_id: customerId,
       gateway_order_id:
         body.gatewayOrderId ?? body.gateway_order_id
           ? String(body.gatewayOrderId ?? body.gateway_order_id).slice(0, 100)
           : null,
+      created_at: new Date().toISOString(),
       txn_at: body.txnAt ?? body.txn_at ?? (status === "success" ? new Date().toISOString() : null),
       remark: body.remark ? String(body.remark) : null,
       status: status.slice(0, 30),
@@ -93,8 +135,6 @@ export async function POST(request: Request) {
           ? Number(body.orderId ?? body.order_id) || null
           : null,
     };
-
-    const supabase = getSupabaseAdmin();
     const { data: existing, error: existingError } = await supabase
       .from("payments")
       .select(PAYMENT_COLS)

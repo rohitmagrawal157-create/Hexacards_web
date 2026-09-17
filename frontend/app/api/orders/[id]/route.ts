@@ -338,13 +338,17 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const existing = await findOrder(supabase, id);
     if (!existing) return jsonError(404, "Order not found");
 
+    const orderId = existing.order_id;
+    await supabase.from("payments").delete().eq("order_id", orderId);
+    await supabase.from("order_items").delete().eq("order_id", orderId);
+
     const { error } = await supabase
       .from("orders")
       .delete()
-      .eq("order_id", existing.order_id);
+      .eq("order_id", orderId);
 
     if (error) return jsonError(500, "Failed to delete order", error.message);
-    return jsonOk({ deleted: existing.order_code, orderId: existing.order_id });
+    return jsonOk({ deleted: existing.order_code, orderId });
   } catch (err) {
     return jsonError(
       500,

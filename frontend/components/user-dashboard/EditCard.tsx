@@ -34,7 +34,8 @@ import {
 import LocationSelects, {
   type LocationValue,
 } from "@/components/shared/LocationSelects";
-import { fetchOrdersForPhone, isOrderPaymentPaid, type HexaOrder } from "@/lib/orders";
+import { isOrderPaymentPaid, type HexaOrder } from "@/lib/orders";
+import { fetchUserDashboardOrders } from "@/lib/user-cards";
 import { resolveOrderLiveUrl } from "@/lib/order-card";
 import { buildShareCardUrl } from "@/lib/site-url";
 import { uploadCardImage } from "@/lib/card-image-upload";
@@ -196,7 +197,7 @@ export default function EditCard() {
     let cancelled = false;
 
     async function initEditor() {
-      const allOrders = await fetchOrdersForPhone(auth!.phone);
+      const allOrders = await fetchUserDashboardOrders(auth!.phone, auth!.userId);
       if (cancelled) return;
 
       const orders = allOrders.filter(isOrderPaymentPaid);

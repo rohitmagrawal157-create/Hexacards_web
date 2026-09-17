@@ -9,24 +9,9 @@ import {
   mapOrderWithLinkedCard,
   mapOrdersWithLinkedCards,
 } from "@/lib/server/order-live-url";
-
-async function resolveUserId(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  phone: string,
-  explicit?: number | null,
-): Promise<number | null> {
-  if (explicit != null && Number.isFinite(explicit) && explicit > 0) {
-    return Number(explicit);
-  }
-  const digits = String(phone || "").replace(/\D/g, "").slice(-10);
-  if (!digits) return null;
-  const { data } = await supabase
-    .from("users")
-    .select("user_id")
-    .eq("mobile", digits)
-    .maybeSingle();
-  return data?.user_id != null ? Number(data.user_id) : null;
-}
+import { resolveExistingUserId } from "@/lib/server/resolve-user-id";
+import { insertStrippingUnknownColumns } from "@/lib/server/postgrest-schema-fallback";
+import { fetchAllSupabaseRows } from "@/lib/server/supabase-fetch-all";
 
 async function resolveProductId(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -49,30 +34,65 @@ export async function GET(request: Request) {
     const ownerPhone = searchParams.get("ownerPhone");
 
     const cardSlug = searchParams.get("cardSlug");
+    const userIdParam = searchParams.get("userId") || searchParams.get("user_id");
+    const countOnly =
+      searchParams.get("countOnly") === "1" ||
+      searchParams.get("count") === "1";
 
     const supabase = getSupabaseAdmin();
-    let query = supabase
-      .from("orders")
-      .select("*")
-      .order("ord_date", { ascending: false });
 
-    if (cardSlug) {
-      const slug = cardSlug.trim().toLowerCase();
-      if (slug) query = query.eq("card_slug", slug);
-    } else if (ownerPhone) {
-      const digits = ownerPhone.replace(/\D/g, "").slice(-10);
-      if (digits) query = query.eq("owner_phone", digits);
-    } else if (phone) {
-      const digits = phone.replace(/\D/g, "").slice(-10);
-      if (digits) query = query.eq("mobile_number", digits);
+    if (countOnly && !phone && !ownerPhone && !cardSlug && !userIdParam) {
+      const { count, error } = await supabase
+        .from("orders")
+        .select("order_id", { count: "exact", head: true });
+      if (error) {
+        return jsonError(500, "Failed to count orders", error.message);
+      }
+      return jsonOk({ count: count ?? 0 });
     }
 
-    const { data, error } = await query;
+    const { data, error } = await fetchAllSupabaseRows<OrderRow>(
+      async (from, to) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let query: any = supabase
+          .from("orders")
+          .select("*")
+          .order("ord_date", { ascending: false })
+          .range(from, to);
+
+        if (cardSlug) {
+          const slug = cardSlug.trim().toLowerCase();
+          if (slug) query = query.eq("card_slug", slug);
+        } else if (userIdParam) {
+          const uid = Number(userIdParam);
+          if (Number.isInteger(uid) && uid > 0) {
+            query = query.eq("user_id", uid);
+          }
+        } else if (ownerPhone || phone) {
+          // Match either ownership or shipping phone — legacy rows often
+          // populate only one of these columns.
+          const digits = (ownerPhone || phone || "")
+            .replace(/\D/g, "")
+            .slice(-10);
+          if (digits) {
+            query = query.or(
+              `owner_phone.eq.${digits},mobile_number.eq.${digits}`,
+            );
+          }
+        }
+
+        const res = await query;
+        return {
+          data: (res.data as OrderRow[] | null) ?? null,
+          error: res.error ? { message: res.error.message } : null,
+        };
+      },
+    );
+
     if (error) {
       return jsonError(500, "Failed to load orders", error.message);
     }
-    const rows = (data as OrderRow[] | null) ?? [];
-    return jsonOk(await mapOrdersWithLinkedCards(supabase, rows));
+    return jsonOk(await mapOrdersWithLinkedCards(supabase, data));
   } catch (err) {
     return jsonError(
       500,
@@ -104,11 +124,10 @@ export async function POST(request: Request) {
     const productSlug =
       String(body.productSlug ?? body.productId ?? "").trim() || null;
     const [userId, productDbId] = await Promise.all([
-      resolveUserId(
-        supabase,
-        body.ownerPhone || phone,
-        body.userId ?? body.user_id,
-      ),
+      resolveExistingUserId(supabase, {
+        phone: body.ownerPhone || phone,
+        explicit: body.userId ?? body.user_id,
+      }),
       resolveProductId(supabase, productSlug),
     ]);
 
@@ -118,22 +137,55 @@ export async function POST(request: Request) {
       productDbId,
     });
 
-    const { data, error } = await supabase
-      .from("orders")
-      .insert(payload)
-      .select("*")
-      .single();
+    const {
+      data,
+      error,
+      stripped,
+    } = await insertStrippingUnknownColumns<OrderRow>(
+      async (row) => {
+        const res = await supabase
+          .from("orders")
+          .insert(row)
+          .select("*")
+          .single();
+        return {
+          data: (res.data as OrderRow | null) ?? null,
+          error: res.error ? { message: res.error.message } : null,
+        };
+      },
+      payload as Record<string, unknown>,
+    );
 
-    if (error) {
-      return jsonError(500, "Failed to create order", error.message);
+    if (error || !data) {
+      return jsonError(
+        500,
+        "Failed to create order",
+        [
+          error?.message,
+          stripped.length
+            ? `stripped missing columns: ${stripped.join(", ")}`
+            : null,
+          "If status is missing, run frontend/sql/orders-add-status-columns.sql in Supabase",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      );
+    }
+
+    if (stripped.length) {
+      console.warn(
+        "[orders] insert stripped unknown columns (run orders-add-status-columns.sql):",
+        stripped.join(", "),
+      );
     }
 
     const row = data as OrderRow;
     const qty = Number(row.qty) || 1;
     const lineTotal = Number(row.amount) || 0;
     const unit = qty > 0 ? lineTotal / qty : lineTotal;
+    const sideErrors: string[] = [];
 
-    await supabase.from("order_items").insert({
+    const { error: itemErr } = await supabase.from("order_items").insert({
       order_id: row.order_id,
       product_id: row.product_id,
       product_slug: row.product_slug,
@@ -144,6 +196,10 @@ export async function POST(request: Request) {
       line_total: lineTotal,
       sort_order: 0,
     });
+    if (itemErr) {
+      sideErrors.push(`order_items: ${itemErr.message}`);
+      console.error("[orders] order_items insert failed:", itemErr.message);
+    }
 
     // Record a payment row for this order (gateway updates on Razorpay success)
     const payStatus =
@@ -158,11 +214,18 @@ export async function POST(request: Request) {
       .trim()
       .slice(0, 64) ||
       `ord_${row.order_code}_${Date.now().toString(36)}`.slice(0, 64);
-    await supabase.from("payments").insert({
+
+    const safeCustomerId = await resolveExistingUserId(supabase, {
+      explicit: row.user_id != null ? Number(row.user_id) : null,
+      phone: row.mobile_number || row.owner_phone,
+    });
+
+    const { error: payErr } = await supabase.from("payments").insert({
       client_txn_id: clientTxnId,
       amount: lineTotal,
-      customer_id: row.user_id,
+      customer_id: safeCustomerId,
       gateway_order_id: null,
+      created_at: new Date().toISOString(),
       txn_at: payStatus === "success" ? new Date().toISOString() : null,
       remark: `Order ${row.order_code}${row.payment_method ? ` · ${row.payment_method}` : ""}`,
       status: payStatus,
@@ -170,8 +233,22 @@ export async function POST(request: Request) {
       razorpay_payment_id: null,
       order_id: row.order_id,
     });
+    if (payErr) {
+      sideErrors.push(`payments: ${payErr.message}`);
+      console.error("[orders] payments insert failed:", payErr.message);
+    }
 
-    return jsonOk(await mapOrderWithLinkedCard(supabase, row), 201);
+    const mapped = await mapOrderWithLinkedCard(supabase, row);
+    if (sideErrors.length) {
+      return jsonOk(
+        {
+          ...mapped,
+          _warnings: sideErrors,
+        },
+        201,
+      );
+    }
+    return jsonOk(mapped, 201);
   } catch (err) {
     return jsonError(
       500,

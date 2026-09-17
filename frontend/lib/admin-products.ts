@@ -3,6 +3,7 @@ import {
   type CatalogProduct,
   type ProductMedia,
 } from "@/lib/product-catalog";
+import { mergeApiProductToCatalog } from "@/lib/product-merge";
 import { apiFetch } from "@/lib/api-config";
 import { clearHomeCategoriesCache } from "@/lib/home-categories";
 import { clearPublicProductsCache } from "@/lib/public-product-catalog";
@@ -204,7 +205,7 @@ function mapApiCategory(row: ApiCategory): AdminProductSection {
 }
 
 function mapApiProduct(row: ApiProduct): CatalogProduct {
-  return {
+  return mergeApiProductToCatalog({
     id: row.id,
     category: row.category,
     title: row.title,
@@ -219,7 +220,9 @@ function mapApiProduct(row: ApiProduct): CatalogProduct {
     ctaLabel: row.ctaLabel || "Order Now",
     ctaHref: row.ctaHref || `/product/${row.id}`,
     designable: Boolean(row.designable),
-  };
+    imageSrc: row.imageSrc,
+    active: row.active,
+  });
 }
 
 function draftToApiBody(draft: AdminProductDraft, categoryId?: string) {
@@ -421,25 +424,15 @@ export async function updateAdminProduct(
     return mapApiProduct(res.data);
   }
 
-  // Local fallback
-  const store = readStore();
-  const existing = store.catalog[id];
-  if (!existing) return null;
-  store.catalog[id] = {
-    ...existing,
-    title: draft.title.trim(),
-    shortTitle: draft.shortTitle.trim(),
-    category: draft.category.trim(),
-    description: draft.description.trim(),
-    price: Number(draft.price) || 0,
-    compareAtPrice: Number(draft.compareAtPrice) || 0,
-    ctaLabel: draft.ctaLabel.trim(),
-    ctaHref: draft.ctaHref.trim(),
-    highlights: draft.highlights.map((h) => h.trim()).filter(Boolean),
-    media: buildMediaFromDraft(draft),
-  };
-  writeStoreLocal(store);
-  return store.catalog[id];
+  // Do not silently fall back — local store hides real DB failures (e.g. image upload).
+  if (res.error) {
+    throw new Error(
+      [res.error, res.details].filter(Boolean).join(": ") ||
+        "Failed to update product",
+    );
+  }
+
+  return null;
 }
 
 export async function addAdminProduct(
@@ -572,18 +565,14 @@ export async function updateAdminSection(
     return mapApiCategory(res.data);
   }
 
-  const store = readStore();
-  const index = store.sections.findIndex((s) => s.id === sectionId);
-  if (index < 0) return null;
-  const next: AdminProductSection = {
-    ...store.sections[index],
-    title,
-    subtitle: input.subtitle?.trim() || `Products in ${title}.`,
-    imageSrc: input.imageSrc?.trim() || undefined,
-  };
-  store.sections[index] = next;
-  writeStoreLocal(store);
-  return next;
+  if (res.error) {
+    throw new Error(
+      [res.error, res.details].filter(Boolean).join(": ") ||
+        "Failed to update category",
+    );
+  }
+
+  return null;
 }
 
 export async function deleteAdminSection(

@@ -27,11 +27,18 @@ export function getSupabaseAdmin(): SupabaseClient {
   if (cached) return cached;
 
   const url = getSupabaseUrl();
+  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   const key = getSupabaseKey();
 
   if (!url || !key) {
     throw new Error(
       "Missing Supabase config. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (and SUPABASE_SERVICE_ROLE_KEY for writes) in frontend/.env.local",
+    );
+  }
+
+  if (!serviceRole && process.env.NODE_ENV !== "production") {
+    console.warn(
+      "[supabase] SUPABASE_SERVICE_ROLE_KEY is missing — writes may fail under RLS. Using anon/publishable key.",
     );
   }
 

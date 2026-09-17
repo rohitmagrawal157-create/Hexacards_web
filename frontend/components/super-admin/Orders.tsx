@@ -492,11 +492,16 @@ export default function OrdersPanel({
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((order) => {
+              {pageRows.map((order, index) => {
                 const payment = order.paymentStatus ?? "pending";
                 return (
                   <tr
-                    key={order.id}
+                    key={
+                      order.id ||
+                      (order.orderId
+                        ? `order-${order.orderId}`
+                        : `row-${index}`)
+                    }
                     className="border-b border-black/[0.04] align-top last:border-0"
                   >
                     <td className="whitespace-nowrap px-4 py-3">

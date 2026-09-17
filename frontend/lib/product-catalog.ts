@@ -41,28 +41,74 @@ const sharedCardIncluded = [
 const nfcMedia: ProductMedia[] = [
   {
     type: "image",
-    src: "/Images/Products/digitalCard.jpeg",
-    alt: "HexaCards NFC digital business card",
+    src: "/New_Website_IMG/hexa_Web_img-05.jpg",
+    alt: "Hexa NFC business card — black and gold with QR",
   },
   {
     type: "image",
-    src: "/Images/Products/productd1.jpg",
-    alt: "HexaCards product detail 1",
+    src: "/New_Website_IMG/hexa_Web_img-06.jpg",
+    alt: "Hexa NFC business card — black with logo and QR",
   },
   {
     type: "image",
-    src: "/Images/Products/productd2.jpg",
-    alt: "HexaCards product detail 2",
+    src: "/New_Website_IMG/hexa_Web_img-07.jpg",
+    alt: "Hexa NFC business card — white and gold with QR",
   },
   {
     type: "image",
-    src: "/Images/Products/productd3.jpg",
-    alt: "HexaCards product detail 3",
+    src: "/New_Website_IMG/hexa_Web_img-08.jpg",
+    alt: "Hexa NFC business card — white with NFC mark and QR",
   },
   {
     type: "image",
-    src: "/Images/Products/productd4.jpg",
-    alt: "HexaCards product detail 4",
+    src: "/New_Website_IMG/hexa_Web_img-09.jpg",
+    alt: "Hexa NFC business card — custom color with QR",
+  },
+];
+
+const pvcMedia: ProductMedia[] = [
+  {
+    type: "image",
+    src: "/New_Website_IMG/hexa_Web_img-07.jpg",
+    alt: "Hexa PVC NFC card — white and gold finish",
+  },
+  {
+    type: "image",
+    src: "/New_Website_IMG/hexa_Web_img-08.jpg",
+    alt: "Hexa PVC NFC card — white with logo and QR",
+  },
+  {
+    type: "image",
+    src: "/New_Website_IMG/hexa_Web_img-09.jpg",
+    alt: "Hexa PVC NFC card — custom color sample",
+  },
+  {
+    type: "image",
+    src: "/New_Website_IMG/hexa_Web_img-05.jpg",
+    alt: "Hexa PVC NFC card — black and gold finish",
+  },
+  {
+    type: "image",
+    src: "/New_Website_IMG/hexa_Web_img-06.jpg",
+    alt: "Hexa PVC NFC card — matte black finish",
+  },
+];
+
+const googleReviewMedia: ProductMedia[] = [
+  {
+    type: "image",
+    src: "/New_Website_IMG/hexa_Web_img-10.jpg",
+    alt: "Hexa Google review card — black and gold front and back",
+  },
+  {
+    type: "image",
+    src: "/New_Website_IMG/hexa_Web_img-11.jpg",
+    alt: "Hexa Google review card — tap to open Google reviews",
+  },
+  {
+    type: "image",
+    src: "/New_Website_IMG/hexa_Web_img-12.jpg",
+    alt: "Hexa Google review card — QR review design",
   },
 ];
 
@@ -144,23 +190,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
       "Durable PVC NFC card with crisp print quality — ideal for teams, events, and everyday networking.",
     price: 1599,
     compareAtPrice: 2000,
-    media: [
-      {
-        type: "image",
-        src: "/Images/Products/productd1.jpg",
-        alt: "Hexa PVC NFC business card",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/productd2.jpg",
-        alt: "PVC card detail",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/digitalCard.jpeg",
-        alt: "Hexa digital card",
-      },
-    ],
+    media: pvcMedia,
     highlights: [
       "Premium PVC with sharp full-color print",
       "NFC + QR — no app required",
@@ -441,23 +471,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
       "Hand customers a card that opens your Google review page in one tap or scan — grow ratings without awkward asks.",
     price: 399,
     compareAtPrice: 799,
-    media: [
-      {
-        type: "image",
-        src: "/Images/Products/googleReview.jpeg",
-        alt: "Hexa Google review card",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/Googlecard1.jpg",
-        alt: "Hexa Google review NFC card",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/Googlecard2.jpg",
-        alt: "Hexa Google review NFC card — alternate view",
-      },
-    ],
+    media: googleReviewMedia,
     highlights: [
       "Opens your Google review page instantly",
       "NFC + QR — works on every phone",
@@ -488,43 +502,7 @@ export const productCatalog: Record<string, CatalogProduct> = {
       "Hand customers a card that opens your Google review page in one tap or scan — grow ratings without awkward asks.",
     price: 399,
     compareAtPrice: 799,
-    media: [
-      {
-        type: "image",
-        src: "/Images/Products/googleReview.jpeg",
-        alt: "Hexa Google review card",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/Googlecard1.jpg",
-        alt: "Hexa Google review NFC card",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/Googlecard2.jpg",
-        alt: "Hexa Google review NFC card — alternate view",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/Instacard1.jpg",
-        alt: "Hexa Instagram NFC card",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/Instacard2.jpg",
-        alt: "Hexa Instagram NFC card — alternate view",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/Youtubecard1.jpg",
-        alt: "Hexa YouTube NFC card",
-      },
-      {
-        type: "image",
-        src: "/Images/Products/Youtubecard2.jpg",
-        alt: "Hexa YouTube NFC card — alternate view",
-      },
-    ],
+    media: googleReviewMedia,
     highlights: [
       "Opens your Google review page instantly",
       "NFC + QR — works on every phone",

@@ -8,6 +8,7 @@ import {
   resolveCategoryRef,
   resolveProductRef,
 } from "@/lib/admin-catalog-db";
+import { materializeProductWriteBody } from "@/lib/server/catalog-image-persist";
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string } };
 
@@ -38,11 +39,15 @@ export async function GET(_request: Request, context: RouteContext) {
 export async function PUT(request: Request, context: RouteContext) {
   try {
     const { id } = await Promise.resolve(context.params);
-    const body = (await request.json().catch(() => ({}))) as ProductWriteBody;
+    const rawBody = (await request.json().catch(() => ({}))) as ProductWriteBody;
     const supabase = getSupabaseAdmin();
     const existing = await resolveProductRef(supabase, id);
     if (!existing) return jsonError(404, "Product not found");
 
+    const body = await materializeProductWriteBody(
+      rawBody,
+      String(rawBody.slug ?? existing.slug ?? id),
+    );
     const patch = buildProductPayload(body, { forCreate: false });
 
     let categorySlug: string | null | undefined;

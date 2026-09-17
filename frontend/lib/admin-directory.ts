@@ -426,6 +426,16 @@ export async function fetchAdminUsers(): Promise<AdminUserRecord[]> {
   return assignSrNos(sortAdminUsers(mergeAdminUserRows(dbRows, store)));
 }
 
+/** Exact DB user count (not capped at Supabase's 1000-row page size). */
+export async function fetchAdminUsersCount(): Promise<number> {
+  const res = await apiFetch<{ count: number }>("/api/users?countOnly=1");
+  if (res.ok && res.data && typeof res.data.count === "number") {
+    return res.data.count;
+  }
+  const list = await fetchAdminUsers().catch(() => [] as AdminUserRecord[]);
+  return list.length;
+}
+
 export async function addAdminUser(
   user: Omit<AdminUserRecord, "id"> & { id?: string },
 ): Promise<AdminUserRecord | string> {

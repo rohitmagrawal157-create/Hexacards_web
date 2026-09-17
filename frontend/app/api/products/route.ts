@@ -9,6 +9,7 @@ import {
   slugify,
   uniqueId,
 } from "@/lib/admin-catalog-db";
+import { materializeProductWriteBody } from "@/lib/server/catalog-image-persist";
 
 export async function GET(request: Request) {
   try {
@@ -97,11 +98,13 @@ export async function POST(request: Request) {
       return jsonError(409, `Product slug "${slug}" already exists`);
     }
 
+    const materialized = await materializeProductWriteBody(body, slug);
+
     const payload: Record<string, unknown> = {
       slug,
-      ...buildProductPayload(body, { forCreate: true }),
+      ...buildProductPayload(materialized, { forCreate: true }),
       product_category: Number(category.category_id),
-      category: body.category,
+      category: materialized.category ?? body.category,
     };
 
     if (!payload.cta_href) payload.cta_href = `/product/${slug}`;

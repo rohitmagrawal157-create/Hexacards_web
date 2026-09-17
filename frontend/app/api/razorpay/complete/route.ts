@@ -8,6 +8,7 @@ import {
   PAYMENT_COLS,
   type PaymentRow,
 } from "@/lib/server/payment-types";
+import { resolveExistingUserId } from "@/lib/server/resolve-user-id";
 
 export const runtime = "nodejs";
 
@@ -126,13 +127,19 @@ export async function POST(request: Request) {
     const payAmount = amount > 0 ? amount : Number(orderRow.amount) || 0;
     const now = new Date().toISOString();
 
+    const resolvedCustomerId = await resolveExistingUserId(supabase, {
+      explicit:
+        customerId ??
+        (orderRow.user_id != null ? Number(orderRow.user_id) : null),
+      phone: orderRow.mobile_number ?? orderRow.owner_phone ?? null,
+    });
+
     const paymentPayload = {
       client_txn_id: txnId.slice(0, 64),
       amount: payAmount,
-      customer_id:
-        customerId ??
-        (orderRow.user_id != null ? Number(orderRow.user_id) : null),
+      customer_id: resolvedCustomerId,
       gateway_order_id: razorpayOrderId.slice(0, 100),
+      created_at: now,
       txn_at: now,
       remark: `Order ${orderRow.order_code} — Razorpay paid`,
       status: "success",
@@ -190,8 +197,8 @@ export async function POST(request: Request) {
       payment_method: "razorpay",
       updated_at: now,
     };
-    if (!orderRow.user_id && customerId) {
-      orderUpdate.user_id = customerId;
+    if (!orderRow.user_id && resolvedCustomerId) {
+      orderUpdate.user_id = resolvedCustomerId;
     }
 
     const { data: updatedOrder, error: orderErr } = await supabase

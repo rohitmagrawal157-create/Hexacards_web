@@ -9,16 +9,45 @@ import {
   normalizeMobile,
   USER_SAFE_COLS,
 } from "@/lib/users-db";
+import { fetchAllSupabaseRows } from "@/lib/server/supabase-fetch-all";
 
 // ── GET /api/users ──────────────────────────────────────────────────────────
+// Supports:
+//   ?countOnly=1  → { count } only (fast overview)
+// Default: all users (paged past Supabase 1000-row cap)
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const countOnly =
+      searchParams.get("countOnly") === "1" ||
+      searchParams.get("count") === "1";
+
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("users")
-      .select(USER_SAFE_COLS)
-      .order("user_id", { ascending: true });
+
+    if (countOnly) {
+      const { count, error } = await supabase
+        .from("users")
+        .select("user_id", { count: "exact", head: true });
+      if (error) {
+        return jsonError(500, "Failed to count users", error.message);
+      }
+      return jsonOk({ count: count ?? 0 });
+    }
+
+    const { data, error } = await fetchAllSupabaseRows<UserRow>(
+      async (from, to) => {
+        const res = await supabase
+          .from("users")
+          .select(USER_SAFE_COLS)
+          .order("user_id", { ascending: true })
+          .range(from, to);
+        return {
+          data: (res.data as UserRow[] | null) ?? null,
+          error: res.error ? { message: res.error.message } : null,
+        };
+      },
+    );
 
     if (error) {
       if (
@@ -33,7 +62,7 @@ export async function GET() {
       return jsonError(500, "Failed to load users", error.message);
     }
 
-    return jsonOk((data as UserRow[] ?? []).map(mapUser));
+    return jsonOk(data.map(mapUser));
   } catch (err) {
     return jsonError(500, err instanceof Error ? err.message : "Server error");
   }

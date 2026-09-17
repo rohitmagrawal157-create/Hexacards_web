@@ -41,10 +41,26 @@ export function asMedia(
   alt = "Product",
 ): ProductMedia[] {
   if (Array.isArray(value) && value.length > 0) {
-    return value as ProductMedia[];
+    return (value as ProductMedia[]).map((item) => {
+      if (item?.type === "image") {
+        return {
+          ...item,
+          src: catalogImgPublicUrl(item.src) || item.src,
+        };
+      }
+      if (item?.type === "video") {
+        return {
+          ...item,
+          thumbnail: catalogImgPublicUrl(item.thumbnail) || item.thumbnail,
+        };
+      }
+      return item;
+    });
   }
   const src =
-    String(fallbackImage || "").trim() || "/Images/Products/digitalCard.jpeg";
+    catalogImgPublicUrl(fallbackImage) ||
+    String(fallbackImage || "").trim() ||
+    "/Images/Products/digitalCard.jpeg";
   return [{ type: "image", src, alt }];
 }
 
@@ -78,24 +94,35 @@ function resolveProductHeroFilename(filename: string): string {
   return aliased || base;
 }
 
-/** Persist only the file name (strip folders / query). */
+/** Persist path for public assets. Keep New_Website_IMG full path; strip others to filename. */
 export function toCatalogImgFilename(
   value: string | null | undefined,
 ): string | null {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
-  if (raw.startsWith("data:")) return raw;
+  if (raw.startsWith("data:")) return null;
   try {
+    let path = raw;
     if (/^https?:\/\//i.test(raw)) {
-      const path = new URL(raw).pathname;
-      const base = path.split("/").filter(Boolean).pop() ?? "";
-      return base || null;
+      path = new URL(raw).pathname;
+      // Keep full https URLs that fit varchar(255) for Supabase public objects
+      if (raw.length <= 255 && raw.includes("/storage/")) {
+        return raw.split("?")[0];
+      }
     }
+    const newWebsiteIdx = path.indexOf("/New_Website_IMG/");
+    if (newWebsiteIdx >= 0) {
+      return path.slice(newWebsiteIdx);
+    }
+    if (path.startsWith("/uploads/")) {
+      return path.split("?")[0];
+    }
+    const base = path.split(/[\\/]/).filter(Boolean).pop()?.split("?")[0]?.trim() ?? "";
+    return base || null;
   } catch {
-    // fall through
+    const base = raw.split(/[\\/]/).pop()?.split("?")[0]?.trim() ?? "";
+    return base || null;
   }
-  const base = raw.split(/[\\/]/).pop()?.split("?")[0]?.trim() ?? "";
-  return base || null;
 }
 
 /** @deprecated use toCatalogImgFilename */
@@ -116,6 +143,9 @@ export function catalogImgPublicUrl(
       return `${CATALOG_IMG_DIR}${resolveProductHeroFilename(base)}`;
     }
     return raw;
+  }
+  if (/^hexa_web_img-\d+\.(jpe?g|png|webp)$/i.test(raw)) {
+    return `/New_Website_IMG/${raw}`;
   }
   return `${CATALOG_IMG_DIR}${resolveProductHeroFilename(raw)}`;
 }
@@ -141,6 +171,7 @@ export function mapProduct(
   row: ProductRow,
   categorySlug?: string | null,
 ): ProductDto {
+  const shortTitle = row.short_title || row.product_name;
   return {
     id: row.slug,
     productId: Number(row.product_id),
@@ -148,11 +179,11 @@ export function mapProduct(
     categorySlug: categorySlug ?? null,
     category: row.category,
     title: row.product_name,
-    shortTitle: row.short_title || row.product_name,
+    shortTitle,
     description: row.product_desc ?? "",
     price: Number(row.product_price) || 0,
     compareAtPrice: Number(row.regular_price) || 0,
-    media: row.media ?? [],
+    media: asMedia(row.media, catalogImgPublicUrl(row.product_img), shortTitle),
     highlights: row.highlights ?? [],
     finishes: row.finishes ?? [],
     included: row.included ?? [],
@@ -349,7 +380,20 @@ export function buildProductPayload(
       shortTitle || title || "Product",
     );
   }
-  if (imageFile !== undefined) payload.product_img = imageFile;
+  // Never write data: URLs into product_img (varchar 255) — media jsonb holds gallery.
+  if (imageRaw !== undefined) {
+    if (imageFile && !String(imageFile).startsWith("data:")) {
+      payload.product_img = String(imageFile).slice(0, 255);
+    } else if (
+      imageRaw == null ||
+      imageRaw === "" ||
+      (typeof imageRaw === "string" && !imageRaw.startsWith("data:"))
+    ) {
+      // Explicit clear / non-data path that failed filename parse
+      if (imageRaw == null || imageRaw === "") payload.product_img = null;
+    }
+    // data: upload left product_img unchanged when materialize failed to run
+  }
 
   return payload;
 }

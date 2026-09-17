@@ -22,6 +22,7 @@ import {
   stripLinkFieldsFromCardPayload,
   upsertCardLinks,
 } from "@/lib/server/card-links-db";
+import { fetchAllSupabaseRows } from "@/lib/server/supabase-fetch-all";
 
 async function resolveUserId(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -162,66 +163,78 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("user_id");
     const slug = searchParams.get("slug")?.trim().toLowerCase();
+    const countOnly =
+      searchParams.get("countOnly") === "1" ||
+      searchParams.get("count") === "1";
 
     const supabase = getSupabaseAdmin();
-    let query = supabase
-      .from("cards")
-      .select(CARD_COLS)
-      .order("card_id", { ascending: false });
 
-    if (userId) {
-      const id = Number(userId);
-      if (!Number.isInteger(id) || id <= 0) {
-        return jsonError(400, "user_id must be a positive integer");
-      }
-      query = query.eq("user_id", id);
-    }
-    if (slug) query = query.eq("unic_card_name", slug);
-
-    let { data, error } = await query;
-    if (error && isExtraMobilesColumnMissingError(error.message)) {
-      let noExtra = supabase
+    if (countOnly && !userId && !slug) {
+      const { count, error } = await supabase
         .from("cards")
-        .select(CARD_COLS_NO_EXTRA)
-        .order("card_id", { ascending: false });
+        .select("card_id", { count: "exact", head: true });
+      if (error) {
+        return jsonError(500, "Failed to count cards", error.message);
+      }
+      return jsonOk({ count: count ?? 0 });
+    }
+
+    const applyFilters = <T extends { eq: (c: string, v: string | number) => T }>(
+      q: T,
+    ): T => {
+      let next = q;
       if (userId) {
         const id = Number(userId);
-        noExtra = noExtra.eq("user_id", id);
+        if (!Number.isInteger(id) || id <= 0) {
+          throw new Error("user_id must be a positive integer");
+        }
+        next = next.eq("user_id", id);
       }
-      if (slug) noExtra = noExtra.eq("unic_card_name", slug);
-      const noExtraResult = await noExtra;
-      data = noExtraResult.data as typeof data;
-      error = noExtraResult.error;
+      if (slug) next = next.eq("unic_card_name", slug);
+      return next;
+    };
+
+    const pageWithCols = async (cols: string) =>
+      fetchAllSupabaseRows<CardRow>(async (from, to) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q: any = supabase
+          .from("cards")
+          .select(cols)
+          .order("card_id", { ascending: false })
+          .range(from, to);
+        q = applyFilters(q);
+        const res = await q;
+        return {
+          data: (res.data as CardRow[] | null) ?? null,
+          error: res.error ? { message: res.error.message } : null,
+        };
+      });
+
+    let result = await pageWithCols(CARD_COLS);
+    if (result.error && isExtraMobilesColumnMissingError(result.error.message)) {
+      result = await pageWithCols(CARD_COLS_NO_EXTRA);
     }
-    if (error && isAccentColumnMissingError(error.message)) {
-      let legacy = supabase
-        .from("cards")
-        .select(CARD_COLS_LEGACY)
-        .order("card_id", { ascending: false });
-      if (userId) {
-        const id = Number(userId);
-        legacy = legacy.eq("user_id", id);
+    if (result.error && isAccentColumnMissingError(result.error.message)) {
+      result = await pageWithCols(CARD_COLS_LEGACY);
+    }
+
+    if (result.error) {
+      if (result.error.message.includes("user_id must be a positive integer")) {
+        return jsonError(400, result.error.message);
       }
-      if (slug) legacy = legacy.eq("unic_card_name", slug);
-      const legacyResult = await legacy;
-      data = legacyResult.data as typeof data;
-      error = legacyResult.error;
-    }
-    if (error) {
       if (
-        error.message.includes("does not exist") ||
-        error.message.includes("schema cache")
+        result.error.message.includes("does not exist") ||
+        result.error.message.includes("schema cache")
       ) {
         return jsonError(
           400,
           "cards table missing — run frontend/sql/cards-table.sql in Supabase",
         );
       }
-      return jsonError(500, "Failed to load cards", error.message);
+      return jsonError(500, "Failed to load cards", result.error.message);
     }
 
-    const rows = (data as CardRow[] | null) ?? [];
-    const cards = rows.map(mapCard);
+    const cards = result.data.map(mapCard);
     const linksMap = await fetchLinksForCards(
       supabase,
       cards.map((c) => c.cardId),
