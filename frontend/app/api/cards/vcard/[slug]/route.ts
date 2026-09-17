@@ -1,14 +1,10 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError } from "@/lib/admin-catalog-db";
+import { mapCard } from "@/lib/server/card-types";
 import {
-  CARD_COLS,
-  CARD_COLS_LEGACY,
-  CARD_COLS_NO_EXTRA,
-  isAccentColumnMissingError,
-  isExtraMobilesColumnMissingError,
-  mapCard,
-  type CardRow,
-} from "@/lib/server/card-types";
+  cardHasPublicPaymentEntitlement,
+  findActiveCardRowBySlug,
+} from "@/lib/server/card-by-slug";
 import { isReservedRootSegment } from "@/lib/reserved-routes";
 import { buildVCardFromCardDto } from "@/lib/server/card-vcard";
 import {
@@ -31,60 +27,22 @@ export async function GET(_request: Request, context: RouteContext) {
     }
 
     const supabase = getSupabaseAdmin();
-    let { data, error } = await supabase
-      .from("cards")
-      .select(CARD_COLS)
-      .eq("unic_card_name", slug)
-      .eq("status", 1)
-      .maybeSingle();
+    const { row, error } = await findActiveCardRowBySlug(supabase, slug);
+    if (error) return jsonError(500, "Failed to load card", error);
+    if (!row) return jsonError(404, "Card not found");
 
-    if (error && isExtraMobilesColumnMissingError(error.message)) {
-      ({ data, error } = await supabase
-        .from("cards")
-        .select(CARD_COLS_NO_EXTRA)
-        .eq("unic_card_name", slug)
-        .eq("status", 1)
-        .maybeSingle());
-    }
-
-    if (error && isAccentColumnMissingError(error.message)) {
-      ({ data, error } = await supabase
-        .from("cards")
-        .select(CARD_COLS_LEGACY)
-        .eq("unic_card_name", slug)
-        .eq("status", 1)
-        .maybeSingle());
-    }
-
-    if (error) return jsonError(500, "Failed to load card", error.message);
-    if (!data) return jsonError(404, "Card not found");
-
-    const row = data as CardRow;
     const cardId = Number(row.card_id);
-    const { data: linkedOrders } = await supabase
-      .from("orders")
-      .select("payment_status")
-      .or(
-        [
-          `card_slug.eq.${slug}`,
-          Number.isFinite(cardId) && cardId > 0
-            ? `card_id.eq.${cardId}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(","),
-      )
-      .limit(20);
-    const orderRows =
-      (linkedOrders as { payment_status: number }[] | null) ?? [];
-    if (
-      orderRows.length > 0 &&
-      !orderRows.some((o) => Number(o.payment_status) === 1)
-    ) {
-      return jsonError(404, "Card not found");
-    }
+    const canonicalSlug = String(row.unic_card_name ?? "")
+      .trim()
+      .toLowerCase() || slug;
 
-    let card = mapCard(row);
+    const allowed = await cardHasPublicPaymentEntitlement(supabase, {
+      cardId,
+      slug: canonicalSlug,
+    });
+    if (!allowed) return jsonError(404, "Card not found");
+
+    let card = mapCard({ ...row, unic_card_name: canonicalSlug });
     try {
       const links = await fetchLinksForCard(supabase, card.cardId);
       card = applyLinksToCard(card, links);

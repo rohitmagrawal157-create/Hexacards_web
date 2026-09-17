@@ -1,13 +1,9 @@
 import {
-  CARD_COLS,
-  CARD_COLS_LEGACY,
-  CARD_COLS_NO_EXTRA,
-  isAccentColumnMissingError,
-  isExtraMobilesColumnMissingError,
   mapCard,
   type CardDto,
   type CardRow,
 } from "@/lib/server/card-types";
+import { findActiveCardRowBySlug } from "@/lib/server/card-by-slug";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { resolveCardImageSrc } from "@/lib/card-images";
 import { DEFAULT_CARD_AVATAR } from "@/lib/card-profile";
@@ -76,33 +72,10 @@ export async function fetchCardBySlugForOg(
   if (!slug || isReservedRootSegment(slug)) return null;
 
   const supabase = getSupabaseAdmin();
-  let { data, error } = await supabase
-    .from("cards")
-    .select(CARD_COLS)
-    .eq("unic_card_name", slug)
-    .eq("status", 1)
-    .maybeSingle();
-
-  if (error && isExtraMobilesColumnMissingError(error.message)) {
-    ({ data, error } = await supabase
-      .from("cards")
-      .select(CARD_COLS_NO_EXTRA)
-      .eq("unic_card_name", slug)
-      .eq("status", 1)
-      .maybeSingle());
-  }
-
-  if (error && isAccentColumnMissingError(error.message)) {
-    ({ data, error } = await supabase
-      .from("cards")
-      .select(CARD_COLS_LEGACY)
-      .eq("unic_card_name", slug)
-      .eq("status", 1)
-      .maybeSingle());
-  }
-
-  if (error || !data) return null;
-  return mapCard(data as CardRow);
+  const { row, error } = await findActiveCardRowBySlug(supabase, slug);
+  if (error || !row) return null;
+  const canonical = String(row.unic_card_name ?? "").trim().toLowerCase() || slug;
+  return mapCard({ ...row, unic_card_name: canonical } as CardRow);
 }
 
 export async function getCardOgPayload(

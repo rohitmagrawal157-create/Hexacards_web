@@ -104,7 +104,7 @@ export function buildPublicCardUrl(
   slug: string,
   mode: PublicCardUrlMode = "canonical",
 ): string {
-  const clean = slug.trim().replace(/^\/+/, "");
+  const clean = slug.trim().replace(/^\/+/, "").toLowerCase();
   const base =
     mode === "runtime"
       ? getRuntimeSiteOrigin()
@@ -116,7 +116,7 @@ export function buildPublicCardUrl(
 
 /** Relative in-app path — works on hexacards.com and *.vercel.app */
 export function buildPublicCardPath(slug: string): string {
-  return `/${slug.trim().replace(/^\/+/, "")}`;
+  return `/${slug.trim().replace(/^\/+/, "").toLowerCase()}`;
 }
 
 /** Owner dashboard / edit bar — show test URL on Vercel, production URL otherwise. */

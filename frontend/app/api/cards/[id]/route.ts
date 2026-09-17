@@ -84,7 +84,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     };
 
     if (body.unicCardName !== undefined || body.unic_card_name !== undefined) {
-      const v = String(body.unicCardName ?? body.unic_card_name ?? "").trim();
+      const v = String(body.unicCardName ?? body.unic_card_name ?? "")
+        .trim()
+        .toLowerCase();
       if (!v) return jsonError(400, "unic_card_name cannot be empty");
       set("unic_card_name", v);
     }

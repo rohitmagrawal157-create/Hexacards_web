@@ -51,7 +51,7 @@ function buildCardPayload(
 ) {
   const cardName = String(body.cardName ?? body.card_name ?? "").trim();
   const unic =
-    String(body.unicCardName ?? body.unic_card_name ?? "").trim() ||
+    String(body.unicCardName ?? body.unic_card_name ?? "").trim().toLowerCase() ||
     (cardName ? slugifyCardName(cardName) : "");
   const userId = Number(resolvedUserId ?? body.userId ?? body.user_id);
 
