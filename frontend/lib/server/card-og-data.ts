@@ -1,7 +1,6 @@
 import {
   mapCard,
   type CardDto,
-  type CardRow,
 } from "@/lib/server/card-types";
 import { findActiveCardRowBySlug } from "@/lib/server/card-by-slug";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
@@ -75,7 +74,7 @@ export async function fetchCardBySlugForOg(
   const { row, error } = await findActiveCardRowBySlug(supabase, slug);
   if (error || !row) return null;
   const canonical = String(row.unic_card_name ?? "").trim().toLowerCase() || slug;
-  return mapCard({ ...row, unic_card_name: canonical } as CardRow);
+  return mapCard({ ...row, unic_card_name: canonical });
 }
 
 export async function getCardOgPayload(

@@ -15,36 +15,48 @@ function escapeIlikeExact(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
+function toCardRow(data: unknown): CardRow | null {
+  if (!data || typeof data !== "object") return null;
+  return data as CardRow;
+}
+
 async function selectCardBySlug(
   supabase: SupabaseAdmin,
-  cols: string,
+  cols: typeof CARD_COLS | typeof CARD_COLS_NO_EXTRA | typeof CARD_COLS_LEGACY,
   slug: string,
-) {
+): Promise<{ data: CardRow | null; error: { message: string } | null }> {
   const normalized = slug.trim().toLowerCase();
   if (!normalized) {
-    return { data: null as CardRow | null, error: null as { message: string } | null };
+    return { data: null, error: null };
   }
 
   // 1) Exact lowercase match (canonical new rows)
-  let { data, error } = await supabase
-    .from("cards")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let result: { data: unknown; error: { message: string } | null } = await (
+    supabase.from("cards") as any
+  )
     .select(cols)
     .eq("unic_card_name", normalized)
     .maybeSingle();
 
-  if (error) return { data: null, error: { message: error.message } };
-  if (data) return { data: data as CardRow, error: null };
+  if (result.error) {
+    return { data: null, error: { message: result.error.message } };
+  }
+  const exact = toCardRow(result.data);
+  if (exact) return { data: exact, error: null };
 
   // 2) Legacy mixed-case unic_card_name (e.g. Mr-AbhayKhursale99)
-  ({ data, error } = await supabase
-    .from("cards")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  result = await (supabase.from("cards") as any)
     .select(cols)
     .ilike("unic_card_name", escapeIlikeExact(normalized))
     .limit(1)
-    .maybeSingle());
+    .maybeSingle();
 
-  if (error) return { data: null, error: { message: error.message } };
-  return { data: (data as CardRow | null) ?? null, error: null };
+  if (result.error) {
+    return { data: null, error: { message: result.error.message } };
+  }
+  return { data: toCardRow(result.data), error: null };
 }
 
 function isActiveCardStatus(status: unknown): boolean {
@@ -103,7 +115,8 @@ export async function cardHasPublicPaymentEntitlement(
     .or(filters.join(","))
     .limit(20);
 
-  const orderRows = (data as { payment_status: number | string }[] | null) ?? [];
+  const orderRows =
+    (data as unknown as { payment_status: number | string }[] | null) ?? [];
   if (orderRows.length === 0) return true;
   return orderRows.some((o) => Number(o.payment_status) === 1);
 }
