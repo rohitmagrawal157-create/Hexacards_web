@@ -896,9 +896,9 @@ export default function CardsPanel({
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/[0.06] px-5 py-4 text-sm text-[#5c5346]">
           <p>
-            Showing {(safePage - 1) * PAGE_SIZE + 1} to{" "}
-            {Math.min(safePage * PAGE_SIZE, filtered.length)} of{" "}
-            {filtered.length} entries
+            {filtered.length === 0
+              ? "Showing 0 entries"
+              : `Showing ${(safePage - 1) * PAGE_SIZE + 1} to ${Math.min(safePage * PAGE_SIZE, filtered.length)} of ${filtered.length} entries`}
           </p>
 
           <div className="flex flex-wrap items-center gap-1">

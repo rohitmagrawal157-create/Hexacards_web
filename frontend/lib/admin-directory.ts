@@ -769,14 +769,11 @@ export async function fetchAdminCardsCount(): Promise<number> {
   return list.filter((row) => row.id.startsWith("card-")).length;
 }
 
-/** Load cards from Supabase + orders (read-only merge, stable list). */
+/** Load cards from Supabase only (admin list = DB rows, not order orphans). */
 export async function fetchAdminCards(): Promise<AdminCardRecord[]> {
   let store = readCardsStore();
 
-  const [cardsRes, orders] = await Promise.all([
-    apiFetch<CardDto[]>("/api/cards"),
-    fetchOrders(),
-  ]);
+  const cardsRes = await apiFetch<CardDto[]>("/api/cards");
 
   const dbRows =
     cardsRes.ok && Array.isArray(cardsRes.data)
@@ -794,44 +791,22 @@ export async function fetchAdminCards(): Promise<AdminCardRecord[]> {
     }
   }
 
-  const cachedExtras = store.extras.filter(
-    (c) => !store.deletedIds.includes(c.id),
+  // Recently provisioned cards may appear in extras before the next full list
+  // refresh; keep only real DB card ids not already in this response.
+  const dbIds = new Set(dbRows.map((row) => row.id));
+  const pendingExtras = store.extras.filter(
+    (c) =>
+      !store.deletedIds.includes(c.id) &&
+      c.id.startsWith("card-") &&
+      !dbIds.has(c.id),
   );
 
-  const dbSlugs = new Set(
-    dbRows.map((row) => slugFromLiveUrl(row.liveUrl)).filter(Boolean),
-  );
-  const dbCardIds = new Set(
-    dbRows
-      .map((row) => adminCardIdNumeric(row.id))
-      .filter((id): id is number => id != null),
-  );
+  const list = [...dbRows, ...pendingExtras].map((c) => ({
+    ...c,
+    ...store.overrides[c.id],
+  }));
 
-  const orderRows = orders
-    .filter(isOrderPaymentPaid)
-    .filter(isCardProductOrder)
-    .filter((o) => {
-      const dbId = o.cardId && o.cardId > 0 ? `card-${o.cardId}` : null;
-      return (
-        !store.deletedIds.includes(o.id) &&
-        (!dbId || !store.deletedIds.includes(dbId))
-      );
-    })
-    .filter((o) => {
-      if (o.cardId && o.cardId > 0 && dbCardIds.has(o.cardId)) return false;
-      const slug = resolveOrderLiveUrl(o).slug.toLowerCase();
-      return slug ? !dbSlugs.has(slug) : true;
-    })
-    .map(orderToAdminCard);
-
-  const merged = mergeAdminCards(dbRows, [...orderRows, ...cachedExtras]).map(
-    (c) => ({
-      ...c,
-      ...store.overrides[c.id],
-    }),
-  );
-
-  return assignSrNos(sortAdminCards(merged));
+  return assignSrNos(sortAdminCards(list));
 }
 
 export function updateAdminCard(id: string, patch: Partial<AdminCardRecord>) {
