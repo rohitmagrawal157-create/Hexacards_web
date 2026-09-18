@@ -44,6 +44,12 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
+/** Prefer numeric DB `orders.order_id`; fall back to order code. */
+function displayOrderId(order: HexaOrder): string {
+  if (order.orderId != null && order.orderId > 0) return String(order.orderId);
+  return order.id || "—";
+}
+
 function paymentBadge(status: HexaPaymentStatus) {
   switch (status) {
     case "paid":
@@ -93,7 +99,8 @@ function formatInputDateLabel(value: string) {
 
 function toCsv(rows: HexaOrder[]): string {
   const headers = [
-    "ID",
+    "Order ID",
+    "Order Code",
     "Customer Name",
     "Product Name",
     "Amount",
@@ -105,6 +112,7 @@ function toCsv(rows: HexaOrder[]): string {
   ];
   const lines = rows.map((o) =>
     [
+      o.orderId != null && o.orderId > 0 ? o.orderId : "",
       o.id,
       `"${o.customerName.replace(/"/g, '""')}"`,
       `"${o.productTitle.replace(/"/g, '""')}"`,
@@ -193,7 +201,7 @@ function printTable(rows: HexaOrder[]) {
   const rowsHtml = rows
     .map(
       (o) =>
-        `<tr><td>${o.id}</td><td>${o.customerName}</td><td>${o.productTitle}</td><td>${formatCurrency(o.total)}</td><td>${formatOrderDate(o.createdAt)}</td><td>${paymentStatusLabel(o.paymentStatus ?? "pending")}</td><td>${o.phone}</td><td>${formatOrderAddress(o)}</td></tr>`,
+        `<tr><td>${displayOrderId(o)}</td><td>${o.customerName}</td><td>${o.productTitle}</td><td>${formatCurrency(o.total)}</td><td>${formatOrderDate(o.createdAt)}</td><td>${paymentStatusLabel(o.paymentStatus ?? "pending")}</td><td>${o.phone}</td><td>${formatOrderAddress(o)}</td></tr>`,
     )
     .join("");
   win.document.write(`
@@ -202,7 +210,7 @@ function printTable(rows: HexaOrder[]) {
       <body>
         <h2>All Orders</h2>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">
-          <thead><tr><th>ID</th><th>Customer</th><th>Product</th><th>Amount</th><th>Date</th><th>Payment</th><th>Number</th><th>Address</th></tr></thead>
+          <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Amount</th><th>Date</th><th>Payment</th><th>Number</th><th>Address</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </body>
@@ -274,6 +282,11 @@ export default function OrdersPanel({
     }
 
     list = [...list].sort((a, b) => {
+      const aId = a.orderId != null && a.orderId > 0 ? a.orderId : 0;
+      const bId = b.orderId != null && b.orderId > 0 ? b.orderId : 0;
+      if (aId !== bId) {
+        return sortAsc ? aId - bId : bId - aId;
+      }
       const aTime = new Date(a.createdAt).getTime();
       const bTime = new Date(b.createdAt).getTime();
       return sortAsc ? aTime - bTime : bTime - aTime;
@@ -474,7 +487,7 @@ export default function OrdersPanel({
                     onClick={() => setSortAsc((v) => !v)}
                     className="inline-flex items-center gap-1 hover:text-[#141414]"
                   >
-                    ID
+                    Order ID
                     {sortAsc ? (
                       <ChevronUp className="h-3.5 w-3.5" />
                     ) : (
@@ -514,8 +527,8 @@ export default function OrdersPanel({
                         View
                       </button>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-[#141414]">
-                      {order.id}
+                    <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums text-[#141414]">
+                      {displayOrderId(order)}
                     </td>
                     <td className="px-4 py-3">
                       <p className="font-medium break-words text-[#141414]">
@@ -697,6 +710,14 @@ export default function OrdersPanel({
                       Order summary
                     </p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <DetailField
+                        label="Order ID"
+                        value={displayOrderId(viewOrder)}
+                      />
+                      <DetailField
+                        label="Order code"
+                        value={viewOrder.id || "—"}
+                      />
                       <DetailField label="Product name" value={viewOrder.productTitle} />
                       <DetailField label="Pack" value={viewOrder.packTitle} />
                       <DetailField label="Quantity" value={String(viewOrder.qty)} />

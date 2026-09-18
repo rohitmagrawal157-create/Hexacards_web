@@ -91,6 +91,14 @@ function parseCardDate(value: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/** Numeric DB `cards.card_id` from admin row id (`card-123`). */
+function adminCardDbId(card: Pick<AdminCardRow, "id">): number | null {
+  const match = String(card.id).match(/^card-(\d+)$/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 function isCardExpired(card: AdminCardRow, today = new Date()): boolean {
   const expiry = parseCardDate(card.expiryDate);
   if (!expiry) return false;
@@ -121,7 +129,7 @@ function isCardActive(card: AdminCardRow): boolean {
 
 function toCsv(rows: AdminCardRow[]): string {
   const headers = [
-    "Sr. No.",
+    "Card ID",
     "Name",
     "Live URL",
     "Mobile",
@@ -132,7 +140,7 @@ function toCsv(rows: AdminCardRow[]): string {
   ];
   const lines = rows.map((r) =>
     [
-      r.srNo,
+      adminCardDbId(r) ?? "",
       `"${r.name.replace(/"/g, '""')}"`,
       r.liveUrl,
       r.mobile,
@@ -161,7 +169,7 @@ function printTable(rows: AdminCardRow[], title: string) {
   const rowsHtml = rows
     .map(
       (r) =>
-        `<tr><td>${r.srNo}</td><td>${r.name}</td><td>${r.mobile}</td><td>${r.startDate}</td><td>${r.expiryDate}</td><td>${r.pageViews}</td><td>${isCardActive(r) ? "Active" : "Inactive"}</td></tr>`,
+        `<tr><td>${adminCardDbId(r) ?? ""}</td><td>${r.name}</td><td>${r.mobile}</td><td>${r.startDate}</td><td>${r.expiryDate}</td><td>${r.pageViews}</td><td>${isCardActive(r) ? "Active" : "Inactive"}</td></tr>`,
     )
     .join("");
   win.document.write(`
@@ -170,7 +178,7 @@ function printTable(rows: AdminCardRow[], title: string) {
       <body>
         <h2>${title}</h2>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">
-          <thead><tr><th>Sr. No.</th><th>Name</th><th>Mobile</th><th>Start</th><th>Expiry</th><th>Views</th><th>Status</th></tr></thead>
+          <thead><tr><th>Card ID</th><th>Name</th><th>Mobile</th><th>Start</th><th>Expiry</th><th>Views</th><th>Status</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </body>
@@ -251,7 +259,10 @@ function CardDetailModal({
         <div className="flex items-start justify-between gap-3 border-b border-black/[0.06] px-5 py-4">
           <div className="flex-1 min-w-0">
             <p className="text-[10px] font-bold tracking-[0.14em] text-[#BC7C10] uppercase">
-              Card Details · #{card.id}
+              Card Details
+              {adminCardDbId(card) != null
+                ? ` · Card ID ${adminCardDbId(card)}`
+                : ""}
             </p>
             <h3
               id="card-detail-title"
@@ -752,13 +763,13 @@ export default function CardsPanel({
             <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-black/[0.06] text-[11px] font-bold tracking-wide text-[#8a8174] uppercase">
-                  <th className="w-[72px] px-4 py-3">
+                  <th className="w-[88px] px-4 py-3">
                     <button
                       type="button"
                       onClick={() => setSortAsc((v) => !v)}
                       className="inline-flex items-center gap-1 hover:text-[#141414]"
                     >
-                      No.
+                      Card ID
                       {sortAsc ? (
                         <ChevronUp className="h-3.5 w-3.5" />
                       ) : (
@@ -785,8 +796,8 @@ export default function CardsPanel({
                       onClick={() => setDetailCard(card)}
                       className="cursor-pointer border-b border-black/[0.04] align-top last:border-0 hover:bg-[#FFFCF7] transition-colors"
                     >
-                      <td className="px-4 py-4 font-semibold tabular-nums text-[#8a8174]">
-                        {card.srNo}
+                      <td className="px-4 py-4 font-semibold tabular-nums text-[#141414]">
+                        {adminCardDbId(card) ?? "—"}
                       </td>
                       <td className="px-4 py-4">
                         <a

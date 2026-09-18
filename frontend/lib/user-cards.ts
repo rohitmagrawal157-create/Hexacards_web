@@ -448,12 +448,30 @@ async function fetchActiveCardsForUser(userId: number): Promise<CardDto[]> {
   return res.data.filter((c) => c.status !== false && c.cardId > 0);
 }
 
+/** Active cards whose primary mobile matches this phone (orphan gap-fill). */
+async function fetchActiveCardsForPhone(phone: string): Promise<CardDto[]> {
+  const digits = normalizeIndianPhone(phone);
+  if (!digits) return [];
+  const res = await apiFetch<CardDto[]>(
+    `/api/cards?mobile=${encodeURIComponent(digits)}`,
+  );
+  if (!res.ok || !Array.isArray(res.data)) return [];
+  return res.data.filter((c) => {
+    if (c.status === false || !(c.cardId > 0)) return false;
+    return normalizeIndianPhone(c.mobile) === digits;
+  });
+}
+
 /**
  * Dashboard order list — successful payments only.
  *
- * 1) Paid orders by phone + user_id (source of truth for Add user / checkout)
- * 2) Card gap-fill ONLY when there are zero paid orders (orphan card)
- * 3) Dedupe by cardId / slug / person
+ * 1) Paid orders owned by this phone (source of truth for Add user / checkout)
+ * 2) Gap-fill active cards owned by the same phone that are not already
+ *    represented by a paid order (by cardId / slug) — needed when the user
+ *    has other paid products but an orphan digital card still exists in DB
+ * 3) Dedupe by cardId / slug / order id (prefers real orders over card-* stubs)
+ *
+ * Ownership stays phone-only: never attach another user's card via userId alone.
  */
 export async function fetchUserDashboardOrders(
   phone: string,
@@ -469,26 +487,51 @@ export async function fetchUserDashboardOrders(
     },
   );
 
-  // Admin Add user + checkout always create a paid order. Never also inject the
-  // linked cards row as a second "paid" tile (that caused 1 add → 2 cards).
-  if (paidOrders.length > 0) {
+  if (!phoneDigits) {
     return dedupeDashboardOrders(paidOrders);
   }
 
+  const coveredCardIds = new Set<number>();
+  const coveredSlugs = new Set<string>();
+  for (const order of paidOrders) {
+    if (order.cardId && order.cardId > 0) coveredCardIds.add(order.cardId);
+    const slug = String(order.cardSlug ?? "").trim().toLowerCase();
+    if (slug) coveredSlugs.add(slug);
+    // Also cover resolved live slug when order is editable
+    if (isEditableCardOrder(order)) {
+      try {
+        const resolved = resolveOrderLiveUrl(order).slug.trim().toLowerCase();
+        if (resolved) coveredSlugs.add(resolved);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   const uid = userId && userId > 0 ? userId : null;
-  if (!uid) return [];
+  const [byPhone, byUser] = await Promise.all([
+    fetchActiveCardsForPhone(phoneDigits),
+    uid ? fetchActiveCardsForUser(uid) : Promise.resolve([] as CardDto[]),
+  ]);
 
-  const cards = await fetchActiveCardsForUser(uid);
-  if (!phoneDigits || cards.length === 0) return [];
-
-  const extras: HexaOrder[] = [];
-  for (const card of cards) {
+  const byCardId = new Map<number, CardDto>();
+  for (const card of [...byPhone, ...byUser]) {
+    // Phone must match auth — userId alone must never grant dashboard tiles
+    // (prevents Shoeb→Punit style bleed from a stale auth.userId).
     const cardPhone = normalizeIndianPhone(card.mobile);
     if (!cardPhone || cardPhone !== phoneDigits) continue;
+    if (!byCardId.has(card.cardId)) byCardId.set(card.cardId, card);
+  }
+
+  const extras: HexaOrder[] = [];
+  for (const card of byCardId.values()) {
+    const slug = String(card.unicCardName || "").trim().toLowerCase();
+    if (coveredCardIds.has(card.cardId)) continue;
+    if (slug && coveredSlugs.has(slug)) continue;
     extras.push(cardDtoToPaidOrder(card, phone));
   }
 
-  return dedupeDashboardOrders(extras);
+  return dedupeDashboardOrders([...paidOrders, ...extras]);
 }
 
 /** @deprecated use initOrderCardProfile — each order keeps its own profile */

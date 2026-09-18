@@ -53,6 +53,14 @@ function fullName(user: Pick<AdminUserRow, "firstName" | "lastName">) {
   return [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
 }
 
+/** Numeric DB `users.user_id` from admin row id (`db-123`). */
+function adminUserDbId(user: Pick<AdminUserRow, "id">): number | null {
+  const match = String(user.id).match(/^db-(\d+)$/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 function formatRegDate(date = new Date()) {
   return date.toLocaleDateString("en-GB", {
     day: "2-digit",
@@ -104,7 +112,7 @@ const PAGE_SIZE = 10;
 
 function toCsv(rows: AdminUserRow[]): string {
   const headers = [
-    "Sr. No.",
+    "User ID",
     "First Name",
     "Last Name",
     "Email",
@@ -114,7 +122,7 @@ function toCsv(rows: AdminUserRow[]): string {
   ];
   const lines = rows.map((r) =>
     [
-      r.srNo,
+      adminUserDbId(r) ?? "",
       `"${r.firstName.replace(/"/g, '""')}"`,
       `"${r.lastName.replace(/"/g, '""')}"`,
       r.email,
@@ -142,7 +150,7 @@ function printTable(rows: AdminUserRow[]) {
   const rowsHtml = rows
     .map(
       (r) =>
-        `<tr><td>${r.srNo}</td><td>${r.firstName}</td><td>${r.lastName}</td><td>${r.email}</td><td>${r.mobile}</td><td>${r.regDate}</td><td>${r.active ? "Active" : "Inactive"}</td></tr>`,
+        `<tr><td>${adminUserDbId(r) ?? ""}</td><td>${r.firstName}</td><td>${r.lastName}</td><td>${r.email}</td><td>${r.mobile}</td><td>${r.regDate}</td><td>${r.active ? "Active" : "Inactive"}</td></tr>`,
     )
     .join("");
   win.document.write(`
@@ -160,7 +168,7 @@ function printTable(rows: AdminUserRow[]) {
       <body>
         <h2>All Users</h2>
         <table>
-          <thead><tr><th>Sr. No.</th><th>First Name</th><th>Last Name</th><th>Email</th><th>Mobile</th><th>Reg Date</th><th>Status</th></tr></thead>
+          <thead><tr><th>User ID</th><th>First Name</th><th>Last Name</th><th>Email</th><th>Mobile</th><th>Reg Date</th><th>Status</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </body>
@@ -256,9 +264,11 @@ export default function UsersPanel({
       list = list.filter((u) => isWithinRegDateRange(u.regDate, dateFrom, dateTo));
     }
 
-    list = [...list].sort((a, b) =>
-      sortAsc ? a.srNo - b.srNo : b.srNo - a.srNo,
-    );
+    list = [...list].sort((a, b) => {
+      const aId = adminUserDbId(a) ?? a.srNo;
+      const bId = adminUserDbId(b) ?? b.srNo;
+      return sortAsc ? aId - bId : bId - aId;
+    });
 
     return list;
   }, [rows, search, dateFrom, dateTo, sortAsc]);
@@ -601,13 +611,13 @@ export default function UsersPanel({
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-black/[0.06] text-[11px] font-bold tracking-wide text-[#8a8174] uppercase">
-                <th className="w-[72px] px-4 py-3">
+                <th className="w-[88px] px-4 py-3">
                   <button
                     type="button"
                     onClick={() => setSortAsc((v) => !v)}
                     className="inline-flex items-center gap-1 hover:text-[#141414]"
                   >
-                    No.
+                    User ID
                     {sortAsc ? (
                       <ChevronUp className="h-3.5 w-3.5" />
                     ) : (
@@ -641,8 +651,8 @@ export default function UsersPanel({
                   key={user.id}
                   className="border-b border-black/[0.04] align-top last:border-0"
                 >
-                  <td className="px-4 py-4 font-semibold tabular-nums text-[#8a8174]">
-                    {user.srNo}
+                  <td className="px-4 py-4 font-semibold tabular-nums text-[#141414]">
+                    {adminUserDbId(user) ?? "—"}
                   </td>
                   <td className="px-4 py-4">
                     <span className="break-words leading-snug font-medium text-[#141414]">

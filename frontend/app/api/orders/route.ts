@@ -65,9 +65,9 @@ export async function GET(request: Request) {
           if (slug) query = query.eq("card_slug", slug);
         } else if (ownerPhone || phone) {
           // Dashboard ownership: owner_phone is source of truth.
-          // Also allow legacy rows that only stored the owner on mobile_number
-          // when owner_phone is empty — never match another owner's shipping phone
-          // when owner_phone is already set to someone else.
+          // Schema default is '' (NOT NULL) — treat blank owner_phone like unset
+          // and fall back to mobile_number. Never match another owner's shipping
+          // phone when owner_phone is already set to someone else.
           const digits = (ownerPhone || phone || "")
             .replace(/\D/g, "")
             .slice(-10);
@@ -75,18 +75,19 @@ export async function GET(request: Request) {
             if (ownerPhone) {
               // Owner phone only — do not return another customer's order just
               // because shipping mobile_number matches the logged-in user.
+              // PostgREST: owner_phone.eq. matches empty string (varchar default).
               query = query.or(
-                `owner_phone.eq.${digits},and(owner_phone.is.null,mobile_number.eq.${digits})`,
+                [
+                  `owner_phone.eq.${digits}`,
+                  `and(owner_phone.eq.,mobile_number.eq.${digits})`,
+                  `and(owner_phone.is.null,mobile_number.eq.${digits})`,
+                ].join(","),
               );
             } else {
               query = query.or(
                 `owner_phone.eq.${digits},mobile_number.eq.${digits}`,
               );
             }
-          }
-          const uid = Number(userIdParam);
-          if (ownerPhone && Number.isInteger(uid) && uid > 0) {
-            query = query.eq("user_id", uid);
           }
         } else if (userIdParam) {
           const uid = Number(userIdParam);

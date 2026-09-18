@@ -181,7 +181,10 @@ export async function GET(request: Request) {
       return jsonOk({ count: count ?? 0 });
     }
 
-    const applyFilters = <T extends { eq: (c: string, v: string | number) => T }>(
+    const applyFilters = <T extends {
+      eq: (c: string, v: string | number) => T;
+      or?: (filters: string) => T;
+    }>(
       q: T,
     ): T => {
       let next = q;
@@ -193,6 +196,13 @@ export async function GET(request: Request) {
         next = next.eq("user_id", id);
       }
       if (slug) next = next.eq("unic_card_name", slug);
+      const mobile = searchParams.get("mobile")?.replace(/\D/g, "").slice(-10);
+      if (mobile && /^[6-9]\d{9}$/.test(mobile)) {
+        // Primary mobile may be stored as 10-digit or with 91 prefix (legacy).
+        next = (next as T & { or: (f: string) => T }).or(
+          `mobile.eq.${mobile},mobile.eq.91${mobile}`,
+        );
+      }
       return next;
     };
 
