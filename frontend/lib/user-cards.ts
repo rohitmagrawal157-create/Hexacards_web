@@ -7,6 +7,7 @@ import { normalizeIndianPhone } from "@/lib/auth";
 import {
   fetchPaidOrdersForPhone,
   getOrdersForPhone,
+  isAdminOfflineOrder,
   isOrderDashboardHidden,
   isOrderPaymentPaid,
   type HexaOrder,
@@ -42,6 +43,8 @@ export type UserDashboardCard = {
   isLatest: boolean;
   /** true for NFC / business cards that have an editable digital profile */
   isEditable: boolean;
+  /** Super Admin Add user / offline card — show Offline chip, not Paid */
+  isOffline: boolean;
 };
 
 
@@ -281,6 +284,7 @@ export function orderToDashboardCard(
       "#BC7C10",
     isLatest,
     isEditable: editable,
+    isOffline: isAdminOfflineOrder(order),
   };
 }
 
@@ -415,6 +419,7 @@ function cardDtoToPaidOrder(card: CardDto, fallbackPhone: string): HexaOrder {
     createdAt,
     status: "placed",
     paymentStatus: "paid",
+    paymentMethod: "offline",
     ownerPhone: phone,
     customerName: card.cardName?.trim() || "Your Name",
     phone,

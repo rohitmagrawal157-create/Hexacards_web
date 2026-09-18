@@ -19,6 +19,8 @@ export type HexaOrder = {
   createdAt: string;
   status: HexaOrderStatus;
   paymentStatus?: HexaPaymentStatus;
+  /** razorpay | admin | offline | … — admin Add user sets "admin" */
+  paymentMethod?: string;
   /** Logged-in account phone (10 digits) — used for dashboard ownership */
   ownerPhone: string;
   customerName: string;
@@ -78,6 +80,33 @@ export function isOrderPaymentPaid(
   order: Pick<HexaOrder, "paymentStatus"> | null | undefined,
 ): boolean {
   return order?.paymentStatus === "paid";
+}
+
+/**
+ * Super Admin → Add user (or gap-fill card stub) — not a real checkout order.
+ * Still unlocks My Cards, but must not inflate Orders / Total spent.
+ */
+export function isAdminOfflineOrder(
+  order: Pick<HexaOrder, "id" | "paymentMethod"> | null | undefined,
+): boolean {
+  if (!order) return false;
+  if (String(order.id ?? "").startsWith("card-")) return true;
+  const method = String(order.paymentMethod ?? "")
+    .trim()
+    .toLowerCase();
+  return (
+    method === "admin" ||
+    method === "offline" ||
+    method === "manual" ||
+    method === "super-admin"
+  );
+}
+
+/** Real paid checkout only — used for Orders metric and Order History. */
+export function isCheckoutPaidOrder(
+  order: HexaOrder | null | undefined,
+): boolean {
+  return Boolean(order && isOrderPaymentPaid(order) && !isAdminOfflineOrder(order));
 }
 
 function phoneKey(phone: string | undefined | null): string {
@@ -193,6 +222,9 @@ function dtoToHexaOrder(dto: HexaOrder & Record<string, unknown>): HexaOrder {
     createdAt: String(dto.createdAt),
     status: (dto.status as HexaOrderStatus) || "placed",
     paymentStatus: (dto.paymentStatus as HexaPaymentStatus) || "pending",
+    paymentMethod: dto.paymentMethod
+      ? String(dto.paymentMethod)
+      : undefined,
     ownerPhone: phoneKey(String(dto.ownerPhone ?? "")),
     customerName: String(dto.customerName ?? ""),
     phone: phoneKey(String(dto.phone ?? "")),
@@ -281,7 +313,8 @@ function orderToApiBody(order: Partial<HexaOrder> & { id?: string }) {
     status: order.status,
     paymentStatus: order.paymentStatus,
     paymentMethod:
-      order.paymentStatus === "pending" ? "razorpay" : undefined,
+      order.paymentMethod ??
+      (order.paymentStatus === "pending" ? "razorpay" : undefined),
   };
 }
 

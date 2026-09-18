@@ -38,6 +38,7 @@ import {
 } from "@/lib/auth";
 import {
   formatOrderDate,
+  isCheckoutPaidOrder,
   isOrderDashboardHidden,
   isOrderPaymentPaid,
   statusLabel,
@@ -622,12 +623,17 @@ function CardsPanel({
     () => orders.filter(isOrderPaymentPaid),
     [orders],
   );
+  /** Real checkout payments only — excludes Super Admin Add user / offline cards */
+  const checkoutOrders = useMemo(
+    () => orders.filter(isCheckoutPaidOrder),
+    [orders],
+  );
   const userCards = useMemo(
     () => getUserDashboardCardsFromOrders(paidOrders),
     [paidOrders, profileTick],
   );
   const hasCard = userCards.length > 0;
-  const totalSpend = paidOrders.reduce((sum, o) => sum + o.total, 0);
+  const totalSpend = checkoutOrders.reduce((sum, o) => sum + o.total, 0);
 
   async function copyShareUrl(url: string) {
     try {
@@ -663,8 +669,8 @@ function CardsPanel({
           },
           {
             label: "Orders",
-            value: String(paidOrders.length),
-            hint: paidOrders.length
+            value: String(checkoutOrders.length),
+            hint: checkoutOrders.length
               ? "Successful payments only"
               : "None yet",
             icon: Package,
@@ -672,7 +678,7 @@ function CardsPanel({
           {
             label: "Total spent",
             value: `₹${totalSpend.toLocaleString("en-IN")}`,
-            hint: "Paid orders only",
+            hint: "Paid checkout orders",
             icon: ShoppingBag,
           },
         ].map((stat) => {
@@ -728,9 +734,15 @@ function CardsPanel({
               })()}
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
               <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                <span className="rounded-md bg-emerald-500/90 px-2 py-1 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm">
-                  Paid
-                </span>
+                {card.isOffline ? (
+                  <span className="rounded-md bg-slate-600/90 px-2 py-1 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm">
+                    Offline
+                  </span>
+                ) : (
+                  <span className="rounded-md bg-emerald-500/90 px-2 py-1 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm">
+                    Paid
+                  </span>
+                )}
                 {card.isLatest ? (
                   <span className="rounded-md bg-white/15 px-2 py-1 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm">
                     Latest
@@ -1026,14 +1038,14 @@ function CardsPanel({
 }
 
 function OrdersPanel({ orders }: { orders: HexaOrder[] }) {
-  const paidOrders = orders.filter(isOrderPaymentPaid);
+  const paidOrders = orders.filter(isCheckoutPaidOrder);
 
   if (paidOrders.length === 0) {
     return (
       <EmptyPanel
         icon={ShoppingBag}
         title="No orders yet"
-        text="After a successful payment at checkout, tracking details will appear here. Failed or cancelled payments are not listed."
+        text="After a successful payment at checkout, tracking details will appear here. Cards created by Super Admin (offline) are not listed here."
         action={{ href: "/products", label: "Browse products" }}
       />
     );
