@@ -453,15 +453,19 @@ export async function upsertOrderCardInDb(
   }
 
   if (!card) {
-    // Try existing by slug (e.g. previous save linked differently)
+    // Adopt existing card by slug ONLY when it belongs to this order's owner.
     const existing = await apiFetch<CardDto[]>(
       `/api/cards?slug=${encodeURIComponent(body.unicCardName)}`,
     );
     const found =
       existing.ok && Array.isArray(existing.data)
-        ? existing.data.find(
-            (c) => c.unicCardName === body.unicCardName,
-          ) ?? existing.data[0]
+        ? existing.data.find((c) => {
+            if (c.unicCardName !== body.unicCardName) return false;
+            const cardPhone = normalizeIndianPhone(c.mobile);
+            if (ownerPhone && cardPhone && cardPhone === ownerPhone) return true;
+            if (userId && c.userId > 0 && c.userId === userId) return true;
+            return false;
+          }) ?? null
         : null;
 
     if (found?.cardId) {
@@ -486,20 +490,23 @@ export async function upsertOrderCardInDb(
 
   if (!card) return { cardId: null, error };
 
+  // Never reassign order.user_id from a foreign card (slug collision).
   const nextSlug = card.unicCardName;
   const nextUrl = buildPublicCardUrl(nextSlug, "share");
+  const nextUserId =
+    (order.userId && order.userId > 0 ? order.userId : null) ||
+    (userId && userId > 0 ? userId : null) ||
+    undefined;
   const needsOrderLink =
     order.cardId !== card.cardId ||
-    order.userId !== card.userId ||
+    (nextUserId != null && order.userId !== nextUserId) ||
     order.cardSlug?.trim().toLowerCase() !== nextSlug.trim().toLowerCase() ||
     (order.cardUrl || "").replace(/\/$/, "") !== nextUrl;
 
-  // Avoid redundant order writes — they fan out hexa-orders-change / localStorage
-  // and make every open dashboard/admin tab refetch at once.
   if (needsOrderLink) {
     await updateOrder(order.id, {
       cardId: card.cardId,
-      userId: card.userId,
+      ...(nextUserId != null ? { userId: nextUserId } : {}),
       cardSlug: nextSlug,
       cardUrl: nextUrl,
     });

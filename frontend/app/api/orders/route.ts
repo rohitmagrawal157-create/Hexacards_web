@@ -63,21 +63,35 @@ export async function GET(request: Request) {
         if (cardSlug) {
           const slug = cardSlug.trim().toLowerCase();
           if (slug) query = query.eq("card_slug", slug);
-        } else if (userIdParam) {
-          const uid = Number(userIdParam);
-          if (Number.isInteger(uid) && uid > 0) {
-            query = query.eq("user_id", uid);
-          }
         } else if (ownerPhone || phone) {
-          // Match either ownership or shipping phone — legacy rows often
-          // populate only one of these columns.
+          // Dashboard ownership: owner_phone is source of truth.
+          // Also allow legacy rows that only stored the owner on mobile_number
+          // when owner_phone is empty — never match another owner's shipping phone
+          // when owner_phone is already set to someone else.
           const digits = (ownerPhone || phone || "")
             .replace(/\D/g, "")
             .slice(-10);
           if (digits) {
-            query = query.or(
-              `owner_phone.eq.${digits},mobile_number.eq.${digits}`,
-            );
+            if (ownerPhone) {
+              // Owner phone only — do not return another customer's order just
+              // because shipping mobile_number matches the logged-in user.
+              query = query.or(
+                `owner_phone.eq.${digits},and(owner_phone.is.null,mobile_number.eq.${digits})`,
+              );
+            } else {
+              query = query.or(
+                `owner_phone.eq.${digits},mobile_number.eq.${digits}`,
+              );
+            }
+          }
+          const uid = Number(userIdParam);
+          if (ownerPhone && Number.isInteger(uid) && uid > 0) {
+            query = query.eq("user_id", uid);
+          }
+        } else if (userIdParam) {
+          const uid = Number(userIdParam);
+          if (Number.isInteger(uid) && uid > 0) {
+            query = query.eq("user_id", uid);
           }
         }
 

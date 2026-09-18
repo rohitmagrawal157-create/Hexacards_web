@@ -379,7 +379,7 @@ export function getPaidOrdersForPhone(phone: string): HexaOrder[] {
   return getOrdersForPhone(phone).filter(isOrderPaymentPaid);
 }
 
-/** Load this user's orders by phone and/or DB user_id (admin login-as-user). */
+/** Load this user's orders. Phone is the ownership source of truth. */
 export async function fetchOrdersForPhone(
   phone: string,
   userId?: number | null,
@@ -387,25 +387,18 @@ export async function fetchOrdersForPhone(
   const digits = phoneKey(phone);
   const uid = userId && userId > 0 ? userId : null;
 
-  const [byPhone, byUser] = await Promise.all([
-    digits
-      ? fetchOrders({ ownerPhone: digits })
-      : Promise.resolve([] as HexaOrder[]),
-    uid ? fetchOrders({ userId: uid }) : Promise.resolve([] as HexaOrder[]),
-  ]);
-
-  const byId = new Map<string, HexaOrder>();
-  for (const order of [...byPhone, ...byUser]) {
-    const key =
-      (order.orderId && order.orderId > 0
-        ? `id:${order.orderId}`
-        : null) ||
-      order.id ||
-      `${order.phone}-${order.createdAt}`;
-    byId.set(key, order);
+  // Never union phone ∪ userId — a stale/mismatched auth.userId would pull
+  // another person's paid orders onto this dashboard (e.g. Shoeb → Punit).
+  let list: HexaOrder[] = [];
+  if (digits) {
+    list = await fetchOrders({ ownerPhone: digits });
+    list = list.filter((o) => orderOwnerKey(o) === digits);
+  } else if (uid) {
+    // Admin / edge case when phone is unavailable
+    list = await fetchOrders({ userId: uid });
   }
 
-  return [...byId.values()].sort(
+  return list.sort(
     (a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );

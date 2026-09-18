@@ -101,6 +101,13 @@ export async function POST(request: Request) {
     const sms = await sendNimbusOtpSms(mobile, otp);
     if (!sms.ok) {
       console.error("Nimbus OTP SMS failed", sms.error, sms.providerResponse);
+      // Clear unused OTP so a failed send cannot leave a confusing live code.
+      if (existing?.user_id) {
+        await supabase
+          .from("users")
+          .update({ otp: null, otp_expiry: null })
+          .eq("user_id", existing.user_id);
+      }
       return jsonError(
         502,
         sms.error || "Could not send OTP SMS. Please try again in a moment.",

@@ -194,11 +194,34 @@ export async function syncCardsFromOrders(): Promise<{
 
     const { data: existingCard } = await supabase
       .from("cards")
-      .select("card_id")
+      .select("card_id, user_id, mobile")
       .eq("unic_card_name", slug)
       .maybeSingle();
 
     if (existingCard?.card_id) {
+      const orderPhone =
+        phoneTail(String(order.owner_phone ?? "")) ||
+        phoneTail(String(order.mobile_number ?? ""));
+      const cardPhone = phoneTail(String(existingCard.mobile ?? ""));
+      const orderUserId =
+        order.user_id != null && Number(order.user_id) > 0
+          ? Number(order.user_id)
+          : null;
+      const cardUserId =
+        existingCard.user_id != null && Number(existingCard.user_id) > 0
+          ? Number(existingCard.user_id)
+          : null;
+      const sameOwner =
+        (orderPhone && cardPhone && orderPhone === cardPhone) ||
+        (orderUserId != null &&
+          cardUserId != null &&
+          orderUserId === cardUserId);
+
+      // Do not attach another person's card just because the slug matches.
+      if (!sameOwner) {
+        continue;
+      }
+
       const cardId = Number(existingCard.card_id);
       const nextUrl = canonicalCardUrl(slug);
       if (

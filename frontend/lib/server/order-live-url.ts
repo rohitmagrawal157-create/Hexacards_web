@@ -243,16 +243,28 @@ export async function mapOrdersWithLinkedCards(
     ),
   ];
 
-  const slugByCardId = new Map<number, string>();
+  const slugByCardId = new Map<
+    number,
+    { slug: string; mobile: string; userId: number | null }
+  >();
   if (cardIds.length > 0) {
     const { data: cards } = await supabase
       .from("cards")
-      .select("card_id, unic_card_name")
+      .select("card_id, unic_card_name, mobile, user_id")
       .in("card_id", cardIds);
     for (const card of cards ?? []) {
       const slug = String(card.unic_card_name ?? "").trim().toLowerCase();
       const id = Number(card.card_id);
-      if (slug && id > 0) slugByCardId.set(id, slug);
+      if (slug && id > 0) {
+        slugByCardId.set(id, {
+          slug,
+          mobile: String(card.mobile ?? "").replace(/\D/g, "").slice(-10),
+          userId:
+            card.user_id != null && Number(card.user_id) > 0
+              ? Number(card.user_id)
+              : null,
+        });
+      }
     }
   }
 
@@ -262,8 +274,25 @@ export async function mapOrdersWithLinkedCards(
     const linked =
       row.card_id != null ? slugByCardId.get(Number(row.card_id)) : undefined;
     if (!linked) return dto;
-    heals.push(healOrderCardUrl(supabase, row, linked));
-    return withLinkedSlug(dto, linked);
+
+    const orderPhone =
+      String(row.owner_phone ?? "").replace(/\D/g, "").slice(-10) ||
+      String(row.mobile_number ?? "").replace(/\D/g, "").slice(-10);
+    const orderUserId =
+      row.user_id != null && Number(row.user_id) > 0
+        ? Number(row.user_id)
+        : null;
+    const sameOwner =
+      (orderPhone && linked.mobile && orderPhone === linked.mobile) ||
+      (orderUserId != null &&
+        linked.userId != null &&
+        orderUserId === linked.userId);
+
+    // Wrong card_id link must not rewrite this order to another person's slug.
+    if (!sameOwner) return dto;
+
+    heals.push(healOrderCardUrl(supabase, row, linked.slug));
+    return withLinkedSlug(dto, linked.slug);
   });
 
   if (heals.length > 0) {

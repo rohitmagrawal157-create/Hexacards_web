@@ -459,7 +459,15 @@ export async function fetchUserDashboardOrders(
   phone: string,
   userId?: number | null,
 ): Promise<HexaOrder[]> {
-  const paidOrders = await fetchPaidOrdersForPhone(phone, userId);
+  const phoneDigits = normalizeIndianPhone(phone);
+  const paidOrders = (await fetchPaidOrdersForPhone(phone, userId)).filter(
+    (o) => {
+      if (!phoneDigits) return true;
+      const owner =
+        normalizeIndianPhone(o.ownerPhone) || normalizeIndianPhone(o.phone);
+      return owner === phoneDigits;
+    },
+  );
 
   // Admin Add user + checkout always create a paid order. Never also inject the
   // linked cards row as a second "paid" tile (that caused 1 add → 2 cards).
@@ -471,7 +479,6 @@ export async function fetchUserDashboardOrders(
   if (!uid) return [];
 
   const cards = await fetchActiveCardsForUser(uid);
-  const phoneDigits = normalizeIndianPhone(phone);
   if (!phoneDigits || cards.length === 0) return [];
 
   const extras: HexaOrder[] = [];
