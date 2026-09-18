@@ -381,7 +381,7 @@ export function dedupeDashboardOrders(orders: HexaOrder[]): HexaOrder[] {
     const id =
       (order.cardId && order.cardId > 0 && `c:${order.cardId}`) ||
       (resolvedSlug && `s:${resolvedSlug}`) ||
-      (order.orderId > 0 && `o:${order.orderId}`) ||
+      (order.orderId != null && order.orderId > 0 && `o:${order.orderId}`) ||
       `id:${order.id}`;
     const existing = unique.get(id);
     if (!existing || isBetter(order, existing)) unique.set(id, order);
