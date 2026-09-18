@@ -1,6 +1,15 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonError, jsonOk } from "@/lib/admin-catalog-db";
-import { CARD_COLS, CARD_COLS_LEGACY, CARD_COLS_NO_EXTRA, isAccentColumnMissingError, isExtraMobilesColumnMissingError, mapCard, type CardRow } from "@/lib/server/card-types";
+import {
+  CARD_COLS,
+  CARD_COLS_LEGACY,
+  CARD_COLS_NO_EXTRA,
+  isAccentColumnMissingError,
+  isExtraMobilesColumnMissingError,
+  mapCard,
+  type CardRow,
+} from "@/lib/server/card-types";
+import { findActiveCardRowBySlug } from "@/lib/server/card-by-slug";
 import {
   cardImageDbFields,
   saveCardImage,
@@ -17,6 +26,62 @@ function parseKind(raw: string | null): CardImageKind | null {
   if (k === "profile" || k === "logo" || k === "avatar") return "profile";
   if (k === "background" || k === "cover" || k === "bg") return "background";
   return null;
+}
+
+async function updateCardImageFields(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  match: { cardId?: number | null; slug?: string },
+  payload: Record<string, unknown>,
+): Promise<ReturnType<typeof mapCard> | null> {
+  const run = async (
+    cols: string,
+    filter: { col: string; val: string | number },
+  ) => {
+    let { data, error } = await supabase
+      .from("cards")
+      .update(payload)
+      .eq(filter.col, filter.val)
+      .select(cols)
+      .maybeSingle();
+    if (error && isExtraMobilesColumnMissingError(error.message)) {
+      ({ data, error } = await supabase
+        .from("cards")
+        .update(payload)
+        .eq(filter.col, filter.val)
+        .select(CARD_COLS_NO_EXTRA)
+        .maybeSingle());
+    }
+    if (error && isAccentColumnMissingError(error.message)) {
+      ({ data, error } = await supabase
+        .from("cards")
+        .update(payload)
+        .eq(filter.col, filter.val)
+        .select(CARD_COLS_LEGACY)
+        .maybeSingle());
+    }
+    if (error) {
+      console.warn("[card-images] DB update:", error.message);
+      return null;
+    }
+    return data ? mapCard(data as unknown as CardRow) : null;
+  };
+
+  if (match.cardId && match.cardId > 0) {
+    const byId = await run(CARD_COLS, { col: "card_id", val: match.cardId });
+    if (byId) return byId;
+  }
+
+  const slug = String(match.slug ?? "").trim().toLowerCase();
+  if (!slug) return null;
+
+  // Resolve mixed-case legacy unic_card_name, then update by card_id
+  const { row } = await findActiveCardRowBySlug(supabase, slug);
+  if (row?.card_id != null) {
+    return run(CARD_COLS, { col: "card_id", val: Number(row.card_id) });
+  }
+
+  return run(CARD_COLS, { col: "unic_card_name", val: slug });
 }
 
 /**
@@ -78,93 +143,37 @@ export async function POST(request: Request) {
       dataUrl = body.dataUrl || body.data_url;
     }
 
+    const safeUser = sanitizeCardUsername(username);
+    if (!safeUser) {
+      return jsonError(400, "slug / username is required");
+    }
     if (!kind) {
       return jsonError(400, "kind must be profile or background");
     }
-    if (!username) {
-      return jsonError(400, "username (card slug) is required");
-    }
     if (!buffer && !dataUrl) {
-      return jsonError(400, "Provide an image file or dataUrl");
+      return jsonError(400, "file or dataUrl is required");
     }
 
-    const safeUser = sanitizeCardUsername(username);
     const saved = await saveCardImage({
       username: safeUser,
       kind,
-      dataUrl,
       buffer,
+      dataUrl,
       contentType: fileContentType,
     });
 
     const dbFields = cardImageDbFields(kind, saved.filename);
-    let card = null as ReturnType<typeof mapCard> | null;
-
     const supabase = getSupabaseAdmin();
     const payload = {
       ...dbFields,
       update_time: new Date().toISOString(),
     };
 
-    if (cardId) {
-      let { data, error } = await supabase
-        .from("cards")
-        .update(payload)
-        .eq("card_id", cardId)
-        .select(CARD_COLS)
-        .maybeSingle();
-      if (error && isExtraMobilesColumnMissingError(error.message)) {
-        ({ data, error } = await supabase
-          .from("cards")
-          .update(payload)
-          .eq("card_id", cardId)
-          .select(CARD_COLS_NO_EXTRA)
-          .maybeSingle());
-      }
-      if (error && isAccentColumnMissingError(error.message)) {
-        ({ data, error } = await supabase
-          .from("cards")
-          .update(payload)
-          .eq("card_id", cardId)
-          .select(CARD_COLS_LEGACY)
-          .maybeSingle());
-      }
-      if (error) {
-        console.warn("[card-images] DB update by id:", error.message);
-      } else if (data) {
-        card = mapCard(data as CardRow);
-      }
-    }
-
-    if (!card) {
-      let { data, error } = await supabase
-        .from("cards")
-        .update(payload)
-        .eq("unic_card_name", safeUser)
-        .select(CARD_COLS)
-        .maybeSingle();
-      if (error && isExtraMobilesColumnMissingError(error.message)) {
-        ({ data, error } = await supabase
-          .from("cards")
-          .update(payload)
-          .eq("unic_card_name", safeUser)
-          .select(CARD_COLS_NO_EXTRA)
-          .maybeSingle());
-      }
-      if (error && isAccentColumnMissingError(error.message)) {
-        ({ data, error } = await supabase
-          .from("cards")
-          .update(payload)
-          .eq("unic_card_name", safeUser)
-          .select(CARD_COLS_LEGACY)
-          .maybeSingle());
-      }
-      if (error) {
-        console.warn("[card-images] DB update by slug:", error.message);
-      } else if (data) {
-        card = mapCard(data as CardRow);
-      }
-    }
+    const card = await updateCardImageFields(
+      supabase,
+      { cardId, slug: safeUser },
+      payload,
+    );
 
     return jsonOk({
       kind,
@@ -174,8 +183,10 @@ export async function POST(request: Request) {
       url: saved.url,
       cardId: card?.cardId ?? cardId,
       logo: card?.logo ?? (kind === "profile" ? saved.filename : undefined),
-      bgImg: card?.bgImg ?? (kind === "background" ? saved.filename : undefined),
-      bgUrl: card?.bgUrl ?? (kind === "background" ? saved.filename : undefined),
+      bgImg:
+        card?.bgImg ?? (kind === "background" ? saved.filename : undefined),
+      bgUrl:
+        card?.bgUrl ?? (kind === "background" ? saved.filename : undefined),
       dbUpdated: Boolean(card),
     });
   } catch (err) {

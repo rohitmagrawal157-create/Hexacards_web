@@ -450,7 +450,7 @@ export default function CardCustomizer() {
         ? "gold"
         : null;
 
-  const previewQrSvg = buildStyledQrSvg("https://hexacards.com", {
+  const previewQrSvg = buildStyledQrSvg("https://hexacards-web.vercel.app", {
     color:
       metalPreset && cardMode === "silver"
         ? "#A8ACB0"

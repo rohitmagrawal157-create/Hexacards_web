@@ -18,7 +18,7 @@ import {
   applyLinksToCard,
   extractLinksFromBody,
   fetchLinksForCard,
-  stripLinkFieldsFromCardPayload,
+  legacyLinkColumnsFromBody,
   upsertCardLinks,
 } from "@/lib/server/card-links-db";
 
@@ -157,8 +157,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     if (body.status !== undefined) set("status", Number(body.status) ? 1 : 0);
 
+    // Dual-write website / social / brochure onto cards columns
+    Object.assign(payload, legacyLinkColumnsFromBody(body));
+
+    if (Object.keys(payload).length > 0) {
+      set("update_time", new Date().toISOString());
+    }
+
     const linkValues = extractLinksFromBody(body);
-    const cardPayload = stripLinkFieldsFromCardPayload(payload);
+    const cardPayload = payload;
     const hasCardFields = Object.keys(cardPayload).length > 0;
     const hasLinkFields = Object.keys(linkValues).length > 0;
 

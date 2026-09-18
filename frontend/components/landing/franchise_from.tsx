@@ -139,7 +139,7 @@ export default function FranchiseEnquiry() {
           state: form.state.trim(),
           city: form.city.trim(),
           message: form.message.trim(),
-          siteUrl: "https://hexacards.com/franchise",
+          siteUrl: "https://hexacards-web.vercel.app/franchise",
         }),
       });
 

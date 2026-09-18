@@ -1,0 +1,21 @@
+-- =============================================================================
+-- HexaCards FK repair — RUN IN ORDER (Supabase SQL Editor)
+-- Folder: frontend/sql/
+--
+-- Why split? One big script times out on ~5k users / orders / cards.
+-- Each part is short, commits on its own, and never deletes users/cards/orders/payments.
+--
+-- Run these files ONE AT A TIME (wait for success before next):
+--   1) fk-repair-01-prep.sql
+--   2) fk-repair-02-users.sql
+--   3) fk-repair-03-orders-payments.sql
+--   4) fk-repair-04-cards-links.sql
+--   5) fk-repair-05-locations-messages.sql
+--   6) fk-repair-06-add-fks.sql
+--   7) fk-repair-07-verify.sql
+--   8) fk-repair-08-full-audit.sql  ← detailed counts + frontend readiness
+--
+-- Optional: SET statement_timeout = '120s'; at the top of each run if still slow.
+-- =============================================================================
+
+SELECT 'Open and run fk-repair-01-prep.sql next' AS next_step;

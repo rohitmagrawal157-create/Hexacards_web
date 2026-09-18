@@ -1,10 +1,10 @@
 /**
  * Card profile / background image helpers.
  * DB stores only the file name (e.g. rohit-agrawal7256-profile.jpg).
- * UI resolves names to a public URL/path for display.
+ * Legacy rows may store theme IDs in bg_img ("1") and real files in bg_url /
+ * logo ("7986….png", "IMG_0746.jpeg").
  *
- * Uploads overwrite the same filename, so display URLs must keep a `?v=`
- * cache-buster or the browser/CDN will keep showing the previous image.
+ * UI resolves names to Supabase Storage (or legacy CDN) for display.
  */
 
 const UPLOADS_DIR = "/uploads/cards";
@@ -12,6 +12,24 @@ const IMAGES_DIR = "/Images";
 
 /** Default Supabase Storage bucket — public, not a secret. */
 export const DEFAULT_CARD_IMAGES_BUCKET = "card-images";
+
+const IMAGE_FILE_RE = /\.(jpe?g|png|webp|gif|svg)$/i;
+
+/** Stock files shipped in frontend/public/Images — not user uploads. */
+const BUNDLED_STOCK_RE =
+  /^(background_img|avatar_default|banner|Hexacards|ads)(\.|$)/i;
+
+function legacyCardImageBases(): string[] {
+  const fromEnv = process.env.NEXT_PUBLIC_LEGACY_CARD_IMAGES_BASE?.trim();
+  const list = [
+    fromEnv,
+    "https://hexacards.com/Images",
+    "https://hexacards.com/images",
+    "https://hexacards.com/uploads",
+    "https://www.hexacards.com/Images",
+  ].filter(Boolean) as string[];
+  return [...new Set(list.map((b) => b.replace(/\/$/, "")))];
+}
 
 /** Public Supabase Storage URL for an uploaded card image file name. */
 export function getSupabaseCardImagePublicUrl(
@@ -41,15 +59,32 @@ export function cardImageFileName(
   try {
     const bare = (t.includes("://") ? new URL(t).pathname : t).split("?")[0];
     const name = bare.split("/").filter(Boolean).pop() || "";
-    return name ? name.slice(0, 255) : null;
+    return name ? decodeURIComponent(name).slice(0, 255) : null;
   } catch {
     const name = t.split("?")[0].split("/").filter(Boolean).pop() || "";
     return name ? name.slice(0, 255) : null;
   }
 }
 
+/** Legacy theme / preset ids stored in cards.bg_img ("1", "15") — not files. */
+export function isLegacyThemeImageId(
+  stored: string | null | undefined,
+): boolean {
+  if (!stored) return false;
+  const t = stored.trim();
+  return /^\d+$/.test(t);
+}
+
 function isUploadedCardFile(name: string): boolean {
-  return /-(profile|background|order-logo)\.(jpe?g|png|webp|gif)$/i.test(name);
+  return /-(profile|background|order-logo|banner)\.(jpe?g|png|webp|gif)$/i.test(
+    name,
+  );
+}
+
+function isUserImageFile(name: string): boolean {
+  if (!IMAGE_FILE_RE.test(name)) return false;
+  if (BUNDLED_STOCK_RE.test(name)) return false;
+  return true;
 }
 
 function queryStringFromSrc(raw: string): string {
@@ -94,10 +129,38 @@ export function withCardImageCacheBust(
 }
 
 /**
+ * Prefer a real image file for cover: bg_url first, then non-numeric bg_img.
+ * Ignores legacy theme ids like "1" / "15" in bg_img.
+ */
+export function pickStoredCardCover(
+  bgUrl: string | null | undefined,
+  bgImg: string | null | undefined,
+): string | null {
+  const url = (bgUrl ?? "").trim();
+  const img = (bgImg ?? "").trim();
+  if (url && !isLegacyThemeImageId(url) && url.toLowerCase() !== "null") {
+    return url;
+  }
+  if (img && !isLegacyThemeImageId(img) && img.toLowerCase() !== "null") {
+    return img;
+  }
+  return null;
+}
+
+/** Alternate URLs to try when the primary src 404s (legacy PHP host). */
+export function legacyCardImageCandidateUrls(filename: string): string[] {
+  const name = cardImageFileName(filename);
+  if (!name || !isUserImageFile(name)) return [];
+  return legacyCardImageBases().map(
+    (base) => `${base}/${encodeURIComponent(name)}`,
+  );
+}
+
+/**
  * Turn a DB file name (or legacy full path) into a browser-usable src.
- * Uploaded profile/background files live in Supabase Storage — never use a bare
- * filename or a local /uploads path that 404s on Vercel.
- * Existing `?v=` query strings are always preserved.
+ * - Theme ids ("1") → fallback
+ * - User uploads → Supabase Storage public URL
+ * - Stock /Images/* paths stay local
  */
 export function resolveCardImageSrc(
   stored: string | null | undefined,
@@ -107,11 +170,26 @@ export function resolveCardImageSrc(
   if (!stored?.trim()) return fallback;
   const raw = stored.trim();
   if (raw.startsWith("data:") || raw.startsWith("idb:")) return raw;
+  if (raw.toLowerCase() === "null" || raw.toLowerCase() === "undefined") {
+    return fallback;
+  }
+  // Legacy bg_img theme ids are not files
+  if (isLegacyThemeImageId(raw)) return fallback;
 
   const name = cardImageFileName(raw);
   const qs = queryStringFromSrc(raw);
 
-  if (name && isUploadedCardFile(name)) {
+  // Bundled stock under /Images (defaults, product shots, etc.)
+  // But reject /Images/1 style legacy theme-id mistakes
+  if (raw.startsWith("/Images/") || (name && BUNDLED_STOCK_RE.test(name))) {
+    if (name && isLegacyThemeImageId(name)) return fallback;
+    const base = raw.startsWith("/")
+      ? raw.split("?")[0]
+      : `${IMAGES_DIR}/${name}`;
+    return withCardImageCacheBust(withQuery(base, qs), version);
+  }
+
+  if (name && (isUploadedCardFile(name) || isUserImageFile(name))) {
     const remote = getSupabaseCardImagePublicUrl(name);
     let base: string;
     if (remote) {
@@ -121,8 +199,7 @@ export function resolveCardImageSrc(
     } else {
       base = `${UPLOADS_DIR}/${name}`;
     }
-    const withQs = withQuery(base, qs);
-    return withCardImageCacheBust(withQs, version);
+    return withCardImageCacheBust(withQuery(base, qs), version);
   }
 
   if (/^https?:\/\//i.test(raw)) {
@@ -132,9 +209,7 @@ export function resolveCardImageSrc(
     return withCardImageCacheBust(withQuery(raw.split("?")[0], qs), version);
   }
 
-  if (name) {
-    return withCardImageCacheBust(`${IMAGES_DIR}/${name}`, version);
-  }
+  // Unknown non-image token — do not invent /Images/{token}
   return fallback;
 }
 
@@ -142,5 +217,6 @@ export function resolveCardImageSrc(
 export function toCardImageDbName(
   src: string | null | undefined,
 ): string | null {
+  if (isLegacyThemeImageId(src)) return null;
   return cardImageFileName(src);
 }

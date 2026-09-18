@@ -728,6 +728,9 @@ function CardsPanel({
               })()}
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
               <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                <span className="rounded-md bg-emerald-500/90 px-2 py-1 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm">
+                  Paid
+                </span>
                 {card.isLatest ? (
                   <span className="rounded-md bg-white/15 px-2 py-1 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm">
                     Latest
@@ -1074,11 +1077,18 @@ function OrdersPanel({ orders }: { orders: HexaOrder[] }) {
                     </span>
                   </div>
                   <p className="mt-2 text-base font-semibold text-[#141414]">
-                    {order.productTitle}
+                    {order.productTitle?.trim() ||
+                      order.packTitle?.trim() ||
+                      "HexaCards product"}
                   </p>
                   <p className="mt-1 text-xs text-[#6b6560]">
-                    {formatOrderDate(order.createdAt)} · {order.packTitle} · Qty{" "}
-                    {order.qty}
+                    {formatOrderDate(order.createdAt)}
+                    {order.packTitle?.trim() &&
+                    order.packTitle.trim() !==
+                      (order.productTitle?.trim() || "")
+                      ? ` · ${order.packTitle}`
+                      : ""}{" "}
+                    · Qty {order.qty}
                   </p>
                 </div>
                 <p className="font-dashboard text-xl font-extrabold tracking-[-0.03em] tabular-nums text-[#141414]">

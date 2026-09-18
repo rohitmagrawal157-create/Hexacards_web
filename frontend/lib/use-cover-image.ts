@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  cardImageFileName,
+  legacyCardImageCandidateUrls,
   resolveCardImageSrc,
   withCardImageCacheBust,
 } from "@/lib/card-images";
@@ -8,6 +10,15 @@ import {
   DEFAULT_CARD_BANNER,
   resolveCoverImageForDisplay,
 } from "@/lib/card-profile";
+
+function tryLoad(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
 
 /** Resolve any stored image (filename, path, or URL) and fall back if it fails to load. */
 export function useCardDisplayImage(
@@ -32,37 +43,47 @@ export function useCardDisplayImage(
     }
 
     let cancelled = false;
-    const img = new window.Image();
-    img.onload = () => {
-      if (!cancelled) setUrl(resolved);
-    };
-    img.onerror = () => {
+
+    void (async () => {
+      if (await tryLoad(resolved)) {
+        if (!cancelled) setUrl(resolved);
+        return;
+      }
       if (cancelled) return;
-      if (resolved.includes("/storage/v1/object/public/")) {
-        const name = resolved.split("/").pop()?.split("?")[0];
-        if (name) {
-          const qs = resolved.includes("?")
-            ? `?${resolved.split("?").slice(1).join("?")}`
-            : "";
-          const local = `/uploads/cards/${decodeURIComponent(name)}${qs}`;
-          const retry = new window.Image();
-          retry.onload = () => {
-            if (!cancelled) setUrl(local);
-          };
-          retry.onerror = () => {
-            if (!cancelled) setUrl(fallback);
-          };
-          retry.src = local;
+
+      const name =
+        cardImageFileName(src) ||
+        cardImageFileName(resolved) ||
+        "";
+
+      // 1) Supabase → local uploads (dev)
+      if (resolved.includes("/storage/v1/object/public/") && name) {
+        const qs = resolved.includes("?")
+          ? `?${resolved.split("?").slice(1).join("?")}`
+          : "";
+        const local = `/uploads/cards/${encodeURIComponent(decodeURIComponent(name))}${qs}`;
+        if (await tryLoad(local)) {
+          if (!cancelled) setUrl(local);
           return;
         }
       }
-      setUrl(fallback);
-    };
-    img.src = resolved;
+
+      // 2) Legacy PHP host (hexacards.com/Images/…) for imported filenames
+      for (const candidate of legacyCardImageCandidateUrls(name || resolved)) {
+        const busted = withCardImageCacheBust(candidate, version);
+        if (await tryLoad(busted)) {
+          if (!cancelled) setUrl(busted);
+          return;
+        }
+      }
+
+      if (!cancelled) setUrl(fallback);
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [resolved, fallback]);
+  }, [resolved, fallback, src, version]);
 
   return url;
 }

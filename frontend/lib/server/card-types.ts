@@ -1,3 +1,5 @@
+import { cleanDbText, isBlankDbValue } from "@/lib/db-text";
+
 /** Supabase `cards` table row */
 export type CardRow = {
   card_id: number | string;
@@ -232,37 +234,44 @@ export function mapCard(row: CardRow): CardDto {
     row.mobile,
     row.extra_mobiles,
   );
+  const text = (v: unknown): string | null => {
+    const s = cleanDbText(v);
+    return s || null;
+  };
+  const textReq = (v: unknown, fallback = ""): string =>
+    cleanDbText(v, fallback);
+
   return {
     cardId: Number(row.card_id),
-    unicCardName: row.unic_card_name,
-    cardName: row.card_name,
-    jobName: row.job_name,
-    businessName: row.business_name,
+    unicCardName: textReq(row.unic_card_name),
+    cardName: textReq(row.card_name),
+    jobName: textReq(row.job_name),
+    businessName: textReq(row.business_name),
     userId: Number(row.user_id),
-    logo: row.logo ?? null,
-    bgImg: row.bg_img ?? null,
-    bgUrl: row.bg_url ?? null,
+    logo: text(row.logo),
+    bgImg: text(row.bg_img),
+    bgUrl: text(row.bg_url),
     themeId: Number(row.theme_id),
     accentColor: row.accent_color?.trim() || null,
     mobile,
-    extraMobiles,
-    email: row.email ?? null,
-    website: row.website ?? null,
-    code: row.code || "91",
-    whatsapp: row.whatsapp ?? null,
+    extraMobiles: extraMobiles.filter((m) => !isBlankDbValue(m)),
+    email: text(row.email),
+    website: text(row.website),
+    code: textReq(row.code, "91") || "91",
+    whatsapp: text(row.whatsapp),
     stateId: row.state_id == null ? null : Number(row.state_id),
     cityId: row.city_id == null ? null : Number(row.city_id),
-    address: row.address ?? null,
-    about: row.about ?? null,
-    facebookUrl: row.facebook_url ?? null,
-    instagramUrl: row.instagram_url ?? null,
-    linkedinUrl: row.linkedin_url ?? null,
-    twitterUrl: row.twitter_url ?? null,
-    youtubeUrl: row.youtube_url ?? null,
-    googleUrl: row.google_url ?? null,
-    aboutCompany: row.about_company ?? null,
-    services: row.services ?? null,
-    brochure: row.brochure ?? null,
+    address: text(row.address),
+    about: text(row.about),
+    facebookUrl: text(row.facebook_url),
+    instagramUrl: text(row.instagram_url),
+    linkedinUrl: text(row.linkedin_url),
+    twitterUrl: text(row.twitter_url),
+    youtubeUrl: text(row.youtube_url),
+    googleUrl: text(row.google_url),
+    aboutCompany: text(row.about_company),
+    services: text(row.services),
+    brochure: text(row.brochure),
     pageView: Number(row.page_view) || 0,
     startDate: row.start_date ?? null,
     endDate: row.end_date ?? null,

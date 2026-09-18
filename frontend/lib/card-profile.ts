@@ -590,12 +590,12 @@ export function cardPublicSlug(profile: HexaCardProfile) {
   return buildCardSlugFromName(name);
 }
 
-/** Public profile / share URL — live host on Vercel, hexacards.com in production. */
+/** Public profile / share URL — live host on hexacards-web.vercel.app */
 export function cardPublicUrl(profile: HexaCardProfile) {
   return buildShareCardUrl(cardPublicSlug(profile));
 }
 
-/** Local app path — works on hexacards.com and *.vercel.app */
+/** Local app path — works on vercel.app and any custom domain */
 export function cardPublicPath(profile: HexaCardProfile) {
   return buildPublicCardPath(cardPublicSlug(profile));
 }
@@ -656,21 +656,25 @@ export function resolveBrochureDownloadUrl(
   stored: string | null | undefined,
 ): string | null {
   const raw = String(stored ?? "").trim();
-  if (!raw) return null;
+  if (!raw || /^null$/i.test(raw)) return null;
   if (/^https?:\/\//i.test(raw)) return raw.split("#")[0];
   if (raw.startsWith("/uploads/")) return raw.split("?")[0];
 
-  const name = raw.split("/").pop()?.split("?")[0] || "";
-  if (!name) return null;
+  const name = decodeURIComponent(
+    raw.split("/").pop()?.split("?")[0] || "",
+  );
+  if (!name || /^null$/i.test(name)) return null;
 
-  // Uploaded storage file (preferred)
-  if (/-brochure\./i.test(name)) {
+  // New: {slug}-brochure.pdf — also legacy plain pdf/doc/image names in DB
+  if (
+    /-brochure\./i.test(name) ||
+    /\.(pdf|docx?|png|jpe?g|webp)$/i.test(name)
+  ) {
     const remote = getSupabaseCardImagePublicUrl(name);
     if (remote) return remote;
-    return `/uploads/cards/${name}`;
+    return `/uploads/cards/${encodeURIComponent(name)}`;
   }
 
-  // Legacy: plain original filename only lived in IndexedDB
   return null;
 }
 
@@ -680,36 +684,70 @@ function brochureDownloadName(stored?: string | null): string {
   return name || "brochure.pdf";
 }
 
+function legacyBrochureCandidateUrls(filename: string): string[] {
+  const name = filename.split("/").pop()?.split("?")[0] || "";
+  if (!name) return [];
+  const bases = [
+    process.env.NEXT_PUBLIC_LEGACY_CARD_IMAGES_BASE?.trim(),
+    "https://hexacards.com/Images",
+    "https://hexacards.com/uploads",
+    "https://hexacards.com/uploads/cards",
+    "https://www.hexacards.com/Images",
+  ]
+    .filter(Boolean)
+    .map((b) => String(b).replace(/\/$/, ""));
+  return [...new Set(bases)].map(
+    (base) => `${base}/${encodeURIComponent(decodeURIComponent(name))}`,
+  );
+}
+
+function triggerBrochureDownload(href: string, downloadName: string) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.download = downloadName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 /**
- * Simple brochure download:
- * 1) Public URL / Supabase file (works for any visitor)
- * 2) IndexedDB fallback (owner device only, legacy)
+ * Brochure download for any visitor:
+ * 1) Supabase / local uploads URL
+ * 2) Legacy hexacards.com hosts (imported files)
+ * 3) IndexedDB on the owner’s browser only
  */
 export async function openBrochureDownload(fileName?: string | null) {
-  const remote = resolveBrochureDownloadUrl(fileName);
-  if (remote) {
-    const a = document.createElement("a");
-    a.href = remote;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.download = brochureDownloadName(fileName);
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+  const downloadName = brochureDownloadName(fileName);
+  const primary = resolveBrochureDownloadUrl(fileName);
+  const candidates = [
+    primary,
+    ...legacyBrochureCandidateUrls(String(fileName ?? "")),
+  ].filter(Boolean) as string[];
+
+  for (const href of candidates) {
+    try {
+      const res = await fetch(href, { method: "HEAD", mode: "cors" });
+      if (res.ok) {
+        triggerBrochureDownload(href, downloadName);
+        return true;
+      }
+    } catch {
+      // CORS — try opening anyway for same-origin / public CDN
+    }
+  }
+
+  // Unverified primary (CORS may block HEAD on Supabase) — still open it
+  if (primary) {
+    triggerBrochureDownload(primary, downloadName);
     return true;
   }
 
   const blob = await getBrochureFile();
   if (!blob) return false;
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  a.download = brochureDownloadName(fileName) || "brochure";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  triggerBrochureDownload(url, downloadName || "brochure");
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   return true;
 }

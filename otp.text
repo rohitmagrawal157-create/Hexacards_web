@@ -16,7 +16,7 @@ $result['Status'] == "OK"
 nimbusStatusOk() checks Status === "OK"
 The SMS text matches your DLT template exactly:
 
-Your Hexa Cards mobile number verification OTP is {otp}. This OTP is valid for 10 minutes. Do not share this OTP with anyone. https://hexacards.com
+Your Hexa Cards mobile number verification OTP is {otp}. This OTP is valid for 10 minutes. Do not share this OTP with anyone. https://hexacards-web.vercel.app
 
 Step-by-step OTP flow
 alt [OTP_SMS_ENABLED=true]

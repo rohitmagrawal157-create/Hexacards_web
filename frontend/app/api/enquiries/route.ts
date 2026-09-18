@@ -67,7 +67,7 @@ async function sendEnquiryEmail(opts: {
       : "";
 
   const textLines = [
-    `${label} from hexacards.com`,
+    `${label} from hexacards-web.vercel.app`,
     "",
     `Name: ${opts.name}`,
     `Phone: ${opts.phone}`,

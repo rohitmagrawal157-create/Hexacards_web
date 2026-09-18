@@ -67,7 +67,7 @@ export function buildStyledQrSvg(
   const silver = Boolean(options.silver) && !gold;
   const foil = gold || silver;
   const gradientId = options.gradientId || "hexaQrFoil";
-  const payload = data.trim() || "https://hexacards.com";
+  const payload = data.trim() || "https://hexacards-web.vercel.app";
 
   const qr = createQr(payload, {
     errorCorrectionLevel: "M",

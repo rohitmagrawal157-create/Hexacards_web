@@ -193,6 +193,7 @@ export function saveOrderCardProfile(
 
 /**
  * Save profile to localStorage + Supabase `cards`, and link `orders.card_id`.
+ * Throws when the DB write fails so the editor can alert the user.
  */
 export async function persistOrderCardProfile(
   order: HexaOrder,
@@ -203,6 +204,7 @@ export async function persistOrderCardProfile(
   const result = await upsertOrderCardInDb(order, next, loc);
   if (result.error) {
     console.warn("[cards] DB persist warning:", result.error);
+    throw new Error(result.error);
   }
   if (result.cardId && order.cardId !== result.cardId) {
     await updateOrder(order.id, { cardId: result.cardId });

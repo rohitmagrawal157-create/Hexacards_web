@@ -27,6 +27,7 @@ SUPABASE_SERVICE_ROLE_KEY=...
    - `sql/payments-table.sql`
    - `sql/reviews-table.sql`
    - `sql/messages-table.sql`
+   - `sql/fk-repair-live.sql` ← **heal orphan FKs, backfill `orders.card_id`, re-add constraints** (does not wipe users/orders/cards)
 
 3. Start Next.js (frontend + TypeScript API together):
 

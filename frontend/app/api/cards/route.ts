@@ -19,7 +19,7 @@ import {
   applyLinksToCard,
   extractLinksFromBody,
   fetchLinksForCards,
-  stripLinkFieldsFromCardPayload,
+  legacyLinkColumnsFromBody,
   upsertCardLinks,
 } from "@/lib/server/card-links-db";
 import { fetchAllSupabaseRows } from "@/lib/server/supabase-fetch-all";
@@ -154,8 +154,10 @@ function buildCardPayload(
     payload.status = Number(body.status) ? 1 : 0;
   }
 
-  // website / social / brochure → `links` table (not cards columns)
-  return { payload: stripLinkFieldsFromCardPayload(payload) };
+  // Dual-write website / social / brochure onto cards + `links` table
+  Object.assign(payload, legacyLinkColumnsFromBody(body));
+
+  return { payload };
 }
 
 export async function GET(request: Request) {

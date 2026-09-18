@@ -9,7 +9,7 @@ export type NimbusSmsResult =
 
 /** DLT-approved OTP template — must match Nimbus / TRAI registration exactly. */
 export function buildHexaCardsOtpMessage(otp: string): string {
-  return `Your Hexa Cards mobile number verification OTP is ${otp}. This OTP is valid for 10 minutes. Do not share this OTP with anyone. https://hexacards.com`;
+  return `Your Hexa Cards mobile number verification OTP is ${otp}. This OTP is valid for 10 minutes. Do not share this OTP with anyone. https://hexacards-web.vercel.app`;
 }
 
 /** Strip wrapping quotes — common when pasting secrets into Vercel / .env. */

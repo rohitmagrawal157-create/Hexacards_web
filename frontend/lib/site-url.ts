@@ -1,6 +1,11 @@
-const DEFAULT_CANONICAL = "https://hexacards.com";
-/** Live web app used for WhatsApp / social shares while on Vercel */
 const DEFAULT_PUBLIC_APP = "https://hexacards-web.vercel.app";
+/** Live site host — QR, NFC, dashboard, and public cards (currently Vercel). */
+const DEFAULT_CANONICAL = DEFAULT_PUBLIC_APP;
+
+const LEGACY_SITE_HOSTS = new Set([
+  "hexacards.com",
+  "www.hexacards.com",
+]);
 
 function stripTrailingSlash(url: string): string {
   return url.replace(/\/$/, "");
@@ -16,14 +21,36 @@ export function isLocalHost(hostnameOrUrl: string): boolean {
   return value === "localhost" || value === "127.0.0.1";
 }
 
+function hostnameOf(urlOrHost: string): string {
+  const raw = urlOrHost.trim();
+  if (!raw) return "";
+  try {
+    const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    return new URL(withProto).hostname.toLowerCase();
+  } catch {
+    return raw
+      .replace(/^https?:\/\//i, "")
+      .split("/")[0]
+      .split(":")[0]
+      .toLowerCase();
+  }
+}
+
+export function isLegacyHexacardsHost(hostnameOrUrl: string): boolean {
+  return LEGACY_SITE_HOSTS.has(hostnameOf(hostnameOrUrl));
+}
+
 /** Production print / QR / NFC base — never localhost, even if SITE_URL is local. */
 export function getCanonicalSiteOrigin(): string {
   const canonical = process.env.NEXT_PUBLIC_CANONICAL_SITE_URL?.trim();
   if (canonical && !isLocalHost(canonical)) {
+    // Old env still pointing at hexacards.com → use live Vercel app
+    if (isLegacyHexacardsHost(canonical)) return DEFAULT_PUBLIC_APP;
     return stripTrailingSlash(canonical);
   }
   const site = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (site && !isLocalHost(site)) {
+    if (isLegacyHexacardsHost(site)) return DEFAULT_PUBLIC_APP;
     return stripTrailingSlash(site);
   }
   return DEFAULT_CANONICAL;
@@ -51,11 +78,13 @@ export function getRuntimeSiteOrigin(): string {
 export function getShareSiteOrigin(): string {
   const shareEnv = process.env.NEXT_PUBLIC_SHARE_SITE_URL?.trim();
   if (shareEnv && !isLocalHost(shareEnv)) {
+    if (isLegacyHexacardsHost(shareEnv)) return DEFAULT_PUBLIC_APP;
     return stripTrailingSlash(shareEnv);
   }
 
   const siteEnv = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (siteEnv && !isLocalHost(siteEnv)) {
+    if (isLegacyHexacardsHost(siteEnv)) return DEFAULT_PUBLIC_APP;
     return stripTrailingSlash(siteEnv);
   }
 
@@ -64,8 +93,7 @@ export function getShareSiteOrigin(): string {
     if (isVercelPreviewHost(hostname)) {
       return stripTrailingSlash(origin);
     }
-    if (!isLocalHost(hostname) && hostname !== "") {
-      // Real custom domain (e.g. hexacards.com)
+    if (!isLocalHost(hostname) && hostname !== "" && !isLegacyHexacardsHost(hostname)) {
       return stripTrailingSlash(origin);
     }
   }
@@ -96,7 +124,7 @@ export type PublicCardUrlMode = "canonical" | "runtime" | "share";
 
 /**
  * Build a full public card URL.
- * - canonical: hexacards.com (QR / NFC / production print)
+ * - canonical: live public host (hexacards-web.vercel.app)
  * - runtime: current domain (local preview navigation)
  * - share: public app host for WhatsApp / social (never localhost)
  */
@@ -114,20 +142,17 @@ export function buildPublicCardUrl(
   return `${base}/${clean}`;
 }
 
-/** Relative in-app path — works on hexacards.com and *.vercel.app */
+/** Relative in-app path — works on any host (/, /slug, /dashboard/edit-card). */
 export function buildPublicCardPath(slug: string): string {
   return `/${slug.trim().replace(/^\/+/, "").toLowerCase()}`;
 }
 
-/** Owner dashboard / edit bar — show test URL on Vercel, production URL otherwise. */
+/**
+ * Owner dashboard / edit bar public URL.
+ * Prefer share host so View Card opens on hexacards-web.vercel.app.
+ */
 export function buildOwnerDisplayCardUrl(slug: string): string {
-  return buildPublicCardUrl(
-    slug,
-    isPreviewDeployment() ||
-      (typeof window !== "undefined" && isLocalHost(window.location.hostname))
-      ? "share"
-      : "canonical",
-  );
+  return buildPublicCardUrl(slug, "share");
 }
 
 /**
@@ -139,8 +164,8 @@ export function buildShareCardUrl(slug: string): string {
 }
 
 /**
- * Rewrite a stored card URL that may contain localhost (from local checkout)
- * into a public URL. Prefer the known slug when provided.
+ * Rewrite a stored card URL that may contain localhost or legacy hexacards.com
+ * into the live public URL. Prefer the known slug when provided.
  */
 export function normalizeStoredCardUrl(
   storedUrl: string | null | undefined,

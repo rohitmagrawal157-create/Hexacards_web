@@ -282,3 +282,46 @@ export function stripLinkFieldsFromCardPayload(
   delete next.brochure;
   return next;
 }
+
+/**
+ * Dual-write social / website / brochure onto legacy `cards` columns.
+ * Primary store is still `links`; columns stay in sync so public fetch
+ * never shows a stale cards.brochure after a clear/update.
+ */
+export function legacyLinkColumnsFromBody(
+  body: CardCreateBody & {
+    telegramUrl?: string | null;
+    telegram_url?: string | null;
+  },
+): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  const asUrl = (v: unknown): string | null => {
+    const s = trimUrl(v);
+    return s || null;
+  };
+
+  if (body.website !== undefined) out.website = asUrl(body.website);
+  if (body.facebookUrl !== undefined || body.facebook_url !== undefined) {
+    out.facebook_url = asUrl(body.facebookUrl ?? body.facebook_url);
+  }
+  if (body.instagramUrl !== undefined || body.instagram_url !== undefined) {
+    out.instagram_url = asUrl(body.instagramUrl ?? body.instagram_url);
+  }
+  if (body.linkedinUrl !== undefined || body.linkedin_url !== undefined) {
+    out.linkedin_url = asUrl(body.linkedinUrl ?? body.linkedin_url);
+  }
+  if (body.twitterUrl !== undefined || body.twitter_url !== undefined) {
+    out.twitter_url = asUrl(body.twitterUrl ?? body.twitter_url);
+  }
+  if (body.youtubeUrl !== undefined || body.youtube_url !== undefined) {
+    out.youtube_url = asUrl(body.youtubeUrl ?? body.youtube_url);
+  }
+  if (body.googleUrl !== undefined || body.google_url !== undefined) {
+    out.google_url = asUrl(body.googleUrl ?? body.google_url);
+  }
+  if (body.brochure !== undefined) {
+    const raw = trimUrl(body.brochure);
+    out.brochure = raw ? raw.slice(0, 500) : null;
+  }
+  return out;
+}

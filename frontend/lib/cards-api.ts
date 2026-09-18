@@ -23,8 +23,10 @@ import { resolveOrderLiveUrl } from "@/lib/order-card";
 import {
   resolveCardImageSrc,
   toCardImageDbName,
+  pickStoredCardCover,
 } from "@/lib/card-images";
 import { buildPublicCardUrl } from "@/lib/site-url";
+import { cleanDbText, isBlankDbValue, pickDbText } from "@/lib/db-text";
 
 const LAYOUT_TO_THEME: Record<CardLayoutId, number> = {
   classic: 1,
@@ -53,14 +55,17 @@ function dbImagePath(src: string | null | undefined): string | null {
 
 function servicesToDb(services: string[] | undefined): string | null {
   if (!Array.isArray(services) || services.length === 0) return null;
-  return services.map((s) => s.trim()).filter(Boolean).join("\n") || null;
+  const lines = services
+    .map((s) => cleanDbText(s))
+    .filter(Boolean);
+  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 function servicesFromDb(raw: string | null | undefined): string[] {
-  if (!raw?.trim()) return [];
-  return raw
+  if (isBlankDbValue(raw)) return [];
+  return String(raw)
     .split(/\n|,/)
-    .map((s) => s.trim())
+    .map((s) => cleanDbText(s))
     .filter(Boolean);
 }
 
@@ -186,62 +191,99 @@ export function cardDtoToProfile(
     ...fallback,
     contact: {
       ...fallback.contact,
-      cardName: card.cardName || fallback.contact.cardName,
-      title: card.jobName || fallback.contact.title,
-      businessName: card.businessName || fallback.contact.businessName,
+      cardName: pickDbText(fallback.contact.cardName, card.cardName),
+      title: pickDbText(fallback.contact.title, card.jobName),
+      businessName: pickDbText(
+        fallback.contact.businessName,
+        card.businessName,
+      ),
       countryCode: card.code === "91" ? "IN" : fallback.contact.countryCode,
       mobile: (() => {
         if (card.mobile?.includes("|")) {
-          return decodeCardMobileField(card.mobile).mobile || fallback.contact.mobile;
+          return (
+            decodeCardMobileField(card.mobile).mobile ||
+            fallback.contact.mobile
+          );
         }
+        const cleaned = cleanDbText(card.mobile);
         return (
-          normalizeIndianPhone(card.mobile) ||
-          card.mobile ||
+          normalizeIndianPhone(cleaned) ||
+          cleaned ||
           fallback.contact.mobile
         );
       })(),
       extraMobiles: (() => {
-        const fromCol = normalizeExtraMobiles(card.extraMobiles);
+        const fromCol = normalizeExtraMobiles(card.extraMobiles).filter(
+          (m) => !isBlankDbValue(m),
+        );
         if (fromCol.length > 0) return fromCol;
         if (card.mobile?.includes("|")) {
           return decodeCardMobileField(card.mobile).extraMobiles;
         }
         return normalizeExtraMobiles(fallback.contact.extraMobiles);
       })(),
-      whatsapp:
-        card.whatsapp ||
-        normalizeIndianPhone(card.mobile) ||
-        (card.mobile?.includes("|")
-          ? decodeCardMobileField(card.mobile).mobile
-          : "") ||
-        fallback.contact.whatsapp,
-      email: card.email || fallback.contact.email,
-      website: card.website || fallback.contact.website,
-      address: card.address || fallback.contact.address,
-      brochureName: card.brochure || fallback.contact.brochureName,
-      brochureDisplayName: fallback.contact.brochureDisplayName,
-      brochureMime: fallback.contact.brochureMime,
-      brochureSize: fallback.contact.brochureSize,
+      whatsapp: (() => {
+        const fromDb = cleanDbText(card.whatsapp);
+        const digits =
+          normalizeIndianPhone(fromDb) ||
+          normalizeIndianPhone(card.mobile) ||
+          (card.mobile?.includes("|")
+            ? decodeCardMobileField(card.mobile).mobile
+            : "") ||
+          normalizeIndianPhone(fallback.contact.whatsapp) ||
+          normalizeIndianPhone(fallback.contact.mobile);
+        return digits || fallback.contact.whatsapp || "";
+      })(),
+      email: pickDbText(fallback.contact.email, card.email),
+      website: pickDbText(fallback.contact.website, card.website),
+      address: pickDbText(fallback.contact.address, card.address),
+      // Keep city/state labels from local/order cache (DB only stores IDs)
+      state: fallback.contact.state,
+      city: fallback.contact.city,
+      brochureName: (() => {
+        const name = cleanDbText(card.brochure);
+        return name || null;
+      })(),
+      brochureDisplayName: cleanDbText(card.brochure)
+        ? fallback.contact.brochureDisplayName
+        : null,
+      brochureMime: cleanDbText(card.brochure)
+        ? fallback.contact.brochureMime
+        : null,
+      brochureSize: cleanDbText(card.brochure)
+        ? fallback.contact.brochureSize
+        : null,
     },
     social: {
       ...fallback.social,
-      facebook: card.facebookUrl || fallback.social.facebook,
-      instagram: card.instagramUrl || fallback.social.instagram,
-      linkedin: card.linkedinUrl || fallback.social.linkedin,
-      twitter: card.twitterUrl || fallback.social.twitter,
-      youtube: card.youtubeUrl || fallback.social.youtube,
-      googleReview: card.googleUrl || fallback.social.googleReview,
-      telegram: card.telegramUrl || fallback.social.telegram,
-      snapchat: card.snapchatUrl || fallback.social.snapchat,
-      pinterest: card.pinterestUrl || fallback.social.pinterest,
-      tripadvisor: card.tripadvisorUrl || fallback.social.tripadvisor,
+      facebook: pickDbText(fallback.social.facebook, card.facebookUrl),
+      instagram: pickDbText(fallback.social.instagram, card.instagramUrl),
+      linkedin: pickDbText(fallback.social.linkedin, card.linkedinUrl),
+      twitter: pickDbText(fallback.social.twitter, card.twitterUrl),
+      youtube: pickDbText(fallback.social.youtube, card.youtubeUrl),
+      googleReview: pickDbText(fallback.social.googleReview, card.googleUrl),
+      telegram: pickDbText(fallback.social.telegram, card.telegramUrl),
+      snapchat: pickDbText(fallback.social.snapchat, card.snapchatUrl),
+      pinterest: pickDbText(fallback.social.pinterest, card.pinterestUrl),
+      tripadvisor: pickDbText(
+        fallback.social.tripadvisor,
+        card.tripadvisorUrl,
+      ),
     },
     business: {
-      about: card.about || card.aboutCompany || fallback.business.about,
-      services:
-        servicesFromDb(card.services).length > 0
-          ? servicesFromDb(card.services)
-          : fallback.business.services,
+      about: pickDbText(
+        fallback.business.about,
+        card.about,
+        card.aboutCompany,
+      ),
+      services: (() => {
+        const fromDb = servicesFromDb(card.services);
+        if (fromDb.length > 0) return fromDb;
+        // Literal "NULL" / empty in DB → keep local editor content
+        return Array.isArray(fallback.business.services)
+          ? fallback.business.services.filter((s) => cleanDbText(s))
+          : [];
+      })(),
     },
     appearance: {
       ...fallback.appearance,
@@ -254,13 +296,17 @@ export function cardDtoToProfile(
         card.updateTime,
       ),
       coverImage: normalizeCoverImage(
-        card.bgUrl || card.bgImg
-          ? resolveCardImageSrc(
-              card.bgUrl || card.bgImg,
-              fallback.appearance.coverImage || DEFAULT_CARD_BANNER,
-              card.updateTime,
-            )
-          : fallback.appearance.coverImage || DEFAULT_CARD_BANNER,
+        (() => {
+          const stored = pickStoredCardCover(card.bgUrl, card.bgImg);
+          if (!stored) {
+            return fallback.appearance.coverImage || DEFAULT_CARD_BANNER;
+          }
+          return resolveCardImageSrc(
+            stored,
+            fallback.appearance.coverImage || DEFAULT_CARD_BANNER,
+            card.updateTime,
+          );
+        })(),
         card.updateTime,
       ),
       layout: layoutFromThemeId(card.themeId),
@@ -270,6 +316,64 @@ export function cardDtoToProfile(
         "#141414",
     },
     updatedAt: card.updateTime || new Date().toISOString(),
+  };
+}
+
+/** Strip literal "NULL" and decode &amp; on any profile (cache or DB). */
+export function sanitizeHexaCardProfile(
+  profile: HexaCardProfile,
+): HexaCardProfile {
+  const contact = profile.contact;
+  const social = profile.social;
+  const business = profile.business;
+  return {
+    ...profile,
+    contact: {
+      ...contact,
+      cardName: cleanDbText(contact.cardName),
+      title: cleanDbText(contact.title),
+      businessName: cleanDbText(contact.businessName),
+      mobile: cleanDbText(contact.mobile),
+      whatsapp:
+        cleanDbText(contact.whatsapp) || cleanDbText(contact.mobile),
+      email: cleanDbText(contact.email),
+      website: cleanDbText(contact.website),
+      address: cleanDbText(contact.address),
+      state: cleanDbText(contact.state),
+      city: cleanDbText(contact.city),
+      brochureName: cleanDbText(contact.brochureName) || null,
+      brochureDisplayName: cleanDbText(contact.brochureDisplayName) || null,
+    },
+    social: {
+      ...social,
+      facebook: cleanDbText(social.facebook),
+      instagram: cleanDbText(social.instagram),
+      linkedin: cleanDbText(social.linkedin),
+      twitter: cleanDbText(social.twitter),
+      youtube: cleanDbText(social.youtube),
+      googleReview: cleanDbText(social.googleReview),
+      telegram: cleanDbText(social.telegram),
+      snapchat: cleanDbText(social.snapchat),
+      pinterest: cleanDbText(social.pinterest),
+      tripadvisor: cleanDbText(social.tripadvisor),
+    },
+    business: {
+      about: cleanDbText(business?.about),
+      services: Array.isArray(business?.services)
+        ? business.services.map((s) => cleanDbText(s)).filter(Boolean)
+        : [],
+    },
+    appearance: {
+      ...profile.appearance,
+      logoImage: normalizeLogoImage(
+        profile.appearance?.logoImage,
+        profile.updatedAt,
+      ),
+      coverImage: normalizeCoverImage(
+        profile.appearance?.coverImage,
+        profile.updatedAt,
+      ),
+    },
   };
 }
 
@@ -383,7 +487,7 @@ export async function upsertOrderCardInDb(
   if (!card) return { cardId: null, error };
 
   const nextSlug = card.unicCardName;
-  const nextUrl = buildPublicCardUrl(nextSlug, "canonical");
+  const nextUrl = buildPublicCardUrl(nextSlug, "share");
   const needsOrderLink =
     order.cardId !== card.cardId ||
     order.userId !== card.userId ||

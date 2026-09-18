@@ -111,7 +111,7 @@ export default function ContactUsForm() {
           email: form.email.trim(),
           subject: form.subject.trim(),
           message: form.message.trim(),
-          siteUrl: "https://hexacards.com/contact",
+          siteUrl: "https://hexacards-web.vercel.app/contact",
         }),
       });
 

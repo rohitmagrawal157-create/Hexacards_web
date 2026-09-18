@@ -53,6 +53,18 @@
 If you already ran an older `schema.sql` without these tables, run the matching create/seed files above.
 If Super Admin Products breaks after a schema update, run `categories-migrate.sql` → `products-migrate.sql`, then re-seed.
 If orders API fails after column rename, run `orders-migrate.sql`.
+If FK orphans / missing `orders.card_id` / broken user links after a users wipe, run **in order** (avoids Supabase timeout):
+
+1. `frontend/sql/fk-repair-01-prep.sql`
+2. `frontend/sql/fk-repair-02-users.sql`
+3. `frontend/sql/fk-repair-03-orders-payments.sql`
+4. `frontend/sql/fk-repair-04-cards-links.sql`
+5. `frontend/sql/fk-repair-05-locations-messages.sql`
+6. `frontend/sql/fk-repair-06-add-fks.sql`
+7. `frontend/sql/fk-repair-07-verify.sql`
+
+**Never deletes:** `users`, `cards`, `orders`, `payments`.  
+See `frontend/sql/fk-repair-live.sql` for the index.
 After adding Review Keychain category, run `review-keychain-category.sql` then:
 
 ```bash

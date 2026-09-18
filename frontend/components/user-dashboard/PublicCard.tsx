@@ -27,6 +27,7 @@ import { resolveOrderLiveUrl } from "@/lib/order-card";
 import {
   cardDtoToProfile,
   fetchCardBySlug,
+  sanitizeHexaCardProfile,
 } from "@/lib/cards-api";
 import { MessageOwnerContext } from "@/lib/message-owner-context";
 import { isReservedRootSegment } from "@/lib/reserved-routes";
@@ -210,18 +211,40 @@ export default function PublicCard() {
         return;
       }
 
-      const local =
-        order != null
-          ? getOrderCardProfile(order.id) ??
-            loadOrderCardProfile(order, order.customerName, order.phone)
-          : null;
-      const localIsNewer =
-        Boolean(local?.updatedAt) &&
-        Date.parse(local!.updatedAt) >=
-          Date.parse(dbCard.updateTime || dbCard.dateTime || "0");
-      const loaded = localIsNewer ? local! : cardDtoToProfile(dbCard, local);
+      // Only real localStorage cache — never synthesize a "now" profile for
+      // localIsNewer. Visitors have no cache; synthetic stubs were beating DB
+      // and hiding logo / background / theme / accent on shared links.
+      const cached = order ? getOrderCardProfile(order.id) : null;
+      const auth = getAuthUser();
+      const ownerPhoneDigits =
+        resolveOwnerAccountPhone(order) ||
+        normalizeIndianPhone(dbCard.mobile) ||
+        "";
+      const viewerPhone = normalizeIndianPhone(auth?.phone ?? "");
+      const viewerIsOwner =
+        Boolean(ownerPhoneDigits) &&
+        Boolean(viewerPhone) &&
+        isValidIndianPhone(ownerPhoneDigits) &&
+        isValidIndianPhone(viewerPhone) &&
+        ownerPhoneDigits === viewerPhone;
 
-      if (order) {
+      const dbStamp = Date.parse(dbCard.updateTime || dbCard.dateTime || "0");
+      const cacheStamp = cached?.updatedAt ? Date.parse(cached.updatedAt) : NaN;
+      const ownerCacheIsNewer =
+        viewerIsOwner &&
+        Boolean(cached) &&
+        Number.isFinite(cacheStamp) &&
+        Number.isFinite(dbStamp) &&
+        cacheStamp > dbStamp;
+
+      const loaded = sanitizeHexaCardProfile(
+        ownerCacheIsNewer
+          ? cached!
+          : cardDtoToProfile(dbCard, cached ?? undefined),
+      );
+
+      // Cache DB-backed profile for faster re-open; never cache empty stubs
+      if (order && !ownerCacheIsNewer) {
         try {
           cacheOrderCardProfile(order.id, loaded);
         } catch {
@@ -243,9 +266,10 @@ export default function PublicCard() {
 
     if (order && isOrderPaymentPaid(order)) {
       const saved = getOrderCardProfile(order.id);
-      const loaded =
+      const loaded = sanitizeHexaCardProfile(
         saved ??
-        loadOrderCardProfile(order, order.customerName, order.phone);
+          loadOrderCardProfile(order, order.customerName, order.phone),
+      );
       const { slug } = resolveOrderLiveUrl(order);
       applyLoadedCard({
         loaded,

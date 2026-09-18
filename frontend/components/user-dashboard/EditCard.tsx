@@ -43,7 +43,34 @@ import {
   loadOrderCardProfile,
   persistOrderCardProfile,
   saveOrderCardProfile,
+  cacheOrderCardProfile,
 } from "@/lib/order-card-profile";
+import {
+  cardDtoToProfile,
+  fetchCardById,
+  fetchCardBySlug,
+  sanitizeHexaCardProfile,
+} from "@/lib/cards-api";
+import { cleanDbText, isBlankDbValue } from "@/lib/db-text";
+import type { CardDto } from "@/lib/server/card-types";
+
+/** True when local editor has real business text that DB is missing (NULL string). */
+function localBusinessRicherThanDb(
+  local: HexaCardProfile,
+  db: CardDto,
+): boolean {
+  const localAbout = cleanDbText(local.business?.about);
+  const dbAboutBlank =
+    isBlankDbValue(db.about) && isBlankDbValue(db.aboutCompany);
+  const localServices = (local.business?.services ?? [])
+    .map((s) => cleanDbText(s))
+    .filter(Boolean);
+  const dbServicesBlank = isBlankDbValue(db.services);
+  return (
+    (Boolean(localAbout) && dbAboutBlank) ||
+    (localServices.length > 0 && dbServicesBlank)
+  );
+}
 import {
   cardPublicSlug,
   cardPublicPath,
@@ -212,12 +239,47 @@ export default function EditCard() {
         const order = orders.find((o) => o.id === orderId) ?? null;
         if (order) {
           setEditingOrder(order);
-          setProfile(loadOrderCardProfile(order, auth!.name, auth!.phone));
+          const local = sanitizeHexaCardProfile(
+            loadOrderCardProfile(order, auth!.name, auth!.phone),
+          );
+          setProfile(local);
           setLocIds({
             countryId: order.countryId ?? null,
             stateId: order.stateId ?? null,
             cityId: order.cityId ?? null,
           });
+          setAuthReady(true);
+
+          // Hydrate from Supabase so business / brochure / social match DB
+          const { slug } = resolveOrderLiveUrl(order);
+          const dbCard =
+            (order.cardId && order.cardId > 0
+              ? await fetchCardById(order.cardId)
+              : null) ||
+            (await fetchCardBySlug(slug, { countView: false }));
+          if (cancelled) return;
+          if (dbCard) {
+            const merged = sanitizeHexaCardProfile(
+              cardDtoToProfile(dbCard, local),
+            );
+            setProfile(merged);
+            try {
+              cacheOrderCardProfile(order.id, merged);
+            } catch {
+              // ignore quota
+            }
+            // Push real local business text when DB still has literal "NULL"
+            if (localBusinessRicherThanDb(local, dbCard)) {
+              void persistOrderCardProfile(order, merged, {
+                countryId: order.countryId ?? null,
+                stateId: order.stateId ?? null,
+                cityId: order.cityId ?? null,
+              }).catch((err) =>
+                console.warn("[edit-card] sync business to DB:", err),
+              );
+            }
+          }
+          return;
         } else {
           // Unpaid / unknown order — do not open editor
           router.replace("/dashboard");
@@ -227,12 +289,45 @@ export default function EditCard() {
         const latest = orders[0] ?? null;
         if (latest) {
           setEditingOrder(latest);
-          setProfile(loadOrderCardProfile(latest, auth!.name, auth!.phone));
+          const local = sanitizeHexaCardProfile(
+            loadOrderCardProfile(latest, auth!.name, auth!.phone),
+          );
+          setProfile(local);
           setLocIds({
             countryId: latest.countryId ?? null,
             stateId: latest.stateId ?? null,
             cityId: latest.cityId ?? null,
           });
+          setAuthReady(true);
+
+          const { slug } = resolveOrderLiveUrl(latest);
+          const dbCard =
+            (latest.cardId && latest.cardId > 0
+              ? await fetchCardById(latest.cardId)
+              : null) ||
+            (await fetchCardBySlug(slug, { countView: false }));
+          if (cancelled) return;
+          if (dbCard) {
+            const merged = sanitizeHexaCardProfile(
+              cardDtoToProfile(dbCard, local),
+            );
+            setProfile(merged);
+            try {
+              cacheOrderCardProfile(latest.id, merged);
+            } catch {
+              // ignore quota
+            }
+            if (localBusinessRicherThanDb(local, dbCard)) {
+              void persistOrderCardProfile(latest, merged, {
+                countryId: latest.countryId ?? null,
+                stateId: latest.stateId ?? null,
+                cityId: latest.cityId ?? null,
+              }).catch((err) =>
+                console.warn("[edit-card] sync business to DB:", err),
+              );
+            }
+          }
+          return;
         } else {
           setEditingOrder(null);
           setProfile(getCardProfile(auth!.name, auth!.phone));
