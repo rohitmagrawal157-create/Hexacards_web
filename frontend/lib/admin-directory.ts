@@ -759,6 +759,16 @@ export async function syncAdminCardsFromOrders(): Promise<{
   return res.data ?? null;
 }
 
+/** Exact DB cards count (not the merged admin list length). */
+export async function fetchAdminCardsCount(): Promise<number> {
+  const res = await apiFetch<{ count: number }>("/api/cards?countOnly=1");
+  if (res.ok && res.data && typeof res.data.count === "number") {
+    return res.data.count;
+  }
+  const list = await fetchAdminCards().catch(() => [] as AdminCardRecord[]);
+  return list.filter((row) => row.id.startsWith("card-")).length;
+}
+
 /** Load cards from Supabase + orders (read-only merge, stable list). */
 export async function fetchAdminCards(): Promise<AdminCardRecord[]> {
   let store = readCardsStore();

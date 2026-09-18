@@ -23,12 +23,13 @@ import {
   Phone,
   Calendar,
 } from "lucide-react";
-import CardLogsPanel, { sampleCardLogs } from "@/components/super-admin/Cardslogs";
+import CardLogsPanel from "@/components/super-admin/Cardslogs";
 import { showAdminToast } from "@/lib/admin-toast";
 import {
   deleteAdminCard,
   adminCardListKey,
   fetchAdminCards,
+  fetchAdminCardsCount,
   syncAdminCardsFromOrders,
   toggleAdminCard,
   updateAdminCard,
@@ -417,6 +418,7 @@ export default function CardsPanel({
   onToggleStatus?: (id: string, active: boolean) => void;
 }) {
   const [rows, setRows] = useState<AdminCardRow[]>(() => cards ?? []);
+  const [dbCardsCount, setDbCardsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const loadSeq = useRef(0);
@@ -435,9 +437,13 @@ export default function CardsPanel({
       const seq = ++loadSeq.current;
       setLoading(true);
       try {
-        const next = await fetchAdminCards();
+        const [next, dbCount] = await Promise.all([
+          fetchAdminCards(),
+          fetchAdminCardsCount(),
+        ]);
         if (cancelled || seq !== loadSeq.current) return;
         setRows(next);
+        setDbCardsCount(dbCount);
       } finally {
         if (!cancelled && seq === loadSeq.current) {
           setLoading(false);
@@ -470,17 +476,18 @@ export default function CardsPanel({
     };
   }, []);
 
-  const counts = useMemo(() => {
-    const active = rows.filter(isCardActive).length;
-    const expiry = rows.filter(
-      (c) => isCardExpired(c) || isCardExpiringSoon(c),
-    ).length;
-    return {
-      all: rows.length,
-      active,
-      expiry,
-      logs: sampleCardLogs.length,
-    };
+  const todaysCardsCount = useMemo(() => {
+    const today = new Date();
+    return rows.filter((card) => {
+      if (!card.id.startsWith("card-")) return false;
+      const start = parseCardDate(card.startDate);
+      if (!start) return false;
+      return (
+        start.getFullYear() === today.getFullYear() &&
+        start.getMonth() === today.getMonth() &&
+        start.getDate() === today.getDate()
+      );
+    }).length;
   }, [rows]);
 
   const viewFiltered = useMemo(() => {
@@ -536,6 +543,9 @@ export default function CardsPanel({
     const ok = await deleteAdminCard(id);
     if (ok) {
       showAdminToast("Card deleted successfully");
+      if (id.startsWith("card-")) {
+        setDbCardsCount((n) => Math.max(0, n - 1));
+      }
     } else {
       showAdminToast("Failed to delete card", "error");
     }
@@ -575,8 +585,14 @@ export default function CardsPanel({
         );
       }
       const seq = ++loadSeq.current;
-      const next = await fetchAdminCards();
-      if (seq === loadSeq.current) setRows(next);
+      const [next, dbCount] = await Promise.all([
+        fetchAdminCards(),
+        fetchAdminCardsCount(),
+      ]);
+      if (seq === loadSeq.current) {
+        setRows(next);
+        setDbCardsCount(dbCount);
+      }
       window.dispatchEvent(new Event("hexa-admin-cards-change"));
     } finally {
       setSyncing(false);
@@ -604,10 +620,6 @@ export default function CardsPanel({
         {CARD_VIEWS.map((item) => {
           const Icon = item.icon;
           const selected = view === item.key;
-          const count =
-            item.key === "logs"
-              ? counts.logs
-              : counts[item.key as keyof typeof counts];
 
           return (
             <button
@@ -620,23 +632,12 @@ export default function CardsPanel({
                   : "border-black/[0.06] bg-white hover:border-[#BC7C10]/30 hover:bg-[#FFFCF7]/60"
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                    selected ? "bg-[#BC7C10] text-white" : "bg-[#141414] text-white"
-                  }`}
-                >
-                  <Icon className="h-4.5 w-4.5" />
-                </div>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                    selected
-                      ? "bg-[#BC7C10] text-white"
-                      : "bg-[#fdf1e6] text-[#BC7C10]"
-                  }`}
-                >
-                  {count}
-                </span>
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                  selected ? "bg-[#BC7C10] text-white" : "bg-[#141414] text-white"
+                }`}
+              >
+                <Icon className="h-4.5 w-4.5" />
               </div>
               <p className="mt-4 text-sm font-bold text-[#141414]">{item.label}</p>
               <p className="mt-1 text-xs leading-relaxed text-[#8a8174]">
@@ -654,15 +655,15 @@ export default function CardsPanel({
               Total cards
             </p>
             <p className="font-dashboard mt-1 text-2xl font-bold text-[#141414]">
-              {rows.length}
+              {dbCardsCount}
             </p>
           </div>
           <div className="rounded-xl border border-black/[0.06] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
             <p className="text-[10px] font-bold tracking-[0.14em] text-[#BC7C10] uppercase">
-              In this view
+              Today&apos;s cards
             </p>
             <p className="font-dashboard mt-1 text-2xl font-bold text-[#141414]">
-              {filtered.length}
+              {todaysCardsCount}
             </p>
           </div>
           <div className="rounded-xl border border-black/[0.06] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">

@@ -36,7 +36,7 @@ import {
   type SuperAdminUser,
 } from "@/lib/super-admin-auth";
 import { formatOrderDate, fetchOrders, getOrders, isOrderPaymentPaid, paymentStatusLabel, statusLabel, type HexaOrder } from "@/lib/orders";
-import { fetchAdminCards, fetchAdminUsers, fetchAdminUsersCount, getAdminUsers } from "@/lib/admin-directory";
+import { fetchAdminCardsCount, fetchAdminUsers, fetchAdminUsersCount, getAdminUsers } from "@/lib/admin-directory";
 import {
   addAdminProduct,
   addAdminSection,
@@ -374,13 +374,13 @@ export default function SuperAdminDashboard() {
       const touched = touchSuperAdminSession() ?? auth;
       setUser(touched);
       setOrders(await fetchOrders());
-      const [adminUsers, adminCards, usersTotal] = await Promise.all([
+      const [adminUsers, usersTotal, cardsTotal] = await Promise.all([
         fetchAdminUsers(),
-        fetchAdminCards(),
         fetchAdminUsersCount(),
+        fetchAdminCardsCount(),
       ]);
       setUsersCount(Math.max(usersTotal, adminUsers.length));
-      setCardsCount(adminCards.length);
+      setCardsCount(cardsTotal);
       const nextSections = await getAdminSections();
       const bySection = await getAdminProductsBySection();
       setSections(nextSections);
@@ -403,13 +403,13 @@ export default function SuperAdminDashboard() {
       }
       touchSuperAdminSession();
       setOrders(await fetchOrders());
-      const [adminUsers, adminCards, usersTotal] = await Promise.all([
+      const [adminUsers, usersTotal, cardsTotal] = await Promise.all([
         fetchAdminUsers(),
-        fetchAdminCards(),
         fetchAdminUsersCount(),
+        fetchAdminCardsCount(),
       ]);
       setUsersCount(Math.max(usersTotal, adminUsers.length));
-      setCardsCount(adminCards.length);
+      setCardsCount(cardsTotal);
       const nextSections = await getAdminSections();
       const bySection = await getAdminProductsBySection();
       setSections(nextSections);
@@ -497,13 +497,13 @@ export default function SuperAdminDashboard() {
     setRefreshing(true);
     void Promise.all([
       fetchOrders(),
-      fetchAdminCards(),
+      fetchAdminCardsCount(),
       fetchAdminUsers(),
       fetchAdminUsersCount(),
     ])
-      .then(([list, cards, users, usersTotal]) => {
+      .then(([list, cardsTotal, users, usersTotal]) => {
         setOrders(list);
-        setCardsCount(cards.length);
+        setCardsCount(cardsTotal);
         setUsersCount(Math.max(usersTotal, users.length));
       })
       .finally(() => {
