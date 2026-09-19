@@ -446,97 +446,125 @@ function cardDtoToPaidOrder(card: CardDto, fallbackPhone: string): HexaOrder {
   };
 }
 
-async function fetchActiveCardsForUser(userId: number): Promise<CardDto[]> {
-  if (!Number.isInteger(userId) || userId <= 0) return [];
-  const res = await apiFetch<CardDto[]>(`/api/cards?user_id=${userId}`);
-  if (!res.ok || !Array.isArray(res.data)) return [];
-  return res.data.filter((c) => c.status !== false && c.cardId > 0);
+async function resolveUserIdForPhone(phone: string): Promise<number | null> {
+  const digits = normalizeIndianPhone(phone);
+  if (!digits) return null;
+  const res = await apiFetch<Array<{ userId: number }>>(
+    `/api/users?mobile=${encodeURIComponent(digits)}`,
+  );
+  if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) return null;
+  const id = Number(res.data[0]?.userId);
+  return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-/** Active cards whose primary mobile matches this phone (orphan gap-fill). */
-async function fetchActiveCardsForPhone(phone: string): Promise<CardDto[]> {
-  const digits = normalizeIndianPhone(phone);
-  if (!digits) return [];
-  const res = await apiFetch<CardDto[]>(
-    `/api/cards?mobile=${encodeURIComponent(digits)}`,
-  );
+async function fetchCardsForUserId(userId: number): Promise<CardDto[]> {
+  if (!Number.isInteger(userId) || userId <= 0) return [];
+  // GET /api/cards?user_id=X  →  SELECT * FROM cards WHERE user_id = X
+  const res = await apiFetch<CardDto[]>(`/api/cards?user_id=${userId}`);
   if (!res.ok || !Array.isArray(res.data)) return [];
-  return res.data.filter((c) => {
-    if (c.status === false || !(c.cardId > 0)) return false;
-    return normalizeIndianPhone(c.mobile) === digits;
-  });
+  return res.data.filter(
+    (c) =>
+      c.cardId > 0 &&
+      Number(c.userId) === userId,
+  );
 }
 
 /**
- * Dashboard order list — successful payments only.
+ * Dashboard list for one logged-in account.
  *
- * 1) Paid orders owned by this phone (source of truth for Add user / checkout)
- * 2) Gap-fill active cards owned by the same phone that are not already
- *    represented by a paid order (by cardId / slug) — needed when the user
- *    has other paid products but an orphan digital card still exists in DB
- * 3) Dedupe by cardId / slug / order id (prefers real orders over card-* stubs)
+ * My Cards source of truth: ALL rows in `cards` for this user_id
+ *   (same as: SELECT * FROM cards WHERE user_id = :authUserId)
  *
- * Ownership stays phone-only: never attach another user's card via userId alone.
+ * Paid checkout orders are still merged so Orders / Total spent stay correct,
+ * and physical products without a cards row still appear when paid.
  */
 export async function fetchUserDashboardOrders(
   phone: string,
   userId?: number | null,
 ): Promise<HexaOrder[]> {
   const phoneDigits = normalizeIndianPhone(phone);
-  const paidOrders = (await fetchPaidOrdersForPhone(phone, userId)).filter(
-    (o) => {
-      if (!phoneDigits) return true;
-      const owner =
-        normalizeIndianPhone(o.ownerPhone) || normalizeIndianPhone(o.phone);
-      return owner === phoneDigits;
-    },
-  );
-
-  if (!phoneDigits) {
-    return dedupeDashboardOrders(paidOrders);
+  let uid = userId && userId > 0 ? userId : null;
+  if (!uid && phoneDigits) {
+    uid = await resolveUserIdForPhone(phoneDigits);
   }
 
-  const coveredCardIds = new Set<number>();
-  const coveredSlugs = new Set<string>();
+  // Checkout / admin orders owned by this phone (metrics + order history)
+  const paidOrders = phoneDigits
+    ? (await fetchPaidOrdersForPhone(phone, null)).filter((o) => {
+        const owner =
+          normalizeIndianPhone(o.ownerPhone) || normalizeIndianPhone(o.phone);
+        return owner === phoneDigits;
+      })
+    : [];
+
+  // Every card belonging to this user_id
+  const userCards = uid ? await fetchCardsForUserId(uid) : [];
+
+  const paidByCardId = new Map<number, HexaOrder>();
+  const paidBySlug = new Map<string, HexaOrder>();
   for (const order of paidOrders) {
-    if (order.cardId && order.cardId > 0) coveredCardIds.add(order.cardId);
+    if (order.cardId && order.cardId > 0) {
+      paidByCardId.set(order.cardId, order);
+    }
     const slug = String(order.cardSlug ?? "").trim().toLowerCase();
-    if (slug) coveredSlugs.add(slug);
-    // Also cover resolved live slug when order is editable
-    if (isEditableCardOrder(order)) {
-      try {
-        const resolved = resolveOrderLiveUrl(order).slug.trim().toLowerCase();
-        if (resolved) coveredSlugs.add(resolved);
-      } catch {
-        // ignore
-      }
+    if (slug) paidBySlug.set(slug, order);
+  }
+
+  const fromCards: HexaOrder[] = [];
+  const coveredOrderKeys = new Set<string>();
+
+  for (const card of userCards) {
+    const slug = String(card.unicCardName || "").trim().toLowerCase();
+    const linked =
+      paidByCardId.get(card.cardId) ||
+      (slug ? paidBySlug.get(slug) : undefined);
+
+    if (linked) {
+      // Prefer real order row, but keep cardId/slug from cards table
+      fromCards.push({
+        ...linked,
+        cardId: card.cardId,
+        cardSlug: slug || linked.cardSlug,
+        userId: uid,
+        customerName:
+          card.cardName?.trim() || linked.customerName || "Your Name",
+        businessName: card.businessName?.trim() || linked.businessName,
+        jobTitle: card.jobName?.trim() || linked.jobTitle,
+      });
+      coveredOrderKeys.add(
+        linked.orderId && linked.orderId > 0
+          ? `id:${linked.orderId}`
+          : `code:${linked.id}`,
+      );
+    } else {
+      // Card exists for this user_id with no linked order → still show on My Cards
+      fromCards.push(cardDtoToPaidOrder(card, phoneDigits || phone));
     }
   }
 
-  const uid = userId && userId > 0 ? userId : null;
-  const [byPhone, byUser] = await Promise.all([
-    fetchActiveCardsForPhone(phoneDigits),
-    uid ? fetchActiveCardsForUser(uid) : Promise.resolve([] as CardDto[]),
-  ]);
-
-  const byCardId = new Map<number, CardDto>();
-  for (const card of [...byPhone, ...byUser]) {
-    // Phone must match auth — userId alone must never grant dashboard tiles
-    // (prevents Shoeb→Punit style bleed from a stale auth.userId).
-    const cardPhone = normalizeIndianPhone(card.mobile);
-    if (!cardPhone || cardPhone !== phoneDigits) continue;
-    if (!byCardId.has(card.cardId)) byCardId.set(card.cardId, card);
-  }
-
+  // Keep paid physical / other products that are not already represented by a card
   const extras: HexaOrder[] = [];
-  for (const card of byCardId.values()) {
-    const slug = String(card.unicCardName || "").trim().toLowerCase();
-    if (coveredCardIds.has(card.cardId)) continue;
-    if (slug && coveredSlugs.has(slug)) continue;
-    extras.push(cardDtoToPaidOrder(card, phone));
+  for (const order of paidOrders) {
+    const key =
+      order.orderId && order.orderId > 0
+        ? `id:${order.orderId}`
+        : `code:${order.id}`;
+    if (coveredOrderKeys.has(key)) continue;
+    if (order.cardId && order.cardId > 0) {
+      const used = fromCards.some((o) => o.cardId === order.cardId);
+      if (used) continue;
+    }
+    const slug = String(order.cardSlug ?? "").trim().toLowerCase();
+    if (
+      slug &&
+      fromCards.some((o) => String(o.cardSlug ?? "").toLowerCase() === slug)
+    ) {
+      continue;
+    }
+    extras.push(order);
   }
 
-  return dedupeDashboardOrders([...paidOrders, ...extras]);
+  return dedupeDashboardOrders([...fromCards, ...extras]);
 }
 
 /** @deprecated use initOrderCardProfile — each order keeps its own profile */

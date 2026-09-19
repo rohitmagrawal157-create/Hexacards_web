@@ -35,6 +35,19 @@ export async function GET(request: Request) {
       return jsonOk({ count: count ?? 0 });
     }
 
+    const mobileParam = searchParams.get("mobile")?.replace(/\D/g, "").slice(-10);
+    if (mobileParam && /^[6-9]\d{9}$/.test(mobileParam)) {
+      const { data, error } = await supabase
+        .from("users")
+        .select(USER_SAFE_COLS)
+        .eq("mobile", mobileParam)
+        .maybeSingle();
+      if (error) {
+        return jsonError(500, "Failed to look up user", error.message);
+      }
+      return jsonOk(data ? [mapUser(data as UserRow)] : []);
+    }
+
     const { data, error } = await fetchAllSupabaseRows<UserRow>(
       async (from, to) => {
         const res = await supabase

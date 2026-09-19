@@ -255,9 +255,19 @@ export default function UsersPanel({
     let list = rows;
 
     if (q) {
-      list = list.filter((u) =>
-        [fullName(u), u.email, u.mobile].join(" ").toLowerCase().includes(q),
-      );
+      list = list.filter((u) => {
+        const userId = adminUserDbId(u);
+        return [
+          userId != null ? String(userId) : "",
+          u.id,
+          fullName(u),
+          u.email,
+          u.mobile,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q);
+      });
     }
 
     if (dateFrom || dateTo) {
@@ -586,7 +596,7 @@ export default function UsersPanel({
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="Search name, email, mobile…"
+                placeholder="Search user ID, name, email, mobile…"
                 className="w-full rounded-xl border border-black/10 bg-[#FFFCF7] py-2.5 pr-3 pl-9 text-sm text-[#141414] placeholder:text-[#8a8174]/70 focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
               />
             </div>

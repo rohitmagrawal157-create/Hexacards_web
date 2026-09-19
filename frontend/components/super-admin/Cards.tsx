@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   Search,
   ChevronDown,
@@ -22,18 +22,24 @@ import {
   Link as LinkIcon,
   Phone,
   Calendar,
+  Plus,
+  Mail,
 } from "lucide-react";
 import CardLogsPanel from "@/components/super-admin/Cardslogs";
 import { showAdminToast } from "@/lib/admin-toast";
 import {
   deleteAdminCard,
   adminCardListKey,
+  createAdminCardForUser,
   fetchAdminCards,
   fetchAdminCardsCount,
+  fetchAdminUsers,
   syncAdminCardsFromOrders,
   toggleAdminCard,
   updateAdminCard,
+  type AdminUserRecord,
 } from "@/lib/admin-directory";
+import { CARD_VALIDITY_YEARS } from "@/lib/card-validity";
 
 export type AdminCardRow = {
   id: string;
@@ -441,6 +447,18 @@ export default function CardsPanel({
   const [detailCard, setDetailCard] = useState<AdminCardRow | null>(null);
   const reloadDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [users, setUsers] = useState<AdminUserRecord[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userQuery, setUserQuery] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [addingCard, setAddingCard] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -514,9 +532,20 @@ export default function CardsPanel({
     let list = viewFiltered;
 
     if (q) {
-      list = list.filter((c) =>
-        [c.name, c.mobile].join(" ").toLowerCase().includes(q),
-      );
+      list = list.filter((c) => {
+        const cardId = adminCardDbId(c);
+        return [
+          cardId != null ? String(cardId) : "",
+          c.id,
+          c.name,
+          c.mobile,
+          c.email,
+          c.liveUrl,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q);
+      });
     }
 
     list = [...list].sort((a, b) => {
@@ -540,6 +569,104 @@ export default function CardsPanel({
   );
   const totalViews = rows.reduce((sum, c) => sum + c.pageViews, 0);
   const currentViewMeta = CARD_VIEWS.find((item) => item.key === view)!;
+
+  const filteredUsers = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    const list = users.filter((u) => u.id.startsWith("db-"));
+    if (!q) return list.slice(0, 80);
+    return list
+      .filter((u) => {
+        const id = u.id.startsWith("db-") ? u.id.slice(3) : "";
+        return [id, u.firstName, u.lastName, u.mobile, u.email]
+          .join(" ")
+          .toLowerCase()
+          .includes(q);
+      })
+      .slice(0, 80);
+  }, [users, userQuery]);
+
+  function resetAddForm() {
+    setSelectedUserId(null);
+    setUserQuery("");
+    setFirstName("");
+    setLastName("");
+    setMobile("");
+    setEmail("");
+    setJobTitle("");
+  }
+
+  async function openAddForm() {
+    setShowAddForm(true);
+    if (users.length > 0) return;
+    setUsersLoading(true);
+    try {
+      const list = await fetchAdminUsers();
+      setUsers(list);
+    } finally {
+      setUsersLoading(false);
+    }
+  }
+
+  function selectUser(user: AdminUserRecord) {
+    const id = user.id.startsWith("db-") ? Number(user.id.slice(3)) : NaN;
+    if (!Number.isInteger(id) || id <= 0) {
+      showAdminToast("Only database users can receive cards", "error");
+      return;
+    }
+    setSelectedUserId(id);
+    setUserQuery(
+      `#${id} · ${[user.firstName, user.lastName].filter(Boolean).join(" ")} · ${user.mobile}`,
+    );
+    setFirstName(user.firstName || "");
+    setLastName(user.lastName || "");
+    setMobile(user.mobile || "");
+    setEmail(user.email || "");
+  }
+
+  async function handleAddCard(e: FormEvent) {
+    e.preventDefault();
+    if (addingCard) return;
+    if (!selectedUserId) {
+      showAdminToast("Select a user first", "error");
+      return;
+    }
+    if (!firstName.trim()) {
+      showAdminToast("First name is required", "error");
+      return;
+    }
+    const phone = mobile.replace(/\D/g, "").slice(-10);
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      showAdminToast("Enter a valid 10-digit mobile number", "error");
+      return;
+    }
+
+    setAddingCard(true);
+    try {
+      const result = await createAdminCardForUser({
+        userId: selectedUserId,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        mobile: phone,
+        email: email.trim() || undefined,
+        jobTitle: jobTitle.trim() || undefined,
+      });
+      if (typeof result === "string") return;
+
+      const seq = ++loadSeq.current;
+      const [next, dbCount] = await Promise.all([
+        fetchAdminCards(),
+        fetchAdminCardsCount(),
+      ]);
+      if (seq === loadSeq.current) {
+        setRows(next);
+        setDbCardsCount(dbCount);
+      }
+      resetAddForm();
+      setShowAddForm(false);
+    } finally {
+      setAddingCard(false);
+    }
+  }
 
   function switchView(next: CardsView) {
     setView(next);
@@ -616,6 +743,30 @@ export default function CardsPanel({
       <div className="flex flex-wrap items-center justify-end gap-2">
         <button
           type="button"
+          onClick={() => {
+            if (showAddForm) {
+              setShowAddForm(false);
+              resetAddForm();
+            } else {
+              void openAddForm();
+            }
+          }}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-[#BC7C10] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#9a650d]"
+        >
+          {showAddForm ? (
+            <>
+              <X className="h-4 w-4" />
+              Close form
+            </>
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              Add card for user
+            </>
+          )}
+        </button>
+        <button
+          type="button"
           onClick={() => void handleSyncFromOrders()}
           disabled={syncing || loading}
           className="inline-flex items-center gap-1.5 rounded-xl border border-black/[0.08] bg-white px-4 py-2.5 text-sm font-semibold text-[#141414] transition-colors hover:bg-[#FAFAF8] disabled:opacity-50"
@@ -626,6 +777,177 @@ export default function CardsPanel({
           {syncing ? "Syncing…" : "Sync from orders"}
         </button>
       </div>
+
+      {showAddForm ? (
+        <form
+          onSubmit={(e) => void handleAddCard(e)}
+          className="space-y-4 rounded-xl border border-[#BC7C10]/25 bg-[#FFFCF7] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+        >
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-[#BC7C10] uppercase">
+              Add offline card
+            </p>
+            <p className="mt-1 text-sm text-[#5c5346]">
+              Select an existing user. Creates a Digital Profile + QR card (
+              {CARD_VALIDITY_YEARS}-year expiry) that shows on their dashboard
+              as <span className="font-semibold text-[#141414]">Offline</span>.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-[10px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
+              Select user
+            </label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#8a8174]" />
+              <input
+                type="text"
+                value={userQuery}
+                onChange={(e) => {
+                  setUserQuery(e.target.value);
+                  setSelectedUserId(null);
+                }}
+                placeholder={
+                  usersLoading
+                    ? "Loading users…"
+                    : "Search by user ID, name, mobile, email…"
+                }
+                className="w-full rounded-xl border border-black/10 bg-white py-2.5 pr-3 pl-9 text-sm text-[#141414] placeholder:text-[#8a8174]/70 focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
+              />
+            </div>
+            {!selectedUserId && userQuery.trim() ? (
+              <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-black/[0.06] bg-white">
+                {filteredUsers.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-[#8a8174]">
+                    No users matched.
+                  </p>
+                ) : (
+                  filteredUsers.map((u) => {
+                    const id = u.id.startsWith("db-")
+                      ? Number(u.id.slice(3))
+                      : 0;
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => selectUser(u)}
+                        className="flex w-full flex-col gap-0.5 border-b border-black/[0.04] px-3 py-2.5 text-left last:border-0 hover:bg-[#FFF8ED]"
+                      >
+                        <span className="text-sm font-semibold text-[#141414]">
+                          #{id} · {[u.firstName, u.lastName].filter(Boolean).join(" ") || "User"}
+                        </span>
+                        <span className="text-xs text-[#8a8174]">
+                          {u.mobile}
+                          {u.email ? ` · ${u.email}` : ""}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+            {selectedUserId ? (
+              <p className="mt-2 text-xs font-medium text-emerald-700">
+                Selected user ID: {selectedUserId}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
+                <User className="h-3 w-3" />
+                First name
+              </label>
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+                className="w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-sm text-[#141414] focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
+                Last name
+              </label>
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-sm text-[#141414] focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
+                <Phone className="h-3 w-3" />
+                Mobile
+              </label>
+              <input
+                type="tel"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                required
+                inputMode="numeric"
+                className="w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-sm text-[#141414] focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
+                <Mail className="h-3 w-3" />
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-sm text-[#141414] focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-[10px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
+                Job title (optional)
+              </label>
+              <input
+                type="text"
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                placeholder="Digital Profile + QR"
+                className="w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-sm text-[#141414] focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-[#8a8174]">
+            Expiry is set automatically to{" "}
+            <span className="font-semibold text-[#141414]">
+              {CARD_VALIDITY_YEARS} years
+            </span>{" "}
+            from today.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="submit"
+              disabled={addingCard || !selectedUserId}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#141414] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#BC7C10] disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              {addingCard ? "Creating…" : "Create offline card"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddForm(false);
+                resetAddForm();
+              }}
+              className="rounded-xl border border-black/[0.08] bg-white px-4 py-2.5 text-sm font-semibold text-[#5c5346] hover:bg-[#FAFAF8]"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {CARD_VIEWS.map((item) => {
@@ -753,7 +1075,7 @@ export default function CardsPanel({
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search name, mobile…"
+              placeholder="Search card ID, name, mobile…"
               className="w-full rounded-xl border border-black/10 bg-[#FFFCF7] py-2.5 pr-3 pl-9 text-sm text-[#141414] placeholder:text-[#8a8174]/70 focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
             />
           </div>

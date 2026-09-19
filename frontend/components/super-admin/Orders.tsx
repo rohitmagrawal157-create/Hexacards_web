@@ -261,11 +261,15 @@ export default function OrdersPanel({
     if (q) {
       list = list.filter((o) =>
         [
+          o.orderId != null && o.orderId > 0 ? String(o.orderId) : "",
           o.id,
+          o.userId != null && o.userId > 0 ? String(o.userId) : "",
+          o.cardId != null && o.cardId > 0 ? String(o.cardId) : "",
           o.customerName,
           o.productTitle,
           o.phone,
           o.email,
+          o.cardSlug,
           formatOrderAddress(o),
           paymentStatusLabel(o.paymentStatus ?? "pending"),
         ]
@@ -455,7 +459,7 @@ export default function OrdersPanel({
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="Search ID, customer, product, mobile…"
+                placeholder="Search order ID, customer, product, mobile…"
                 className="w-full rounded-xl border border-black/10 bg-[#FFFCF7] py-2.5 pr-3 pl-9 text-sm text-[#141414] placeholder:text-[#8a8174]/70 focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
               />
             </div>

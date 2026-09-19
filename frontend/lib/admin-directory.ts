@@ -590,6 +590,70 @@ export async function provisionAdminUserWithCard(
   };
 }
 
+export type AdminCreateCardInput = {
+  userId: number;
+  firstName: string;
+  lastName: string;
+  mobile: string;
+  email?: string;
+  jobTitle?: string;
+  businessName?: string;
+};
+
+/** Add Digital Profile + QR card for an existing user (offline / admin). */
+export async function createAdminCardForUser(
+  input: AdminCreateCardInput,
+): Promise<{ liveUrl: string; cardSlug: string; cardId: number } | string> {
+  const res = await apiFetch<{
+    user: UserDto;
+    order: OrderDto;
+    card: CardDto;
+    slug: string;
+    liveUrl: string;
+  }>("/api/cards/admin-create", {
+    method: "POST",
+    body: JSON.stringify({
+      userId: input.userId,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      mobile: input.mobile,
+      email: input.email,
+      jobTitle: input.jobTitle,
+      businessName: input.businessName,
+    }),
+  });
+
+  if (!res.ok || !res.data?.card) {
+    const message = formatAdminUserErrorMessage(res.error) || "Failed to create card";
+    showAdminToast(message, "error");
+    return message;
+  }
+
+  if (res.data.order) {
+    const localOrder = orderDtoToLocalOrder(res.data.order);
+    prependOrderToLocalCache(localOrder);
+    cacheProvisionedAdminCard(cardDtoToAdmin(res.data.card), localOrder.id);
+    void initOrderCardProfileAsync(localOrder).catch((err) => {
+      console.warn("[admin-create-card] profile init failed:", err);
+    });
+  } else {
+    cacheProvisionedAdminCard(cardDtoToAdmin(res.data.card));
+  }
+
+  window.dispatchEvent(new Event("hexa-admin-directory-change"));
+  window.dispatchEvent(new Event("hexa-orders-change"));
+  window.dispatchEvent(new Event("hexa-admin-cards-change"));
+  showAdminToast(
+    `Offline card added · ${res.data.liveUrl}`,
+  );
+
+  return {
+    liveUrl: res.data.liveUrl,
+    cardSlug: res.data.slug,
+    cardId: res.data.card.cardId,
+  };
+}
+
 export async function updateAdminUser(
   id: string,
   patch: Partial<AdminUserRecord>,
