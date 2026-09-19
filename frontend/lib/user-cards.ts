@@ -253,14 +253,18 @@ export function orderToDashboardCard(
   const savedProfile = editable ? getOrderCardProfile(order.id) : null;
   const name =
     savedProfile?.contact.cardName?.trim() ||
-    order.businessName?.trim() ||
+    order.customerName?.trim() ||
     order.cardDesign?.name?.trim() ||
-    order.customerName ||
+    order.businessName?.trim() ||
     "Your Name";
   const subtitle =
     savedProfile?.contact.title?.trim() ||
-    order.cardDesign?.subtitle?.trim() ||
     order.jobTitle?.trim() ||
+    order.cardDesign?.subtitle?.trim() ||
+    (order.businessName?.trim() &&
+    order.businessName.trim() !== order.customerName?.trim()
+      ? order.businessName.trim()
+      : "") ||
     (order.reviewLink
       ? order.reviewLink.replace(/^https?:\/\//, "").replace(/\/$/, "")
       : "") ||
@@ -590,6 +594,91 @@ async function fetchCardsForAccount(
   return [...byId.values()];
 }
 
+function paymentPreferenceRank(order: HexaOrder): number {
+  // Higher = better for My Cards chip / product metadata
+  if (isAdminOfflineOrder(order)) return 1;
+  if (isOrderPaymentPaid(order)) return 3;
+  return 2;
+}
+
+function preferRicherPaidOrder(
+  a: HexaOrder | undefined,
+  b: HexaOrder | undefined,
+): HexaOrder | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  const ra = paymentPreferenceRank(a);
+  const rb = paymentPreferenceRank(b);
+  if (rb !== ra) return rb > ra ? b : a;
+  return new Date(b.createdAt).getTime() > new Date(a.createdAt).getTime()
+    ? b
+    : a;
+}
+
+/**
+ * Match a `cards` row to its paid order: card_id, slug (incl. base2), or
+ * same phone + same person name. Prefers real checkout (razorpay/online)
+ * over Super Admin offline so the tile shows Paid + business profile.
+ */
+function findLinkedPaidOrderForCard(
+  card: CardDto,
+  paidOrders: HexaOrder[],
+  paidByCardId: Map<number, HexaOrder>,
+  paidBySlug: Map<string, HexaOrder>,
+): HexaOrder | undefined {
+  const slug = String(card.unicCardName || "")
+    .trim()
+    .toLowerCase();
+  const slugBase = slug.replace(/\d+$/, "");
+  const cardPhone = normalizeIndianPhone(card.mobile);
+  const cardNameKey = slugifyForCardLink(card.cardName || "");
+  const cardNameBase = cardNameKey.replace(/\d+$/, "");
+
+  let best =
+    preferRicherPaidOrder(
+      card.cardId > 0 ? paidByCardId.get(card.cardId) : undefined,
+      slug ? paidBySlug.get(slug) : undefined,
+    ) ?? undefined;
+
+  if (slugBase && slugBase !== slug) {
+    best = preferRicherPaidOrder(best, paidBySlug.get(slugBase));
+  }
+
+  for (const order of paidOrders) {
+    if (order.cardId && order.cardId === card.cardId) {
+      best = preferRicherPaidOrder(best, order);
+      continue;
+    }
+    const oSlug = String(order.cardSlug ?? "")
+      .trim()
+      .toLowerCase();
+    const oSlugBase = oSlug.replace(/\d+$/, "");
+    if (
+      oSlug &&
+      (oSlug === slug ||
+        (slugBase && (oSlug === slugBase || oSlugBase === slugBase)))
+    ) {
+      best = preferRicherPaidOrder(best, order);
+      continue;
+    }
+    const oPhone =
+      normalizeIndianPhone(order.ownerPhone) ||
+      normalizeIndianPhone(order.phone);
+    const oName = slugifyForCardLink(order.customerName || "");
+    const oNameBase = oName.replace(/\d+$/, "");
+    if (
+      cardPhone &&
+      oPhone === cardPhone &&
+      cardNameBase &&
+      (oName === cardNameKey || oNameBase === cardNameBase)
+    ) {
+      best = preferRicherPaidOrder(best, order);
+    }
+  }
+
+  return best;
+}
+
 /**
  * Dashboard list for one logged-in account.
  *
@@ -635,34 +724,36 @@ export async function fetchUserDashboardOrders(
   const paidBySlug = new Map<string, HexaOrder>();
   for (const order of paidOrders) {
     if (order.cardId && order.cardId > 0) {
-      const prev = paidByCardId.get(order.cardId);
-      if (
-        !prev ||
-        new Date(order.createdAt).getTime() > new Date(prev.createdAt).getTime()
-      ) {
-        paidByCardId.set(order.cardId, order);
-      }
+      paidByCardId.set(
+        order.cardId,
+        preferRicherPaidOrder(paidByCardId.get(order.cardId), order)!,
+      );
     }
     const slug = String(order.cardSlug ?? "").trim().toLowerCase();
     if (slug) {
-      const prev = paidBySlug.get(slug);
-      if (
-        !prev ||
-        new Date(order.createdAt).getTime() > new Date(prev.createdAt).getTime()
-      ) {
-        paidBySlug.set(slug, order);
-      }
+      paidBySlug.set(
+        slug,
+        preferRicherPaidOrder(paidBySlug.get(slug), order)!,
+      );
     }
   }
 
   const fromCards: HexaOrder[] = [];
+  const linkedOrderIds = new Set<string>();
+
   for (const card of userCards) {
     const slug = String(card.unicCardName || "").trim().toLowerCase();
-    const linked =
-      paidByCardId.get(card.cardId) ||
-      (slug ? paidBySlug.get(slug) : undefined);
+    const linked = findLinkedPaidOrderForCard(
+      card,
+      paidOrders,
+      paidByCardId,
+      paidBySlug,
+    );
 
     if (linked) {
+      linkedOrderIds.add(linked.id);
+      // Checkout paid wins for chip; card row wins for profile fields
+      const checkoutPaid = !isAdminOfflineOrder(linked);
       fromCards.push({
         ...linked,
         cardId: card.cardId,
@@ -673,8 +764,22 @@ export async function fetchUserDashboardOrders(
         userId: uid ?? linked.userId ?? card.userId,
         customerName:
           card.cardName?.trim() || linked.customerName || "Your Name",
-        businessName: card.businessName?.trim() || linked.businessName,
-        jobTitle: card.jobName?.trim() || linked.jobTitle,
+        businessName:
+          card.businessName?.trim() || linked.businessName || undefined,
+        jobTitle: card.jobName?.trim() || linked.jobTitle || undefined,
+        // Keep checkout product identity for Paid chip art (NFC / business card)
+        productTitle: checkoutPaid
+          ? linked.productTitle || "Hexa NFC Business Card"
+          : linked.productTitle || "Digital Profile + QR",
+        productId: checkoutPaid
+          ? linked.productId ||
+            (String(linked.productTitle || "")
+              .toLowerCase()
+              .includes("nfc")
+              ? "nfc-business-card"
+              : linked.productId) ||
+            "nfc-business-card"
+          : linked.productId || "digital-profile-qr",
       });
     } else {
       fromCards.push(cardDtoToPaidOrder(card, phoneDigits || phone));
@@ -682,8 +787,6 @@ export async function fetchUserDashboardOrders(
   }
 
   // Paid products not already shown via a cards row (standees + true orphan digitals).
-  // Skip editable digital orders that match an already-listed card by name/slug —
-  // admin-create used to leave card_id null, which produced 2 tiles (card + order).
   const extras: HexaOrder[] = [];
   const fromCardNameKeys = new Set(
     fromCards.map((o) =>
@@ -695,6 +798,7 @@ export async function fetchUserDashboardOrders(
   );
 
   for (const order of paidOrders) {
+    if (linkedOrderIds.has(order.id)) continue;
     if (!isDashboardProductOrder(order)) continue;
     if (order.cardId && order.cardId > 0 && coveredCardIds.has(order.cardId)) {
       continue;
