@@ -765,9 +765,9 @@ function CardsPanel({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-2 border-t border-black/[0.06] px-3 py-2.5">
+            <div className="border-t border-black/[0.06] px-3 py-2.5">
               {card.isEditable ? (
-                <>
+                <div className="flex items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => setQrCard(card)}
@@ -793,7 +793,7 @@ function CardsPanel({
                       Edit
                     </Link>
                   </div>
-                </>
+                </div>
               ) : (
                 <button
                   type="button"
@@ -807,6 +807,11 @@ function CardsPanel({
                   Details
                 </button>
               )}
+              {card.createdAt ? (
+                <p className="mt-2 text-[11px] tabular-nums text-[#8a8174]">
+                  {formatOrderDate(card.createdAt)}
+                </p>
+              ) : null}
             </div>
           </article>
         ))}
