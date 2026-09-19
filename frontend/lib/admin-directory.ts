@@ -41,6 +41,8 @@ export type AdminUserRecord = {
 export type AdminCardRecord = {
   id: string;
   srNo: number;
+  /** Supabase `cards.user_id` — owner account */
+  userId: number | null;
   name: string;
   liveUrl: string;
   email: string;
@@ -200,9 +202,11 @@ function userDtoToAdmin(user: UserDto): AdminUserRecord {
 
 function cardDtoToAdmin(card: CardDto): AdminCardRecord {
   const slug = card.unicCardName;
+  const uid = Number(card.userId);
   return {
     id: `card-${card.cardId}`,
     srNo: 0,
+    userId: Number.isInteger(uid) && uid > 0 ? uid : null,
     name: card.cardName || slug,
     liveUrl: buildPublicCardUrl(slug, "canonical"),
     email: card.email?.trim() || "",
@@ -243,8 +247,10 @@ function adminCardMergeKey(row: AdminCardRecord): string {
 }
 
 /** Stable unique key for React lists — one row per DB card or order-only profile. */
-export function adminCardListKey(row: AdminCardRecord): string {
-  return adminCardMergeKey(row);
+export function adminCardListKey(
+  row: Pick<AdminCardRecord, "id" | "liveUrl">,
+): string {
+  return adminCardMergeKey(row as AdminCardRecord);
 }
 
 function mergeAdminCardRow(
@@ -266,6 +272,11 @@ function mergeAdminCardRow(
   return {
     ...primary,
     id: preferredId,
+    userId:
+      (preferIncoming ? incoming.userId : existing.userId) ??
+      incoming.userId ??
+      existing.userId ??
+      null,
     name: (preferIncoming ? incoming.name : existing.name) || primary.name,
     liveUrl:
       (preferIncoming ? incoming.liveUrl : existing.liveUrl) || primary.liveUrl,
@@ -306,9 +317,11 @@ function orderToAdminCard(order: HexaOrder): AdminCardRecord {
   const card = orderToDashboardCard(order, false);
   const id =
     order.cardId && order.cardId > 0 ? `card-${order.cardId}` : order.id;
+  const uid = Number(order.userId);
   return {
     id,
     srNo: 0,
+    userId: Number.isInteger(uid) && uid > 0 ? uid : null,
     name: card.slug || card.name,
     liveUrl: card.publicUrl,
     email: order.email?.trim() || "",
@@ -754,6 +767,10 @@ export function getAdminCards(): AdminCardRecord[] {
       return {
         id,
         srNo: 0,
+        userId:
+          order.userId != null && Number(order.userId) > 0
+            ? Number(order.userId)
+            : null,
         name: card.slug || card.name,
         liveUrl: card.publicUrl,
         email: order.email?.trim() || "",

@@ -21,6 +21,8 @@ import {
   legacyLinkColumnsFromBody,
   upsertCardLinks,
 } from "@/lib/server/card-links-db";
+import { allocateCardSlugPreferred } from "@/lib/server/card-slug";
+import { buildPublicCardUrl } from "@/lib/site-url";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -78,17 +80,29 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const body = (await request.json().catch(() => ({}))) as CardUpdateBody;
     const payload: Record<string, unknown> = {};
+    const supabase = getSupabaseAdmin();
 
     const set = (col: string, val: unknown) => {
       payload[col] = val;
     };
 
+    let nextSlug: string | null = null;
     if (body.unicCardName !== undefined || body.unic_card_name !== undefined) {
       const v = String(body.unicCardName ?? body.unic_card_name ?? "")
         .trim()
         .toLowerCase();
       if (!v) return jsonError(400, "unic_card_name cannot be empty");
-      set("unic_card_name", v);
+
+      const { data: current } = await supabase
+        .from("cards")
+        .select("unic_card_name")
+        .eq("card_id", cardId)
+        .maybeSingle();
+      const exclude = String(current?.unic_card_name ?? "")
+        .trim()
+        .toLowerCase();
+      nextSlug = await allocateCardSlugPreferred(supabase, v, exclude || undefined);
+      set("unic_card_name", nextSlug);
     }
     if (body.cardName !== undefined || body.card_name !== undefined) {
       set("card_name", String(body.cardName ?? body.card_name ?? "").trim());
@@ -173,7 +187,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       return jsonError(400, "No fields to update");
     }
 
-    const supabase = getSupabaseAdmin();
     let cardRow: CardRow | null = null;
 
     if (hasCardFields) {
@@ -212,6 +225,14 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
       if (!data) return jsonError(404, "Card not found");
       cardRow = data as CardRow;
+
+      if (nextSlug) {
+        const cardUrl = buildPublicCardUrl(nextSlug, "canonical");
+        await supabase
+          .from("orders")
+          .update({ card_slug: nextSlug, card_url: cardUrl })
+          .eq("card_id", cardId);
+      }
     } else {
       let { data, error } = await supabase
         .from("cards")

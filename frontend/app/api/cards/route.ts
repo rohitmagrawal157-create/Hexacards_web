@@ -14,7 +14,7 @@ import {
   type CardCreateBody,
   type CardRow,
 } from "@/lib/server/card-types";
-import { allocateCardSlugForName } from "@/lib/server/card-slug";
+import { allocateCardSlugForName, allocateCardSlugPreferred } from "@/lib/server/card-slug";
 import {
   applyLinksToCard,
   extractLinksFromBody,
@@ -270,7 +270,13 @@ export async function POST(request: Request) {
     const explicitSlug = String(
       body.unicCardName ?? body.unic_card_name ?? "",
     ).trim();
-    if (!explicitSlug && cardName) {
+    // Always unique: preferred slug or name → base, base2, base3…
+    if (explicitSlug) {
+      body.unicCardName = await allocateCardSlugPreferred(
+        supabase,
+        explicitSlug,
+      );
+    } else if (cardName) {
       body.unicCardName = await allocateCardSlugForName(supabase, cardName);
     }
 

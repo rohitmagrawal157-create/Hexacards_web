@@ -1085,6 +1085,8 @@ export async function attachOrderCardLinkAfterPayment(
   if (order.paymentStatus !== "paid") {
     throw new Error("Card link is only created after successful payment.");
   }
+  // Always re-allocate when missing — never keep a bare name fallback that
+  // can collide with another card (rohit-agrawal vs rohit-agrawal2).
   if (order.cardSlug?.trim() && order.cardUrl?.trim()) {
     return order;
   }

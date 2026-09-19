@@ -4,6 +4,7 @@ import { isOrderCardHidden, type OrderRow } from "@/lib/server/order-types";
 import {
   allocateUniqueCardSlug,
   fetchTakenCardSlugs,
+  repairDuplicateCardSlugs,
 } from "@/lib/server/card-slug";
 import {
   computeCardEndDateIso,
@@ -134,8 +135,13 @@ export async function syncCardsFromOrders(): Promise<{
   linked: number;
   totalOrders: number;
   totalCards: number;
+  slugsRepaired: number;
 }> {
   const supabase = getSupabaseAdmin();
+
+  // First: renumber colliding public links (rohit-agrawal, rohit-agrawal2, …)
+  const slugRepair = await repairDuplicateCardSlugs(supabase);
+
   const { data: orders, error: ordersErr } = await supabase
     .from("orders")
     .select("*")
@@ -317,5 +323,6 @@ export async function syncCardsFromOrders(): Promise<{
     linked,
     totalOrders: rows.length,
     totalCards: cardCount ?? 0,
+    slugsRepaired: slugRepair.repaired,
   };
 }

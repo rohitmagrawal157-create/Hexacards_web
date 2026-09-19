@@ -123,63 +123,11 @@ export async function POST(request: Request) {
       }
     }
 
-    const orderPayload = buildOrderInsertPayload(
-      {
-        id: orderCode,
-        customerName,
-        name: customerName,
-        phone: mobile,
-        mobileNumber: mobile,
-        ownerPhone: mobile,
-        email: email ?? "",
-        productId: "digital-profile-qr",
-        productSlug: "digital-profile-qr",
-        productTitle: "Digital Profile + QR",
-        packTitle: "Digital Profile + QR",
-        qty: 1,
-        subtotal: 0,
-        discount: 0,
-        total: 0,
-        amount: 0,
-        paymentStatus: "paid",
-        paymentMethod: "admin",
-        status: "placed",
-        businessName: businessName || displayName,
-        companyName: businessName || displayName,
-        jobTitle,
-        cardSlug,
-        cardUrl,
-        cardDesign: {
-          cardBody: "black",
-          finish: "gold",
-          cardColor: "#141414",
-          accentColor: "#BC7C10",
-          name: displayName,
-          subtitle: jobTitle || "Digital Profile + QR",
-          logoSrc: logoFilename || undefined,
-          liveUrl: cardUrl,
-        },
-        orderLogoSrc: logoFilename,
-        userId,
-      },
-      { orderCode, userId, productDbId },
-    );
-
-    const { data: orderRow, error: orderErr } = await supabase
-      .from("orders")
-      .insert(orderPayload)
-      .select("*")
-      .single();
-
-    if (orderErr || !orderRow) {
-      await supabase.from("users").delete().eq("user_id", userId);
-      return jsonError(500, "Failed to create order", orderErr?.message);
-    }
-
     const logoDb = logoFilename
       ? cardImageDbFields("profile", logoFilename).logo
       : null;
 
+    // Card first, then order with card_id set (one My Cards tile)
     const { data: cardRow, error: cardErr } = await supabase
       .from("cards")
       .insert({
@@ -210,7 +158,6 @@ export async function POST(request: Request) {
       .single();
 
     if (cardErr || !cardRow) {
-      await supabase.from("orders").delete().eq("order_id", (orderRow as OrderRow).order_id);
       await supabase.from("users").delete().eq("user_id", userId);
       if (cardErr?.code === "23505") {
         return jsonError(409, "Card profile URL already exists — try again");
@@ -219,16 +166,91 @@ export async function POST(request: Request) {
     }
 
     const cardId = Number(cardRow.card_id);
-    const { error: linkErr } = await supabase
-      .from("orders")
-      .update({ card_id: cardId, card_slug: cardSlug, card_url: cardUrl })
-      .eq("order_id", (orderRow as OrderRow).order_id);
-
-    if (linkErr) {
-      await supabase.from("cards").delete().eq("card_id", cardId);
-      await supabase.from("orders").delete().eq("order_id", (orderRow as OrderRow).order_id);
+    if (!Number.isInteger(cardId) || cardId <= 0) {
+      await supabase.from("cards").delete().eq("card_id", cardRow.card_id);
       await supabase.from("users").delete().eq("user_id", userId);
-      return jsonError(500, "Failed to link order to card", linkErr.message);
+      return jsonError(500, "Failed to create digital profile — invalid card_id");
+    }
+
+    const orderPayload = buildOrderInsertPayload(
+      {
+        id: orderCode,
+        customerName,
+        name: customerName,
+        phone: mobile,
+        mobileNumber: mobile,
+        ownerPhone: mobile,
+        email: email ?? "",
+        productId: "digital-profile-qr",
+        productSlug: "digital-profile-qr",
+        productTitle: "Digital Profile + QR",
+        packTitle: "Digital Profile + QR",
+        qty: 1,
+        subtotal: 0,
+        discount: 0,
+        total: 0,
+        amount: 0,
+        paymentStatus: "paid",
+        paymentMethod: "admin",
+        status: "placed",
+        businessName: businessName || displayName,
+        companyName: businessName || displayName,
+        jobTitle,
+        cardId,
+        cardSlug,
+        cardUrl,
+        cardDesign: {
+          cardBody: "black",
+          finish: "gold",
+          cardColor: "#141414",
+          accentColor: "#BC7C10",
+          name: displayName,
+          subtitle: jobTitle || "Digital Profile + QR",
+          logoSrc: logoFilename || undefined,
+          liveUrl: cardUrl,
+        },
+        orderLogoSrc: logoFilename,
+        userId,
+      },
+      { orderCode, userId, productDbId },
+    );
+
+    const { data: orderRow, error: orderErr } = await supabase
+      .from("orders")
+      .insert(orderPayload)
+      .select("*")
+      .single();
+
+    if (orderErr || !orderRow) {
+      await supabase.from("cards").delete().eq("card_id", cardId);
+      await supabase.from("users").delete().eq("user_id", userId);
+      return jsonError(500, "Failed to create order", orderErr?.message);
+    }
+
+    const linkedCardId =
+      (orderRow as OrderRow).card_id != null
+        ? Number((orderRow as OrderRow).card_id)
+        : null;
+    if (linkedCardId !== cardId) {
+      const { data: repaired, error: repairErr } = await supabase
+        .from("orders")
+        .update({ card_id: cardId, card_slug: cardSlug, card_url: cardUrl })
+        .eq("order_id", (orderRow as OrderRow).order_id)
+        .select("order_id, card_id")
+        .maybeSingle();
+      if (repairErr || Number(repaired?.card_id) !== cardId) {
+        await supabase
+          .from("orders")
+          .delete()
+          .eq("order_id", (orderRow as OrderRow).order_id);
+        await supabase.from("cards").delete().eq("card_id", cardId);
+        await supabase.from("users").delete().eq("user_id", userId);
+        return jsonError(
+          500,
+          "Failed to link order to card",
+          repairErr?.message || "card_id not persisted on order",
+        );
+      }
     }
 
     const order = mapOrder({

@@ -5,7 +5,7 @@ const DEFAULT_API_URL =
 
 /** Must match the DLT-approved template character-for-character (except OTP). */
 const DEFAULT_OTP_MSG_TEMPLATE =
-  "Your Hexa Cards mobile number verification OTP is {otp}. This OTP is valid for 10 minutes. Do not share this OTP with anyone. https://hexacards-web.vercel.app";
+  "Your Hexa Cards mobile number verification OTP is {otp}. This OTP is valid for 10 minutes. Do not share this OTP with anyone. https://hexacards.com";
 
 export type NimbusSmsResult =
   | { ok: true; providerResponse: unknown }

@@ -14,6 +14,10 @@ import {
 } from "@/lib/orders";
 import type { CardDto } from "@/lib/server/card-types";
 import { buildOwnerDisplayCardUrl, buildPublicCardUrl } from "@/lib/site-url";
+import {
+  nextAvailableSlug,
+  slugifyForCardLink,
+} from "@/lib/card-slug-unique";
 
 export type SavedCardDesign = {
   title?: string;
@@ -397,11 +401,96 @@ export function dedupeDashboardOrders(orders: HexaOrder[]): HexaOrder[] {
   );
 }
 
+/**
+ * Oldest tile keeps the base link; later same-name tiles get base2, base3…
+ * Fixes orphan paid orders with empty card_slug that otherwise fall back to
+ * the same name-based URL as an existing card (e.g. two /rohit-agrawal).
+ */
+function assignUniquePublicSlugs(orders: HexaOrder[]): HexaOrder[] {
+  const sorted = [...orders].sort((a, b) => {
+    const ta = new Date(a.createdAt).getTime();
+    const tb = new Date(b.createdAt).getTime();
+    if (ta !== tb) return ta - tb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  const taken = new Set<string>();
+  const byId = new Map<string, HexaOrder>();
+
+  for (const order of sorted) {
+    if (!isEditableCardOrder(order)) {
+      byId.set(order.id, order);
+      continue;
+    }
+
+    const stored = String(order.cardSlug ?? "").trim().toLowerCase();
+    const fromUrl = (() => {
+      try {
+        return resolveOrderLiveUrl(order).slug.trim().toLowerCase();
+      } catch {
+        return "";
+      }
+    })();
+    const fromName = slugifyForCardLink(
+      order.customerName || order.businessName || "hexa-card",
+    );
+    const preferred = stored || fromUrl || fromName || "hexa-card";
+    const next = nextAvailableSlug(preferred, taken);
+    taken.add(next);
+
+    if (next === stored && order.cardUrl) {
+      byId.set(order.id, order);
+      continue;
+    }
+
+    byId.set(order.id, {
+      ...order,
+      cardSlug: next,
+      cardUrl: buildPublicCardUrl(next, "share"),
+      cardDesign: order.cardDesign
+        ? {
+            ...order.cardDesign,
+            liveUrl: buildPublicCardUrl(next, "canonical"),
+          }
+        : order.cardDesign,
+    });
+  }
+
+  // Preserve original newest-first relative order from caller
+  return orders.map((o) => byId.get(o.id) ?? o);
+}
+
 export function getUserDashboardCardsFromOrders(
   orders: HexaOrder[],
 ): UserDashboardCard[] {
-  return dedupeDashboardOrders(orders)
-    .filter(isDashboardProductOrder)
+  const deduped = dedupeDashboardOrders(orders).filter(isDashboardProductOrder);
+  const uniqueSlugs = assignUniquePublicSlugs(deduped);
+
+  // One tile per card_id (or slug) — blocks admin-create order+card duplicates
+  const byKey = new Map<string, HexaOrder>();
+  for (const order of uniqueSlugs) {
+    const slug = String(order.cardSlug ?? "").trim().toLowerCase();
+    const key =
+      order.cardId && order.cardId > 0
+        ? `c:${order.cardId}`
+        : slug
+          ? `s:${slug}`
+          : `id:${order.id}`;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, order);
+      continue;
+    }
+    const prevSynthetic = String(prev.id).startsWith("card-");
+    const nextSynthetic = String(order.id).startsWith("card-");
+    if (prevSynthetic && !nextSynthetic) byKey.set(key, order);
+  }
+
+  return [...byKey.values()]
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
     .map((order, index) => orderToDashboardCard(order, index === 0));
 }
 
@@ -459,24 +548,58 @@ async function resolveUserIdForPhone(phone: string): Promise<number | null> {
 
 async function fetchCardsForUserId(userId: number): Promise<CardDto[]> {
   if (!Number.isInteger(userId) || userId <= 0) return [];
-  // GET /api/cards?user_id=X  →  SELECT * FROM cards WHERE user_id = X
   const res = await apiFetch<CardDto[]>(`/api/cards?user_id=${userId}`);
   if (!res.ok || !Array.isArray(res.data)) return [];
   return res.data.filter(
-    (c) =>
-      c.cardId > 0 &&
-      Number(c.userId) === userId,
+    (c) => c.cardId > 0 && Number(c.userId) === userId,
   );
+}
+
+/** Cards whose primary mobile matches the login phone (legacy / shared-phone rows). */
+async function fetchCardsForMobile(phone: string): Promise<CardDto[]> {
+  const digits = normalizeIndianPhone(phone);
+  if (!digits) return [];
+  const res = await apiFetch<CardDto[]>(
+    `/api/cards?mobile=${encodeURIComponent(digits)}`,
+  );
+  if (!res.ok || !Array.isArray(res.data)) return [];
+  return res.data.filter((c) => {
+    if (!(c.cardId > 0)) return false;
+    const cardPhone = normalizeIndianPhone(c.mobile);
+    return cardPhone === digits;
+  });
+}
+
+/**
+ * Cards visible on this login: by users.user_id OR by cards.mobile = login phone.
+ * Many legacy rows (e.g. Aniket + Shoeb on one phone) share a mobile but may have
+ * mismatched / null user_id after imports — phone match keeps them visible.
+ */
+async function fetchCardsForAccount(
+  phone: string,
+  userId: number | null,
+): Promise<CardDto[]> {
+  const [byUser, byMobile] = await Promise.all([
+    userId && userId > 0 ? fetchCardsForUserId(userId) : Promise.resolve([]),
+    fetchCardsForMobile(phone),
+  ]);
+  const byId = new Map<number, CardDto>();
+  for (const card of [...byUser, ...byMobile]) {
+    if (!byId.has(card.cardId)) byId.set(card.cardId, card);
+  }
+  return [...byId.values()];
 }
 
 /**
  * Dashboard list for one logged-in account.
  *
- * My Cards source of truth: ALL rows in `cards` for this user_id
- *   (same as: SELECT * FROM cards WHERE user_id = :authUserId)
+ * Digital My Cards:
+ *   1) All `cards` rows for this user_id OR this login phone (one tile per card_id)
+ *   2) Paid digital orders for this phone only when not already covered by (1)
+ * Physical products still come from paid phone-owned orders.
  *
- * Paid checkout orders are still merged so Orders / Total spent stay correct,
- * and physical products without a cards row still appear when paid.
+ * Orders are ALWAYS scoped by phone only (never phone ∪ userId) so a stale
+ * auth.userId cannot pull another person's checkout rows (Shoeb → Punit).
  */
 export async function fetchUserDashboardOrders(
   phone: string,
@@ -488,7 +611,6 @@ export async function fetchUserDashboardOrders(
     uid = await resolveUserIdForPhone(phoneDigits);
   }
 
-  // Checkout / admin orders owned by this phone (metrics + order history)
   const paidOrders = phoneDigits
     ? (await fetchPaidOrdersForPhone(phone, null)).filter((o) => {
         const owner =
@@ -497,22 +619,43 @@ export async function fetchUserDashboardOrders(
       })
     : [];
 
-  // Every card belonging to this user_id
-  const userCards = uid ? await fetchCardsForUserId(uid) : [];
+  const userCards = phoneDigits
+    ? await fetchCardsForAccount(phoneDigits, uid)
+    : uid
+      ? await fetchCardsForUserId(uid)
+      : [];
+  const coveredCardIds = new Set(userCards.map((c) => c.cardId));
+  const coveredSlugs = new Set(
+    userCards
+      .map((c) => String(c.unicCardName || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
 
   const paidByCardId = new Map<number, HexaOrder>();
   const paidBySlug = new Map<string, HexaOrder>();
   for (const order of paidOrders) {
     if (order.cardId && order.cardId > 0) {
-      paidByCardId.set(order.cardId, order);
+      const prev = paidByCardId.get(order.cardId);
+      if (
+        !prev ||
+        new Date(order.createdAt).getTime() > new Date(prev.createdAt).getTime()
+      ) {
+        paidByCardId.set(order.cardId, order);
+      }
     }
     const slug = String(order.cardSlug ?? "").trim().toLowerCase();
-    if (slug) paidBySlug.set(slug, order);
+    if (slug) {
+      const prev = paidBySlug.get(slug);
+      if (
+        !prev ||
+        new Date(order.createdAt).getTime() > new Date(prev.createdAt).getTime()
+      ) {
+        paidBySlug.set(slug, order);
+      }
+    }
   }
 
   const fromCards: HexaOrder[] = [];
-  const coveredOrderKeys = new Set<string>();
-
   for (const card of userCards) {
     const slug = String(card.unicCardName || "").trim().toLowerCase();
     const linked =
@@ -520,51 +663,77 @@ export async function fetchUserDashboardOrders(
       (slug ? paidBySlug.get(slug) : undefined);
 
     if (linked) {
-      // Prefer real order row, but keep cardId/slug from cards table
       fromCards.push({
         ...linked,
         cardId: card.cardId,
         cardSlug: slug || linked.cardSlug,
-        userId: uid,
+        cardUrl: slug
+          ? buildPublicCardUrl(slug, "share")
+          : linked.cardUrl,
+        userId: uid ?? linked.userId ?? card.userId,
         customerName:
           card.cardName?.trim() || linked.customerName || "Your Name",
         businessName: card.businessName?.trim() || linked.businessName,
         jobTitle: card.jobName?.trim() || linked.jobTitle,
       });
-      coveredOrderKeys.add(
-        linked.orderId && linked.orderId > 0
-          ? `id:${linked.orderId}`
-          : `code:${linked.id}`,
-      );
     } else {
-      // Card exists for this user_id with no linked order → still show on My Cards
       fromCards.push(cardDtoToPaidOrder(card, phoneDigits || phone));
     }
   }
 
-  // Keep paid physical / other products that are not already represented by a card
+  // Paid products not already shown via a cards row (standees + true orphan digitals).
+  // Skip editable digital orders that match an already-listed card by name/slug —
+  // admin-create used to leave card_id null, which produced 2 tiles (card + order).
   const extras: HexaOrder[] = [];
+  const fromCardNameKeys = new Set(
+    fromCards.map((o) =>
+      slugifyForCardLink(o.customerName || o.businessName || ""),
+    ),
+  );
+  const fromCardBases = new Set(
+    [...coveredSlugs].map((s) => s.replace(/\d+$/, "")).filter(Boolean),
+  );
+
   for (const order of paidOrders) {
-    const key =
-      order.orderId && order.orderId > 0
-        ? `id:${order.orderId}`
-        : `code:${order.id}`;
-    if (coveredOrderKeys.has(key)) continue;
-    if (order.cardId && order.cardId > 0) {
-      const used = fromCards.some((o) => o.cardId === order.cardId);
-      if (used) continue;
+    if (!isDashboardProductOrder(order)) continue;
+    if (order.cardId && order.cardId > 0 && coveredCardIds.has(order.cardId)) {
+      continue;
     }
     const slug = String(order.cardSlug ?? "").trim().toLowerCase();
+    if (slug && coveredSlugs.has(slug)) continue;
     if (
       slug &&
       fromCards.some((o) => String(o.cardSlug ?? "").toLowerCase() === slug)
     ) {
       continue;
     }
+    if (
+      order.cardId &&
+      order.cardId > 0 &&
+      fromCards.some((o) => o.cardId === order.cardId)
+    ) {
+      continue;
+    }
+
+    if (isEditableCardOrder(order) && !(order.cardId && order.cardId > 0)) {
+      const nameKey = slugifyForCardLink(
+        order.customerName || order.businessName || "",
+      );
+      const nameBase = nameKey.replace(/\d+$/, "");
+      if (nameKey && fromCardNameKeys.has(nameKey)) continue;
+      if (nameBase && fromCardBases.has(nameBase)) continue;
+      if (slug) {
+        const slugBase = slug.replace(/\d+$/, "");
+        if (slugBase && fromCardBases.has(slugBase)) continue;
+      }
+    }
+
     extras.push(order);
   }
 
-  return dedupeDashboardOrders([...fromCards, ...extras]);
+  return assignUniquePublicSlugs(
+    dedupeDashboardOrders([...fromCards, ...extras]),
+  );
 }
 
 /** @deprecated use initOrderCardProfile — each order keeps its own profile */

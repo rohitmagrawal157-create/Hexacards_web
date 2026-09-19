@@ -44,6 +44,8 @@ import { CARD_VALIDITY_YEARS } from "@/lib/card-validity";
 export type AdminCardRow = {
   id: string;
   srNo: number;
+  /** Supabase `cards.user_id` — owner account */
+  userId: number | null;
   name: string;
   liveUrl: string;
   email: string;
@@ -135,6 +137,7 @@ function isCardActive(card: AdminCardRow): boolean {
 
 function toCsv(rows: AdminCardRow[]): string {
   const headers = [
+    "User ID",
     "Card ID",
     "Name",
     "Live URL",
@@ -146,6 +149,7 @@ function toCsv(rows: AdminCardRow[]): string {
   ];
   const lines = rows.map((r) =>
     [
+      r.userId != null && r.userId > 0 ? r.userId : "",
       adminCardDbId(r) ?? "",
       `"${r.name.replace(/"/g, '""')}"`,
       r.liveUrl,
@@ -175,7 +179,7 @@ function printTable(rows: AdminCardRow[], title: string) {
   const rowsHtml = rows
     .map(
       (r) =>
-        `<tr><td>${adminCardDbId(r) ?? ""}</td><td>${r.name}</td><td>${r.mobile}</td><td>${r.startDate}</td><td>${r.expiryDate}</td><td>${r.pageViews}</td><td>${isCardActive(r) ? "Active" : "Inactive"}</td></tr>`,
+        `<tr><td>${r.userId != null && r.userId > 0 ? r.userId : ""}</td><td>${adminCardDbId(r) ?? ""}</td><td>${r.name}</td><td>${r.mobile}</td><td>${r.startDate}</td><td>${r.expiryDate}</td><td>${r.pageViews}</td><td>${isCardActive(r) ? "Active" : "Inactive"}</td></tr>`,
     )
     .join("");
   win.document.write(`
@@ -184,7 +188,7 @@ function printTable(rows: AdminCardRow[], title: string) {
       <body>
         <h2>${title}</h2>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">
-          <thead><tr><th>Card ID</th><th>Name</th><th>Mobile</th><th>Start</th><th>Expiry</th><th>Views</th><th>Status</th></tr></thead>
+          <thead><tr><th>User ID</th><th>Card ID</th><th>Name</th><th>Mobile</th><th>Start</th><th>Expiry</th><th>Views</th><th>Status</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </body>
@@ -266,6 +270,9 @@ function CardDetailModal({
           <div className="flex-1 min-w-0">
             <p className="text-[10px] font-bold tracking-[0.14em] text-[#BC7C10] uppercase">
               Card Details
+              {card.userId != null && card.userId > 0
+                ? ` · User ID ${card.userId}`
+                : ""}
               {adminCardDbId(card) != null
                 ? ` · Card ID ${adminCardDbId(card)}`
                 : ""}
@@ -289,6 +296,30 @@ function CardDetailModal({
 
         {/* Body */}
         <div className="space-y-4 px-5 py-5">
+          {/* User ID + Card ID */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
+                User ID
+              </label>
+              <div className="flex items-center rounded-xl border border-black/10 bg-[#FAFAF8] px-3.5 py-2.5">
+                <span className="text-sm font-semibold tabular-nums text-[#141414]">
+                  {card.userId != null && card.userId > 0 ? card.userId : "—"}
+                </span>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
+                Card ID
+              </label>
+              <div className="flex items-center rounded-xl border border-black/10 bg-[#FAFAF8] px-3.5 py-2.5">
+                <span className="text-sm font-semibold tabular-nums text-[#141414]">
+                  {adminCardDbId(card) ?? "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Card Name */}
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.12em] text-[#8a8174] uppercase">
@@ -535,6 +566,7 @@ export default function CardsPanel({
       list = list.filter((c) => {
         const cardId = adminCardDbId(c);
         return [
+          c.userId != null && c.userId > 0 ? String(c.userId) : "",
           cardId != null ? String(cardId) : "",
           c.id,
           c.name,
@@ -1075,16 +1107,17 @@ export default function CardsPanel({
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search card ID, name, mobile…"
+              placeholder="Search user ID, card ID, name, mobile…"
               className="w-full rounded-xl border border-black/10 bg-[#FFFCF7] py-2.5 pr-3 pl-9 text-sm text-[#141414] placeholder:text-[#8a8174]/70 focus:border-[#BC7C10] focus:ring-2 focus:ring-[#BC7C10]/20 focus:outline-none"
             />
           </div>
         </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1360px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-black/[0.06] text-[11px] font-bold tracking-wide text-[#8a8174] uppercase">
+                  <th className="w-[88px] px-4 py-3">User ID</th>
                   <th className="w-[88px] px-4 py-3">
                     <button
                       type="button"
@@ -1118,6 +1151,11 @@ export default function CardsPanel({
                       onClick={() => setDetailCard(card)}
                       className="cursor-pointer border-b border-black/[0.04] align-top last:border-0 hover:bg-[#FFFCF7] transition-colors"
                     >
+                      <td className="px-4 py-4 font-semibold tabular-nums text-[#5c5346]">
+                        {card.userId != null && card.userId > 0
+                          ? card.userId
+                          : "—"}
+                      </td>
                       <td className="px-4 py-4 font-semibold tabular-nums text-[#141414]">
                         {adminCardDbId(card) ?? "—"}
                       </td>
@@ -1210,7 +1248,7 @@ export default function CardsPanel({
                 {pageRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-10 text-center text-sm text-[#8a8174]"
                     >
                       {loading
